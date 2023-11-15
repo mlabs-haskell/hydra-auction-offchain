@@ -10,17 +10,17 @@ import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Time (POSIXTime)
+import Contract.Value (Value)
 import Data.BigInt (BigInt)
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass (AssetClass)
 import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionTerms = AuctionTerms
-  { auctionLot :: AssetClass
+  { auctionLot :: Value
   , sellerPkh :: PubKeyHash
   , sellerVk :: ByteArray
   , delegates :: Array PubKeyHash
@@ -42,7 +42,7 @@ instance Show AuctionTerms where
   show = genericShow
 
 type AuctionTermsSchema =
-  ("auctionLot" :~: AssetClass)
+  ("auctionLot" :~: Value)
     :$: ("sellerPkh" :~: PubKeyHash)
     :$: ("sellerVk" :~: ByteArray)
     :$: ("delegates" :~: Array PubKeyHash)
