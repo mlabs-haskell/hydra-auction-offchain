@@ -1,0 +1,6 @@
+/node_modules
+/output/
+/.pre-commit-config.yaml
+/.psa-stash
+/.spago/
+/.spago2nix/
