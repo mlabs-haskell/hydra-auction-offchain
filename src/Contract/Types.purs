@@ -1,6 +1,8 @@
 module HydraAuctionOffchain.Contract.Types
   ( module ExportContractError
   , module ExportContractResult
+  , module ExportPlutusAuctionEscrowState
+  , module ExportPlutusAuctionPolicyRedeemer
   , module ExportPlutusAuctionTerms
   , module ExportPlutusExtraAssetClass
   ) where
@@ -20,6 +22,14 @@ import HydraAuctionOffchain.Contract.Types.ContractResult
   , getTotalExUnits
   , submitTxReturningContractResult
   ) as ExportContractResult
+
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionEscrowState
+  ( AuctionEscrowState(AuctionAnnounced, BiddingStarted, AuctionConcluded)
+  ) as ExportPlutusAuctionEscrowState
+
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
+  ( AuctionPolicyRedeemer(MintAuction, BurnAuction)
+  ) as ExportPlutusAuctionPolicyRedeemer
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
