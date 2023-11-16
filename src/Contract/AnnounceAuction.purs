@@ -3,16 +3,19 @@ module HydraAuctionOffchain.Contract.AnnounceAuction where
 import Contract.Prelude
 
 import Contract.Address (scriptHashAddress)
+import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
+import Contract.Time (to) as Time
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustMintValueWithRedeemer
   , mustPayToScript
   , mustSpendPubKeyOutput
+  , mustValidateIn
   ) as Constraints
 import Contract.Utxos (UtxoMap)
 import Contract.Value (TokenName, Value, scriptCurrencySymbol)
@@ -59,10 +62,15 @@ mkAnnounceAuctionContractWithErrors params = do
     throwError AnnounceAuctionEmptyAuctionLotUtxoMap
 
   -- Check that the auction lot utxo map covers Value specified in AuctionTerms:
-  let auctionLotValue = (unwrap params.auctionTerms).auctionLot
+  let { auctionLot, biddingStart } = unwrap params.auctionTerms
   let auctionLotCoverValue = foldMap (view (_output <<< _amount)) $ Map.values auctionLotUtxos
-  unless (auctionLotCoverValue `Value.geq` auctionLotValue) $
+  unless (auctionLotCoverValue `Value.geq` auctionLot) $
     throwError AnnounceAuctionCouldNotCoverAuctionLot
+
+  -- Check that the current time < bidding start time:
+  nowTime <- lift currentTime
+  unless (nowTime < biddingStart) $
+    throwError AnnounceAuctionCurrentTimeAfterBiddingStart
 
   -- Select nonce utxo from the provided auction lot utxo map:
   let nonceUtxo = unsafePartial fromJust $ Array.head $ Map.toUnfoldable auctionLotUtxos
@@ -97,9 +105,8 @@ mkAnnounceAuctionContractWithErrors params = do
     auctionEscrowValidatorHash = (unwrap validatorHashes).auctionEscrow
 
     auctionEscrowValue :: Value
-    auctionEscrowValue =
-      auctionLotValue <> mkAuctionToken auctionEscrowTokenName
-        <> mkAuctionToken standingBidTokenName
+    auctionEscrowValue = auctionLot <> mkAuctionToken auctionEscrowTokenName
+      <> mkAuctionToken standingBidTokenName
 
     auctionEscrowDatum :: Datum
     auctionEscrowDatum = wrap $ toData AuctionAnnounced
@@ -134,6 +141,9 @@ mkAnnounceAuctionContractWithErrors params = do
       -- validator address:
       , Constraints.mustPayToScript metadataValidatorHash auctionInfoDatum DatumInline
           auctionInfoValue
+
+      -- Tx must be included in the block before bidding starts:
+      , Constraints.mustValidateIn $ Time.to biddingStart
       ]
 
     lookups :: ScriptLookups Void
@@ -154,6 +164,7 @@ mkAnnounceAuctionContractWithErrors params = do
 data AnnounceAuctionContractError
   = AnnounceAuctionEmptyAuctionLotUtxoMap
   | AnnounceAuctionCouldNotCoverAuctionLot
+  | AnnounceAuctionCurrentTimeAfterBiddingStart
   | AnnounceAuctionCouldNotGetAuctionCurrencySymbol
 
 derive instance Generic AnnounceAuctionContractError _
@@ -172,7 +183,11 @@ instance ToContractError AnnounceAuctionContractError where
       { errorCode: "AnnounceAuction02"
       , message: "Could not cover auction lot Value with provided utxo map."
       }
-    AnnounceAuctionCouldNotGetAuctionCurrencySymbol ->
+    AnnounceAuctionCurrentTimeAfterBiddingStart ->
       { errorCode: "AnnounceAuction03"
+      , message: "Tx cannot be submitted after bidding start time."
+      }
+    AnnounceAuctionCouldNotGetAuctionCurrencySymbol ->
+      { errorCode: "AnnounceAuction04"
       , message: "Could not get Auction currency symbol from minting policy."
       }
