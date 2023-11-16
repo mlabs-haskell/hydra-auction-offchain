@@ -1,4 +1,4 @@
-module HydraAuctionOffchain.Contract.Scripts.EscrowValidator
+module HydraAuctionOffchain.Contract.Scripts.AuctionEscrowValidator
   ( mkAuctionEscrowValidator
   ) where
 

@@ -2,10 +2,11 @@ module HydraAuctionOffchain.Contract.AnnounceAuction where
 
 import Contract.Prelude
 
+import Contract.Address (scriptHashAddress)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
-import Contract.ScriptLookups (mintingPolicy, unspentOutputs, validator) as Lookups
+import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
@@ -26,13 +27,15 @@ import Data.Map (isEmpty, keys, toUnfoldable, values) as Map
 import HydraAuctionOffchain.Contract.Scripts
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
-  , mkAuctionEscrowValidator
+  , mkAuctionMetadataValidator
   , mkAuctionMintingPolicy
+  , mkAuctionValidators
   , standingBidTokenName
   )
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionEscrowState(AuctionAnnounced)
+  , AuctionInfo(AuctionInfo)
   , AuctionPolicyRedeemer(MintAuction)
   , AuctionTerms
   , ContractResult
@@ -65,13 +68,17 @@ mkAnnounceAuctionContractWithErrors params = do
   let nonceUtxo = unsafePartial fromJust $ Array.head $ Map.toUnfoldable auctionLotUtxos
   let nonceOref = fst nonceUtxo
 
-  -- Auction minting policy:
+  -- Get auction minting policy:
   auctionMintingPolicy <- lift $ mkAuctionMintingPolicy nonceOref
   auctionCurrencySymbol <- scriptCurrencySymbol auctionMintingPolicy ??
     AnnounceAuctionCouldNotGetAuctionCurrencySymbol
 
-  -- Auction escrow validator:
-  escrowValidator <- lift $ mkAuctionEscrowValidator params.auctionTerms
+  -- Get auction validators:
+  validatorHashes <- lift $ map validatorHash <$> mkAuctionValidators params.auctionTerms
+  let validatorAddresses = unwrap $ flip scriptHashAddress Nothing <$> validatorHashes
+
+  -- Get auction metadata validator hash:
+  metadataValidatorHash <- lift $ validatorHash <$> mkAuctionMetadataValidator
   let
     mkAuctionToken :: TokenName -> Value
     mkAuctionToken tokenName = Value.singleton auctionCurrencySymbol tokenName one
@@ -86,16 +93,29 @@ mkAnnounceAuctionContractWithErrors params = do
     mintAuctionRedeemer :: Redeemer
     mintAuctionRedeemer = wrap $ toData MintAuction
 
-    escrowValidatorHash :: ValidatorHash
-    escrowValidatorHash = validatorHash escrowValidator
+    auctionEscrowValidatorHash :: ValidatorHash
+    auctionEscrowValidatorHash = (unwrap validatorHashes).auctionEscrow
 
-    escrowValue :: Value
-    escrowValue =
+    auctionEscrowValue :: Value
+    auctionEscrowValue =
       auctionLotValue <> mkAuctionToken auctionEscrowTokenName
         <> mkAuctionToken standingBidTokenName
 
-    escrowStateDatum :: Datum
-    escrowStateDatum = wrap $ toData AuctionAnnounced
+    auctionEscrowDatum :: Datum
+    auctionEscrowDatum = wrap $ toData AuctionAnnounced
+
+    auctionInfoValue :: Value
+    auctionInfoValue = mkAuctionToken auctionMetadataTokenName
+
+    auctionInfoDatum :: Datum
+    auctionInfoDatum = wrap $ toData $ AuctionInfo
+      { auctionId: auctionCurrencySymbol
+      , auctionTerms: params.auctionTerms
+      , auctionEscrowAddr: validatorAddresses.auctionEscrow
+      , bidderDepositAddr: validatorAddresses.bidderDeposit
+      , feeEscrowAddr: validatorAddresses.feeEscrow
+      , standingBidAddr: validatorAddresses.standingBid
+      }
 
     constraints :: TxConstraints Void Void
     constraints = mconcat
@@ -107,15 +127,19 @@ mkAnnounceAuctionContractWithErrors params = do
 
       -- Lock auction lot with auction state and standing bid tokens at the auction escrow
       -- validator address, set state to AuctionAnnounced:
-      , Constraints.mustPayToScript escrowValidatorHash escrowStateDatum DatumInline
-          escrowValue
+      , Constraints.mustPayToScript auctionEscrowValidatorHash auctionEscrowDatum DatumInline
+          auctionEscrowValue
+
+      -- Lock auction metadata datum and auction metadata token at the auction metadata
+      -- validator address:
+      , Constraints.mustPayToScript metadataValidatorHash auctionInfoDatum DatumInline
+          auctionInfoValue
       ]
 
     lookups :: ScriptLookups Void
     lookups = mconcat
       [ Lookups.unspentOutputs auctionLotUtxos
       , Lookups.mintingPolicy auctionMintingPolicy
-      , Lookups.validator escrowValidator
       ]
 
   lift $ submitTxReturningContractResult {} $ emptySubmitTxData

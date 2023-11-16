@@ -1,7 +1,17 @@
 module HydraAuctionOffchain.Contract.Scripts
-  ( module ExportAuctionMintingPolicy
-  , module ExportEscrowValidator
+  ( module ExportAuctionEscrowValidator
+  , module ExportAuctionMetadataValidator
+  , module ExportAuctionMintingPolicy
+  , module ExportAuctionValidators
   ) where
+
+import HydraAuctionOffchain.Contract.Scripts.AuctionEscrowValidator
+  ( mkAuctionEscrowValidator
+  ) as ExportAuctionEscrowValidator
+
+import HydraAuctionOffchain.Contract.Scripts.AuctionMetadataValidator
+  ( mkAuctionMetadataValidator
+  ) as ExportAuctionMetadataValidator
 
 import HydraAuctionOffchain.Contract.Scripts.AuctionMintingPolicy
   ( auctionEscrowTokenName
@@ -10,6 +20,7 @@ import HydraAuctionOffchain.Contract.Scripts.AuctionMintingPolicy
   , standingBidTokenName
   ) as ExportAuctionMintingPolicy
 
-import HydraAuctionOffchain.Contract.Scripts.EscrowValidator
-  ( mkAuctionEscrowValidator
-  ) as ExportEscrowValidator
+import HydraAuctionOffchain.Contract.Scripts.AuctionValidators
+  ( AuctionValidators(AuctionValidators)
+  , mkAuctionValidators
+  ) as ExportAuctionValidators
