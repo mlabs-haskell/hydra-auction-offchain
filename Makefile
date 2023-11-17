@@ -6,6 +6,9 @@ purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifi
 build:
 	spago build --purs-args ${purs-args}
 
+repl:
+	spago repl
+
 format:
 	@purs-tidy format-in-place ${ps-sources}
 

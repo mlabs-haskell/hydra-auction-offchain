@@ -2,8 +2,6 @@ module HydraAuctionOffchain.Contract.Scripts.AuctionEscrowValidator
   ( mkAuctionEscrowValidator
   ) where
 
-import Prelude
-
 import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
 import Data.Typelevel.Undefined (undefined)

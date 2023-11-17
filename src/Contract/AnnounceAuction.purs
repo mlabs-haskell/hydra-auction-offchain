@@ -27,6 +27,7 @@ import Ctl.Internal.Plutus.Types.Transaction (_amount, _output)
 import Data.Array (head) as Array
 import Data.Lens (view)
 import Data.Map (isEmpty, keys, toUnfoldable, values) as Map
+import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Contract.Scripts
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
@@ -41,9 +42,11 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionInfo(AuctionInfo)
   , AuctionPolicyRedeemer(MintAuction)
   , AuctionTerms
+  , AuctionTermsValidationError
   , ContractResult
   , emptySubmitTxData
   , submitTxReturningContractResult
+  , validateAuctionTerms
   )
 import Partial.Unsafe (unsafePartial)
 
@@ -56,6 +59,10 @@ mkAnnounceAuctionContractWithErrors
   :: AnnounceAuctionContractParams
   -> ExceptT AnnounceAuctionContractError Contract ContractResult
 mkAnnounceAuctionContractWithErrors params = do
+  -- Check auction terms:
+  validateAuctionTerms params.auctionTerms #
+    validation (throwError <<< AnnounceAuctionInvalidAuctionTerms) pure
+
   -- Check that the auction lot utxo map is not empty:
   let auctionLotUtxos = params.auctionLotUtxos
   when (Map.isEmpty auctionLotUtxos) $
@@ -162,7 +169,8 @@ mkAnnounceAuctionContractWithErrors params = do
 --------------------------------------------------------------------------------
 
 data AnnounceAuctionContractError
-  = AnnounceAuctionEmptyAuctionLotUtxoMap
+  = AnnounceAuctionInvalidAuctionTerms (Array AuctionTermsValidationError)
+  | AnnounceAuctionEmptyAuctionLotUtxoMap
   | AnnounceAuctionCouldNotCoverAuctionLot
   | AnnounceAuctionCurrentTimeAfterBiddingStart
   | AnnounceAuctionCouldNotGetAuctionCurrencySymbol
@@ -175,19 +183,23 @@ instance Show AnnounceAuctionContractError where
 
 instance ToContractError AnnounceAuctionContractError where
   toContractError = case _ of
-    AnnounceAuctionEmptyAuctionLotUtxoMap ->
+    AnnounceAuctionInvalidAuctionTerms validationErrors ->
       { errorCode: "AnnounceAuction01"
+      , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
+      }
+    AnnounceAuctionEmptyAuctionLotUtxoMap ->
+      { errorCode: "AnnounceAuction02"
       , message: "Auction lot utxo map cannot be empty."
       }
     AnnounceAuctionCouldNotCoverAuctionLot ->
-      { errorCode: "AnnounceAuction02"
+      { errorCode: "AnnounceAuction03"
       , message: "Could not cover auction lot Value with provided utxo map."
       }
     AnnounceAuctionCurrentTimeAfterBiddingStart ->
-      { errorCode: "AnnounceAuction03"
+      { errorCode: "AnnounceAuction04"
       , message: "Tx cannot be submitted after bidding start time."
       }
     AnnounceAuctionCouldNotGetAuctionCurrencySymbol ->
-      { errorCode: "AnnounceAuction04"
+      { errorCode: "AnnounceAuction05"
       , message: "Could not get Auction currency symbol from minting policy."
       }

@@ -38,6 +38,17 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
+  , AuctionTermsValidationError
+      ( SellerVkPkhMismatchError
+      , BiddingStartNotBeforeBiddingEndError
+      , BiddingEndNotBeforePurchaseDeadlineError
+      , PurchaseDeadlineNotBeforeCleanupError
+      , NonPositiveMinBidIncrementError
+      , InvalidStartingBidError
+      , InvalidAuctionFeePerDelegateError
+      , NoDelegatesError
+      )
+  , validateAuctionTerms
   ) as ExportPlutusAuctionTerms
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass

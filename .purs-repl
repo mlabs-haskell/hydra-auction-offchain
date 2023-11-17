@@ -1,1 +1,4 @@
-import Prelude
+import Contract.Prelude
+import HydraAuctionOffchain.Contract.Scripts
+import HydraAuctionOffchain.Contract.Types
+import HydraAuctionOffchain.Helpers
