@@ -2,7 +2,7 @@ module HydraAuctionOffchain.Contract.AnnounceAuction where
 
 import Contract.Prelude
 
-import Contract.Address (scriptHashAddress)
+import Contract.Address (getNetworkId, scriptHashAddress)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
@@ -19,14 +19,20 @@ import Contract.TxConstraints
   ) as Constraints
 import Contract.Utxos (UtxoMap)
 import Contract.Value (TokenName, Value, scriptCurrencySymbol)
-import Contract.Value (geq, singleton) as Value
-import Control.Error.Util ((??))
-import Control.Monad.Except (ExceptT, throwError)
+import Contract.Value (singleton) as Value
+import Contract.Wallet (getWalletUtxos)
+import Control.Error.Util ((!?), (??))
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Trans.Class (lift)
-import Ctl.Internal.Plutus.Types.Transaction (_amount, _output)
+import Ctl.Internal.BalanceTx.CoinSelection
+  ( SelectionStrategy(SelectionStrategyMinimal)
+  , performMultiAssetSelection
+  )
+import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
+import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
 import Data.Array (head) as Array
-import Data.Lens (view)
-import Data.Map (isEmpty, keys, toUnfoldable, values) as Map
+import Data.Either (hush)
+import Data.Map (isEmpty, keys, toUnfoldable, union) as Map
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Contract.Scripts
   ( auctionEscrowTokenName
@@ -52,7 +58,9 @@ import Partial.Unsafe (unsafePartial)
 
 type AnnounceAuctionContractParams =
   { auctionTerms :: AuctionTerms
-  , auctionLotUtxos :: UtxoMap
+  -- Allows the user to provide additional utxos to cover auction lot Value. This can be useful
+  -- if some portion of the Value is, for example, locked at a multi-signature address.
+  , additionalAuctionLotUtxos :: UtxoMap
   }
 
 mkAnnounceAuctionContractWithErrors
@@ -63,25 +71,22 @@ mkAnnounceAuctionContractWithErrors params = do
   validateAuctionTerms params.auctionTerms #
     validation (throwError <<< AnnounceAuctionInvalidAuctionTerms) pure
 
-  -- Check that the auction lot utxo map is not empty:
-  let auctionLotUtxos = params.auctionLotUtxos
-  when (Map.isEmpty auctionLotUtxos) $
-    throwError AnnounceAuctionEmptyAuctionLotUtxoMap
-
-  -- Check that the auction lot utxo map covers Value specified in AuctionTerms:
+  -- Select utxos to cover auction lot Value:
   let { auctionLot, biddingStart } = unwrap params.auctionTerms
-  let auctionLotCoverValue = foldMap (view (_output <<< _amount)) $ Map.values auctionLotUtxos
-  unless (auctionLotCoverValue `Value.geq` auctionLot) $
-    throwError AnnounceAuctionCouldNotCoverAuctionLot
+  utxos <- getWalletUtxos !? AnnounceAuctionCouldNotGetWalletUtxos
+  let utxos' = Map.union utxos params.additionalAuctionLotUtxos
+  auctionLotUtxos <- selectUtxos utxos' auctionLot !? AnnounceAuctionCouldNotCoverAuctionLot
+  when (Map.isEmpty auctionLotUtxos) $
+    throwError AnnounceAuctionEmptyAuctionLotUtxoMap -- impossible
+
+  -- Select nonce utxo from the auction lot utxos:
+  let nonceUtxo = unsafePartial fromJust $ Array.head $ Map.toUnfoldable auctionLotUtxos
+  let nonceOref = fst nonceUtxo
 
   -- Check that the current time < bidding start time:
   nowTime <- lift currentTime
   unless (nowTime < biddingStart) $
     throwError AnnounceAuctionCurrentTimeAfterBiddingStart
-
-  -- Select nonce utxo from the provided auction lot utxo map:
-  let nonceUtxo = unsafePartial fromJust $ Array.head $ Map.toUnfoldable auctionLotUtxos
-  let nonceOref = fst nonceUtxo
 
   -- Get auction minting policy:
   auctionMintingPolicy <- lift $ mkAuctionMintingPolicy nonceOref
@@ -164,14 +169,25 @@ mkAnnounceAuctionContractWithErrors params = do
     , constraints = constraints
     }
 
+selectUtxos :: UtxoMap -> Value -> Contract (Maybe UtxoMap)
+selectUtxos utxos requiredValue = do
+  networkId <- getNetworkId
+  let utxoIndex = buildUtxoIndex $ fromPlutusUtxoMap networkId utxos
+  hush <$> runExceptT do
+    selState <- performMultiAssetSelection SelectionStrategyMinimal utxoIndex
+      (fromPlutusValue requiredValue)
+    let selectedUtxos = (unwrap selState).selectedUtxos
+    pure $ unsafePartial fromJust $ toPlutusUtxoMap selectedUtxos
+
 --------------------------------------------------------------------------------
 -- Errors
 --------------------------------------------------------------------------------
 
 data AnnounceAuctionContractError
   = AnnounceAuctionInvalidAuctionTerms (Array AuctionTermsValidationError)
-  | AnnounceAuctionEmptyAuctionLotUtxoMap
+  | AnnounceAuctionCouldNotGetWalletUtxos
   | AnnounceAuctionCouldNotCoverAuctionLot
+  | AnnounceAuctionEmptyAuctionLotUtxoMap
   | AnnounceAuctionCurrentTimeAfterBiddingStart
   | AnnounceAuctionCouldNotGetAuctionCurrencySymbol
 
@@ -187,19 +203,23 @@ instance ToContractError AnnounceAuctionContractError where
       { errorCode: "AnnounceAuction01"
       , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
       }
-    AnnounceAuctionEmptyAuctionLotUtxoMap ->
+    AnnounceAuctionCouldNotGetWalletUtxos ->
       { errorCode: "AnnounceAuction02"
-      , message: "Auction lot utxo map cannot be empty."
+      , message: "Could not get wallet utxos."
       }
     AnnounceAuctionCouldNotCoverAuctionLot ->
       { errorCode: "AnnounceAuction03"
-      , message: "Could not cover auction lot Value with provided utxo map."
+      , message: "Could not cover auction lot Value."
+      }
+    AnnounceAuctionEmptyAuctionLotUtxoMap ->
+      { errorCode: "AnnounceAuction04"
+      , message: "Impossible: Auction lot utxo map cannot be empty."
       }
     AnnounceAuctionCurrentTimeAfterBiddingStart ->
-      { errorCode: "AnnounceAuction04"
+      { errorCode: "AnnounceAuction05"
       , message: "Tx cannot be submitted after bidding start time."
       }
     AnnounceAuctionCouldNotGetAuctionCurrencySymbol ->
-      { errorCode: "AnnounceAuction05"
+      { errorCode: "AnnounceAuction06"
       , message: "Could not get Auction currency symbol from minting policy."
       }

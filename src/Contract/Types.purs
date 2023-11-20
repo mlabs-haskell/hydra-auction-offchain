@@ -39,7 +39,8 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
-      ( SellerVkPkhMismatchError
+      ( NonPositiveAuctionLotValueError
+      , SellerVkPkhMismatchError
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
       , PurchaseDeadlineNotBeforeCleanupError

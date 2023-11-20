@@ -3,6 +3,7 @@
   [ "arrays"
   , "bigints"
   , "cardano-transaction-lib"
+  , "either"
   , "errors"
   , "foldable-traversable"
   , "maybe"

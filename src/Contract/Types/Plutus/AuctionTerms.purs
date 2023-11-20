@@ -1,7 +1,8 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
-      ( SellerVkPkhMismatchError
+      ( NonPositiveAuctionLotValueError
+      , SellerVkPkhMismatchError
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
       , PurchaseDeadlineNotBeforeCleanupError
@@ -23,6 +24,7 @@ import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Time (POSIXTime)
 import Contract.Value (Value)
+import Contract.Value (gt) as Value
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
@@ -88,7 +90,8 @@ instance FromData AuctionTerms where
 --------------------------------------------------------------------------------
 
 data AuctionTermsValidationError
-  = SellerVkPkhMismatchError
+  = NonPositiveAuctionLotValueError
+  | SellerVkPkhMismatchError
   | BiddingStartNotBeforeBiddingEndError
   | BiddingEndNotBeforePurchaseDeadlineError
   | PurchaseDeadlineNotBeforeCleanupError
@@ -109,7 +112,9 @@ minAuctionFee = BigInt.fromInt 2_000_000
 
 validateAuctionTerms :: AuctionTerms -> V (Array AuctionTermsValidationError) Unit
 validateAuctionTerms (AuctionTerms rec) = fold
-  [ (Just rec.sellerPkh == map wrap (ed25519KeyHashFromBytes $ blake2b224Hash rec.sellerVk))
+  [ (rec.auctionLot `Value.gt` mempty)
+      `err` NonPositiveAuctionLotValueError
+  , (Just rec.sellerPkh == map wrap (ed25519KeyHashFromBytes $ blake2b224Hash rec.sellerVk))
       `err` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
       `err` BiddingStartNotBeforeBiddingEndError
