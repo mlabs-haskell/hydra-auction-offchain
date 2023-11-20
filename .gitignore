@@ -5,3 +5,5 @@
 /.psci_modules/
 /.spago/
 /.spago2nix/
+/.direnv
+/.envrc
