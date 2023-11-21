@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.Types
   ( module ExportContractError
+  , module ExportContractOutput
   , module ExportContractResult
   , module ExportPlutusAuctionEscrowState
   , module ExportPlutusAuctionInfo
@@ -10,9 +11,16 @@ module HydraAuctionOffchain.Contract.Types
 
 import HydraAuctionOffchain.Contract.Types.ContractError
   ( class ToContractError
-  , ContractError
+  , ContractError(ContractError)
+  , contractErrorCodec
   , toContractError
   ) as ExportContractError
+
+import HydraAuctionOffchain.Contract.Types.ContractOutput
+  ( ContractOutput(ContractOutputError, ContractOutputResult)
+  , contractOutputCodec
+  , mkContractOutput
+  ) as ExportContractOutput
 
 import HydraAuctionOffchain.Contract.Types.ContractResult
   ( ContractResult
