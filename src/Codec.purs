@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Codec
   , fromJs
   , jsonCodec
   , liftAff1
+  , liftAff2
   , toJs
   , transactionHashCodec
   ) where
@@ -68,6 +69,17 @@ liftAff1
   -> Json
   -> Effect (Promise Json)
 liftAff1 f a = fromAff $ toJs <$> f (fromJs a)
+
+liftAff2
+  :: forall (a :: Type) (b :: Type) (c :: Type)
+   . HasJson a
+  => HasJson b
+  => HasJson c
+  => (a -> b -> Aff c)
+  -> Json
+  -> Json
+  -> Effect (Promise Json)
+liftAff2 f a b = fromAff $ toJs <$> f (fromJs a) (fromJs b)
 
 instance HasJson Json where
   jsonCodec = const CA.json

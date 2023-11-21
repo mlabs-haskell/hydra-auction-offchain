@@ -18,6 +18,7 @@
   , "prelude"
   , "profunctor"
   , "profunctor-lenses"
+  , "read"
   , "record"
   , "transformers"
   , "tuples"
