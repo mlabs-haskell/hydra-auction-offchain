@@ -34,10 +34,10 @@ import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Either (fromRight)
 import Data.Maybe (Maybe)
 import Data.Profunctor (wrapIso)
-import Data.Typelevel.Undefined (undefined)
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Type.Proxy (Proxy(Proxy))
+import Undefined (undefined)
 
 bigIntCodec :: CA.JsonCodec BigInt
 bigIntCodec = CA.prismaticCodec "BigInt" BigInt.fromString BigInt.toString CA.string
