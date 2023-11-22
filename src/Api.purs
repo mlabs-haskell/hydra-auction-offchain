@@ -8,7 +8,6 @@ import Contract.Monad (runContract)
 import Contract.Transaction (TransactionHash)
 import Control.Promise (Promise)
 import Data.Argonaut (Json)
-import Data.Typelevel.Undefined (undefined)
 import Effect (Effect)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Codec (liftAff2)
@@ -26,5 +25,5 @@ announceAuction walletApp params =
     :: WalletApp
     -> AnnounceAuctionContractParams
     -> Aff (ContractOutput TransactionHash)
-  announceAuctionContract walletApp =
-    runContract (mkContractParams walletApp) <<< Contract.announceAuctionContract
+  announceAuctionContract walletApp' =
+    runContract (mkContractParams walletApp') <<< Contract.announceAuctionContract

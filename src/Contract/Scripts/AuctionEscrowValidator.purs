@@ -4,8 +4,8 @@ module HydraAuctionOffchain.Contract.Scripts.AuctionEscrowValidator
 
 import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
-import Data.Typelevel.Undefined (undefined)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
+import Undefined (undefined)
 
 mkAuctionEscrowValidator :: AuctionTerms -> Contract Validator
 mkAuctionEscrowValidator = undefined

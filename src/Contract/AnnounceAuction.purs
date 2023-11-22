@@ -47,7 +47,6 @@ import Data.Array (head) as Array
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (hush)
 import Data.Map (isEmpty, keys, toUnfoldable, union) as Map
-import Data.Typelevel.Undefined (undefined)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.Scripts
@@ -73,6 +72,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import Partial.Unsafe (unsafePartial)
+import Undefined (undefined)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
   { auctionTerms :: AuctionTerms

@@ -22,7 +22,6 @@
   , "record"
   , "transformers"
   , "tuples"
-  , "typelevel"
   , "undefined"
   , "validation"
   , "variant"
