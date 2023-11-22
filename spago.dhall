@@ -1,6 +1,22 @@
 { name = "hydra-auction-offchain"
 , dependencies =
-  [ "cardano-transaction-lib"
+  [ "arrays"
+  , "bigints"
+  , "cardano-transaction-lib"
+  , "either"
+  , "errors"
+  , "foldable-traversable"
+  , "maybe"
+  , "newtype"
+  , "ordered-collections"
+  , "partial"
+  , "prelude"
+  , "profunctor-lenses"
+  , "record"
+  , "transformers"
+  , "tuples"
+  , "typelevel"
+  , "validation"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
