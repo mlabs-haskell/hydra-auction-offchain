@@ -7,3 +7,4 @@
 /.spago2nix/
 /.direnv
 /.envrc
+dist/

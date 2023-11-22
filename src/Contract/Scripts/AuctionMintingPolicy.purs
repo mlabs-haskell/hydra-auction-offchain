@@ -9,8 +9,8 @@ import Contract.Monad (Contract)
 import Contract.Scripts (MintingPolicy)
 import Contract.Transaction (TransactionInput)
 import Contract.Value (TokenName)
-import Data.Typelevel.Undefined (undefined)
 import HydraAuctionOffchain.Helpers (tokenNameFromAsciiUnsafe)
+import Undefined (undefined)
 
 mkAuctionMintingPolicy :: TransactionInput -> Contract MintingPolicy
 mkAuctionMintingPolicy _nonce = undefined

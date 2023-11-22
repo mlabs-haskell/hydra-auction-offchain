@@ -10,8 +10,8 @@ import Contract.Scripts (Validator)
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
-import Data.Typelevel.Undefined (undefined)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
+import Undefined (undefined)
 
 newtype AuctionValidators (a :: Type) = AuctionValidators
   { auctionEscrow :: a

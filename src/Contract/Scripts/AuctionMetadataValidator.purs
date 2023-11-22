@@ -4,7 +4,7 @@ module HydraAuctionOffchain.Contract.Scripts.AuctionMetadataValidator
 
 import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
-import Data.Typelevel.Undefined (undefined)
+import Undefined (undefined)
 
 mkAuctionMetadataValidator :: Contract Validator
 mkAuctionMetadataValidator = undefined

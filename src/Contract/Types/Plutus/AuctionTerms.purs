@@ -11,6 +11,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , InvalidAuctionFeePerDelegateError
       , NoDelegatesError
       )
+  , auctionTermsCodec
   , validateAuctionTerms
   ) where
 
@@ -28,12 +29,22 @@ import Contract.Value (gt) as Value
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
+import Data.Codec.Argonaut (JsonCodec, array, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, wrap)
+import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V, invalid)
+import HydraAuctionOffchain.Codec
+  ( bigIntCodec
+  , byteArrayCodec
+  , posixTimeCodec
+  , pubKeyHashCodec
+  , valueCodec
+  )
 import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionTerms = AuctionTerms
@@ -84,6 +95,23 @@ instance FromData AuctionTerms where
     | n == BigNum.zero && recLength (Proxy :: Proxy AuctionTerms) == length pd =
         wrap <$> fromDataRec auctionTermsSchema pd
   fromData _ = Nothing
+
+auctionTermsCodec :: CA.JsonCodec AuctionTerms
+auctionTermsCodec =
+  wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
+    { auctionLot: valueCodec
+    , sellerPkh: pubKeyHashCodec
+    , sellerVk: byteArrayCodec
+    , delegates: CA.array pubKeyHashCodec
+    , biddingStart: posixTimeCodec
+    , biddingEnd: posixTimeCodec
+    , purchaseDeadline: posixTimeCodec
+    , cleanup: posixTimeCodec
+    , auctionFeePerDelegate: bigIntCodec
+    , startingBid: bigIntCodec
+    , minBidIncrement: bigIntCodec
+    , minDepositAmount: bigIntCodec
+    }
 
 --------------------------------------------------------------------------------
 -- Validation
