@@ -6,6 +6,7 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
   ( AnnounceAuctionContractError
       ( AnnounceAuctionInvalidAuctionTerms
       , AnnounceAuctionCouldNotGetWalletUtxos
+      , AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
       , AnnounceAuctionCouldNotCoverAuctionLot
       , AnnounceAuctionEmptyAuctionLotUtxoMap
       , AnnounceAuctionCurrentTimeAfterBiddingStart

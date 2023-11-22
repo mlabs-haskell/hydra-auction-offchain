@@ -57,6 +57,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , InvalidAuctionFeePerDelegateError
       , NoDelegatesError
       )
+  , auctionTermsCodec
   , validateAuctionTerms
   ) as ExportPlutusAuctionTerms
 

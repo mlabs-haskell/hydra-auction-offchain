@@ -2,6 +2,7 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
   ( AnnounceAuctionContractError
       ( AnnounceAuctionInvalidAuctionTerms
       , AnnounceAuctionCouldNotGetWalletUtxos
+      , AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
       , AnnounceAuctionCouldNotCoverAuctionLot
       , AnnounceAuctionEmptyAuctionLotUtxoMap
       , AnnounceAuctionCurrentTimeAfterBiddingStart
@@ -22,7 +23,7 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
 import Contract.Time (to) as Time
-import Contract.Transaction (TransactionHash)
+import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutputWithRefScript)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustMintValueWithRedeemer
@@ -30,13 +31,14 @@ import Contract.TxConstraints
   , mustSpendPubKeyOutput
   , mustValidateIn
   ) as Constraints
-import Contract.Utxos (UtxoMap)
+import Contract.Utxos (UtxoMap, getUtxo)
 import Contract.Value (TokenName, Value, scriptCurrencySymbol)
 import Contract.Value (singleton) as Value
 import Contract.Wallet (getWalletUtxos)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Trans.Class (lift)
+import Control.Parallel (parTraverse)
 import Ctl.Internal.BalanceTx.CoinSelection
   ( SelectionStrategy(SelectionStrategyMinimal)
   , performMultiAssetSelection
@@ -44,11 +46,13 @@ import Ctl.Internal.BalanceTx.CoinSelection
 import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
 import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
 import Data.Array (head) as Array
-import Data.Codec.Argonaut (JsonCodec) as CA
+import Data.Codec.Argonaut (JsonCodec, array, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
-import Data.Map (isEmpty, keys, toUnfoldable, union) as Map
+import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
+import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (class HasJson)
+import HydraAuctionOffchain.Codec (class HasJson, orefCodec)
 import HydraAuctionOffchain.Contract.Scripts
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
@@ -66,19 +70,19 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult
+  , auctionTermsCodec
   , emptySubmitTxData
   , mkContractOutput
   , submitTxReturningContractResult
   , validateAuctionTerms
   )
 import Partial.Unsafe (unsafePartial)
-import Undefined (undefined)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
   { auctionTerms :: AuctionTerms
   -- Allows the user to provide additional utxos to cover auction lot Value. This can be useful
   -- if some portion of the Value is, for example, locked at a multi-signature address.
-  , additionalAuctionLotUtxos :: UtxoMap
+  , additionalAuctionLotOrefs :: Array TransactionInput
   }
 
 derive instance Generic AnnounceAuctionContractParams _
@@ -92,7 +96,12 @@ instance HasJson AnnounceAuctionContractParams where
   jsonCodec = const announceAuctionContractParamsCodec
 
 announceAuctionContractParamsCodec :: CA.JsonCodec AnnounceAuctionContractParams
-announceAuctionContractParamsCodec = undefined
+announceAuctionContractParamsCodec =
+  wrapIso AnnounceAuctionContractParams $ CA.object "AnnounceAuctionContractParams" $
+    CAR.record
+      { auctionTerms: auctionTermsCodec
+      , additionalAuctionLotOrefs: CA.array orefCodec
+      }
 
 announceAuctionContract
   :: AnnounceAuctionContractParams
@@ -111,7 +120,9 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Select utxos to cover auction lot Value:
   let { auctionLot, biddingStart } = unwrap params.auctionTerms
   utxos <- getWalletUtxos !? AnnounceAuctionCouldNotGetWalletUtxos
-  let utxos' = Map.union utxos params.additionalAuctionLotUtxos
+  additionalAuctionLotUtxos <- queryUtxos params.additionalAuctionLotOrefs
+    !? AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
+  let utxos' = Map.union utxos additionalAuctionLotUtxos
   auctionLotUtxos <- selectUtxos utxos' auctionLot !? AnnounceAuctionCouldNotCoverAuctionLot
   when (Map.isEmpty auctionLotUtxos) $
     throwError AnnounceAuctionEmptyAuctionLotUtxoMap -- impossible
@@ -216,6 +227,16 @@ selectUtxos utxos requiredValue = do
     let selectedUtxos = (unwrap selState).selectedUtxos
     pure $ unsafePartial fromJust $ toPlutusUtxoMap selectedUtxos
 
+queryUtxos :: Array TransactionInput -> Contract (Maybe UtxoMap)
+queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
+  where
+  getUtxo'
+    :: TransactionInput
+    -> Contract (Maybe (TransactionInput /\ TransactionOutputWithRefScript))
+  getUtxo' oref =
+    getUtxo oref <#>
+      map (\output -> oref /\ wrap { output, scriptRef: Nothing })
+
 --------------------------------------------------------------------------------
 -- Errors
 --------------------------------------------------------------------------------
@@ -223,6 +244,7 @@ selectUtxos utxos requiredValue = do
 data AnnounceAuctionContractError
   = AnnounceAuctionInvalidAuctionTerms (Array AuctionTermsValidationError)
   | AnnounceAuctionCouldNotGetWalletUtxos
+  | AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
   | AnnounceAuctionCouldNotCoverAuctionLot
   | AnnounceAuctionEmptyAuctionLotUtxoMap
   | AnnounceAuctionCurrentTimeAfterBiddingStart
@@ -244,19 +266,23 @@ instance ToContractError AnnounceAuctionContractError where
       { errorCode: "AnnounceAuction02"
       , message: "Could not get wallet utxos."
       }
-    AnnounceAuctionCouldNotCoverAuctionLot ->
+    AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos ->
       { errorCode: "AnnounceAuction03"
+      , message: "Could not resolve provided action lot output references."
+      }
+    AnnounceAuctionCouldNotCoverAuctionLot ->
+      { errorCode: "AnnounceAuction04"
       , message: "Could not cover auction lot Value."
       }
     AnnounceAuctionEmptyAuctionLotUtxoMap ->
-      { errorCode: "AnnounceAuction04"
+      { errorCode: "AnnounceAuction05"
       , message: "Impossible: Auction lot utxo map cannot be empty."
       }
     AnnounceAuctionCurrentTimeAfterBiddingStart ->
-      { errorCode: "AnnounceAuction05"
+      { errorCode: "AnnounceAuction06"
       , message: "Tx cannot be submitted after bidding start time."
       }
     AnnounceAuctionCouldNotGetAuctionCurrencySymbol ->
-      { errorCode: "AnnounceAuction06"
+      { errorCode: "AnnounceAuction07"
       , message: "Could not get Auction currency symbol from minting policy."
       }
