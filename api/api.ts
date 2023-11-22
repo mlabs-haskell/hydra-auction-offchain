@@ -1,11 +1,11 @@
 import * as Purs from "../output/HydraAuctionOffchain.Api/index.js";
 
-import type { 
+import type {
   AnnounceAuctionContractParams,
   ContractOutput,
   TransactionHash,
   WalletApp
-} from "./types"
+} from "./types";
 
 export const announceAuction = async (
   walletApp: WalletApp,

@@ -16,7 +16,7 @@ repl:
 	spago repl
 
 format:
-	@purs-tidy format-in-place ${ps-sources}
+	@purs-tidy format-in-place ${ps-sources} && prettier -w api
 
 check-format:
-	@purs-tidy check ${ps-sources}
+	@purs-tidy check ${ps-sources} && prettier -c api

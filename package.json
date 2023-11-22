@@ -41,8 +41,5 @@
     "esbuild-plugin-wasm": "^1.1.0",
     "http-server": "14.1.1",
     "typescript": "5.0.4"
-  },
-  "prettier": {
-    "arrowParens": "avoid"
   }
 }
