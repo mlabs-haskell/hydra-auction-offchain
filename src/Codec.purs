@@ -1,5 +1,7 @@
 module HydraAuctionOffchain.Codec
   ( class HasJson
+  , addressCodec
+  , addressWithNetworkTagCodec
   , bigIntCodec
   , byteArrayCodec
   , currencySymbolCodec
@@ -18,7 +20,14 @@ module HydraAuctionOffchain.Codec
 
 import Prelude
 
-import Contract.Address (PubKeyHash)
+import Contract.Address
+  ( Address
+  , AddressWithNetworkTag
+  , PubKeyHash
+  , addressWithNetworkTagFromBech32
+  , addressWithNetworkTagToBech32
+  )
+import Contract.Config (NetworkId)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Time (POSIXTime(POSIXTime))
 import Contract.Transaction
@@ -66,6 +75,17 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
+
+addressCodec :: NetworkId -> CA.JsonCodec Address
+addressCodec network =
+  dimap (wrap <<< { address: _, networkId: network }) (_.address <<< unwrap)
+    addressWithNetworkTagCodec
+
+addressWithNetworkTagCodec :: CA.JsonCodec AddressWithNetworkTag
+addressWithNetworkTagCodec =
+  CA.prismaticCodec "AddressWithNetworkTag" addressWithNetworkTagFromBech32
+    addressWithNetworkTagToBech32
+    CA.string
 
 currencySymbolCodec :: CA.JsonCodec CurrencySymbol
 currencySymbolCodec =

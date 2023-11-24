@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
+  , module ExportQueryAuctions
   ) where
 
 import HydraAuctionOffchain.Contract.AnnounceAuction
@@ -16,3 +17,7 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
   , announceAuctionContract
   , mkAnnounceAuctionContractWithErrors
   ) as ExportAnnounceAuction
+
+import HydraAuctionOffchain.Contract.QueryAuctions
+  ( queryAuctions
+  ) as ExportQueryAuctions

@@ -9,12 +9,20 @@ import Contract.Address (Address)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Value (CurrencySymbol)
+import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
+import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
+import HydraAuctionOffchain.Codec (class HasJson, addressCodec, currencySymbolCodec)
+import HydraAuctionOffchain.Config (config)
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
+  ( AuctionTerms
+  , auctionTermsCodec
+  )
 import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionInfo = AuctionInfo
@@ -53,3 +61,17 @@ instance FromData AuctionInfo where
     | n == BigNum.zero && recLength (Proxy :: Proxy AuctionInfo) == length pd =
         wrap <$> fromDataRec auctionInfoSchema pd
   fromData _ = Nothing
+
+instance HasJson AuctionInfo where
+  jsonCodec = const auctionInfoCodec
+
+auctionInfoCodec :: CA.JsonCodec AuctionInfo
+auctionInfoCodec =
+  wrapIso AuctionInfo $ CA.object "AuctionInfo" $ CAR.record
+    { auctionId: currencySymbolCodec
+    , auctionTerms: auctionTermsCodec
+    , auctionEscrowAddr: addressCodec config.network
+    , bidderDepositAddr: addressCodec config.network
+    , feeEscrowAddr: addressCodec config.network
+    , standingBidAddr: addressCodec config.network
+    }
