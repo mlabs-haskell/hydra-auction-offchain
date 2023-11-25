@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Config
-  ( mkContractParams
+  ( config
+  , mkContractParams
   ) where
 
 import Prelude
@@ -43,7 +44,7 @@ blockfrostConfig =
     MainnetId ->
       blockfrostPublicMainnetServerConfig
 
-mkContractParams :: WalletApp -> ContractParams
+mkContractParams :: Maybe WalletApp -> ContractParams
 mkContractParams walletApp =
   { backendParams: mkBlockfrostBackendParams
       { blockfrostConfig
@@ -52,7 +53,7 @@ mkContractParams walletApp =
       }
   , networkId: config.network
   , logLevel: Trace
-  , walletSpec: Just $ walletSpecFromWalletApp walletApp
+  , walletSpec: walletSpecFromWalletApp <$> walletApp
   , customLogger: Nothing
   , suppressLogs: false
   , hooks: emptyHooks

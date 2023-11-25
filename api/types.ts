@@ -5,6 +5,15 @@ export type AnnounceAuctionContractParams = {
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
 
+export type AuctionInfo = {
+  auctionId: CurrencySymbol;
+  auctionTerms: AuctionTerms;
+  auctionEscrowAddr: Address;
+  bidderDepositAddr: Address;
+  feeEscrowAddr: Address;
+  standingBidAddr: Address;
+};
+
 export type AuctionTerms = {
   auctionLot: Value;
   sellerPkh: PubKeyHash;
@@ -32,6 +41,8 @@ export type ContractError = {
 };
 
 // Cardano ---------------------------------------------------------------------
+
+export type Address = string;
 
 export type BigInt = string;
 
