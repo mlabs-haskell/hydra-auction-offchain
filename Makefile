@@ -8,10 +8,10 @@ build:
 	spago build --purs-args ${purs-args}
 
 bundle: build
-	node bundle.js && tsc --emitDeclarationOnly 
+	node bundle.js && tsc --emitDeclarationOnly && cd demo && node bundle.js 
 
 serve: bundle
-	rsync -av --delete dist/ demo/dist && http-server demo -a 0.0.0.0 -p 8080 -c-1 -P http://localhost:1443
+	http-server demo -a 0.0.0.0 -p 8080 -c-1 -P http://localhost:1443
 
 repl:
 	spago repl

@@ -7,5 +7,6 @@
 /.spago2nix/
 /.direnv
 /.envrc
-dist/
+/dist/
+/demo/index.js
 /plutip-env/payment.skey
