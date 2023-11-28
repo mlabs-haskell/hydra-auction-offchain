@@ -8,7 +8,9 @@ esbuild.build({
   define: {
     BROWSER_RUNTIME: "1",
     "process.env.CARDANO_NETWORK": `"${process.env.CARDANO_NETWORK}"`,
-    "process.env.BLOCKFROST_API_KEY": `"${process.env.BLOCKFROST_API_KEY}"`
+    "process.env.BLOCKFROST_API_KEY": `"${process.env.BLOCKFROST_API_KEY}"`,
+    "process.env.PLUTIP_ENV_HOST_PORT": `"${process.env.PLUTIP_ENV_HOST_PORT}"`,
+    "process.env.DEMO_HOST_PORT": `"${process.env.DEMO_HOST_PORT}"`
   },
   plugins: [
     polyfillNode({

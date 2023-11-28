@@ -31,7 +31,15 @@ export type AuctionTerms = {
 
 // Common ----------------------------------------------------------------------
 
-export type WalletApp = "Nami" | "Gero" | "Flint" | "Eternl" | "Lode" | "NuFi" | "Lace";
+export type WalletApp =
+  | "Nami"
+  | "Gero"
+  | "Flint"
+  | "Eternl"
+  | "Lode"
+  | "NuFi"
+  | "Lace"
+  | "Plutip";
 
 export type ContractOutput<T> = T | ContractError;
 

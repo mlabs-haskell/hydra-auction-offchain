@@ -629,6 +629,18 @@ let
         installPhase = "ln -s $src $out";
       };
 
+    "httpure" = pkgs.stdenv.mkDerivation {
+        name = "httpure";
+        version = "v0.16.0";
+        src = pkgs.fetchgit {
+          url = "https://github.com/citizennet/purescript-httpure.git";
+          rev = "86254b8888a1c5699c8c7f31c9a7e39a277f9bdd";
+          sha256 = "05wwgswi34vha9b4kckd1x8a64ldll4yzjqash2phdsvyzjx4ixq";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
     "identity" = pkgs.stdenv.mkDerivation {
         name = "identity";
         version = "v6.0.0";
@@ -1152,6 +1164,18 @@ let
           url = "https://github.com/felixschl/purescript-pipes.git";
           rev = "e3bdc0b0db0a67e89a717b6118b23e78a380e23f";
           sha256 = "1jz3bfbl8b0hgbcm9y98bv2z29b072v1k8snp19vb2xql1zd40sx";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
+    "ply-ctl" = pkgs.stdenv.mkDerivation {
+        name = "ply-ctl";
+        version = "727b811b0d561cf13d5594b9352a7294e5a20378";
+        src = pkgs.fetchgit {
+          url = "https://github.com/mlabs-haskell/ply-ctl.git";
+          rev = "727b811b0d561cf13d5594b9352a7294e5a20378";
+          sha256 = "1i5v0q1fxar1kpa03vccdmw3mirp4gg2lyl503ky05n3jl4b7mds";
         };
         phases = "installPhase";
         installPhase = "ln -s $src $out";
