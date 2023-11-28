@@ -8,7 +8,7 @@ import type {
 
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
-  const walletApp: WalletApp = "Plutip";
+  const walletApp: WalletApp = "Nami";
   const result = await runAnnounceAuction(walletApp);
   console.log("AnnounceAuction:", result);
 
