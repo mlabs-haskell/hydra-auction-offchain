@@ -2,6 +2,7 @@
   description = "A nix flake for hydra-auction-offchain.";
 
   nixConfig = {
+    extra-experimental-features = [ "flakes" "nix-command" ];
     bash-prompt = "\\[\\e[0m\\][\\[\\e[0;2m\\]nix-develop \\[\\e[0;1m\\]hydra-auction-offchain@\\[\\033[33m\\]$(git rev-parse --abbrev-ref HEAD) \\[\\e[0;32m\\]\\w\\[\\e[0m\\]]\\[\\e[0m\\]$ \\[\\e[0m\\]";
   };
 
