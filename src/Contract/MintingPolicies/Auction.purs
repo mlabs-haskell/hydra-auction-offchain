@@ -1,4 +1,4 @@
-module HydraAuctionOffchain.Contract.Scripts.AuctionMintingPolicy
+module HydraAuctionOffchain.Contract.MintingPolicies.Auction
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
   , mkAuctionMintingPolicy
@@ -9,11 +9,12 @@ import Contract.Monad (Contract)
 import Contract.Scripts (MintingPolicy)
 import Contract.Transaction (TransactionInput)
 import Contract.Value (TokenName)
+import HydraAuctionOffchain.Contract.MintingPolicies.AlwaysMints (mkAlwaysMintsPolicy)
 import HydraAuctionOffchain.Helpers (tokenNameFromAsciiUnsafe)
 import Undefined (undefined)
 
 mkAuctionMintingPolicy :: TransactionInput -> Contract MintingPolicy
-mkAuctionMintingPolicy _nonce = undefined
+mkAuctionMintingPolicy _nonce = mkAlwaysMintsPolicy
 
 -- | Auction state token, identifying the true auction escrow.
 auctionEscrowTokenName :: TokenName

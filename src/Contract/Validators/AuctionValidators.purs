@@ -1,4 +1,4 @@
-module HydraAuctionOffchain.Contract.Scripts.AuctionValidators
+module HydraAuctionOffchain.Contract.Validators.AuctionValidators
   ( AuctionValidators(AuctionValidators)
   , mkAuctionValidators
   ) where
@@ -8,10 +8,12 @@ import Prelude
 import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
 import Data.Generic.Rep (class Generic)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
-import Undefined (undefined)
+import HydraAuctionOffchain.Contract.Validators.AlwaysSucceeds
+  ( mkAlwaysSucceedsValidator
+  )
 
 newtype AuctionValidators (a :: Type) = AuctionValidators
   { auctionEscrow :: a
@@ -29,4 +31,10 @@ instance Show a => Show (AuctionValidators a) where
   show = genericShow
 
 mkAuctionValidators :: AuctionTerms -> Contract (AuctionValidators Validator)
-mkAuctionValidators = undefined
+mkAuctionValidators _ =
+  mkAlwaysSucceedsValidator <#> \alwaysSucceedsStub -> wrap
+    { auctionEscrow: alwaysSucceedsStub
+    , bidderDeposit: alwaysSucceedsStub
+    , feeEscrow: alwaysSucceedsStub
+    , standingBid: alwaysSucceedsStub
+    }

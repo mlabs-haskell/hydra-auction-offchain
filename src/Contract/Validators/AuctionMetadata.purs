@@ -1,10 +1,10 @@
-module HydraAuctionOffchain.Contract.Scripts.AuctionMetadataValidator
+module HydraAuctionOffchain.Contract.Validators.AuctionMetadata
   ( mkAuctionMetadataValidator
   ) where
 
 import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
-import HydraAuctionOffchain.Contract.Scripts.Common (reifySimpleValidator)
+import HydraAuctionOffchain.Contract.Validators.Common (reifySimpleValidator)
 
 foreign import auctionMetadataValidator :: String
 
