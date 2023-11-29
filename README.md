@@ -82,5 +82,19 @@ network. This will generate a wallet, pre-fund it with a substantial amount of
 ADA, and start an HTTP server to communicate the private key of the generated 
 wallet to the frontend code.
 3. Update the demo code in [demo/src/index.ts](./demo/src/index.ts) to use the
-`Plutip` wallet.
+Plutip wallet: 
+
+```TypeScript
+const walletApp: WalletApp = "Plutip";
+```
+
 4. In the second shell, run `make serve`.
+
+Note: Prior to announcing the auction, ensure that the auction lot tokens have
+been minted and placed in the wallet, otherwise the `AnnounceAuction` contract
+will fail with error code `AnnounceAuction04`. For testing purposes, you can
+utilize the provided `mintTokenUsingAlwaysMints` function to mint tokens using
+the `AlwaysMints` minting policy.
+
+Note: It is recommended to stop the plutip-env service by entering the `stop` 
+command to stdin. This ensures the correct deallocation of resources.
