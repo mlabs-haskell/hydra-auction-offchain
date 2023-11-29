@@ -1,4 +1,4 @@
-module HydraAuctionOffchain.Contract.Scripts.Common
+module HydraAuctionOffchain.Contract.Validators.Common
   ( reifySimpleValidator
   ) where
 

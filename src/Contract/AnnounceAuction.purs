@@ -53,12 +53,10 @@ import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson, orefCodec)
-import HydraAuctionOffchain.Contract.Scripts
+import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
-  , mkAuctionMetadataValidator
   , mkAuctionMintingPolicy
-  , mkAuctionValidators
   , standingBidTokenName
   )
 import HydraAuctionOffchain.Contract.Types
@@ -75,6 +73,10 @@ import HydraAuctionOffchain.Contract.Types
   , mkContractOutput
   , submitTxReturningContractResult
   , validateAuctionTerms
+  )
+import HydraAuctionOffchain.Contract.Validators
+  ( mkAuctionMetadataValidator
+  , mkAuctionValidators
   )
 import Partial.Unsafe (unsafePartial)
 

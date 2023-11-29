@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
+  , module ExportMintTokens
   , module ExportQueryAuctions
   ) where
 
@@ -17,6 +18,10 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
   , announceAuctionContract
   , mkAnnounceAuctionContractWithErrors
   ) as ExportAnnounceAuction
+
+import HydraAuctionOffchain.Contract.MintTokens
+  ( mintTokenUsingAlwaysMints
+  ) as ExportMintTokens
 
 import HydraAuctionOffchain.Contract.QueryAuctions
   ( queryAuctions

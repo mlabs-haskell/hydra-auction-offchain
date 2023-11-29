@@ -41,7 +41,17 @@ export type WalletApp =
   | "Lace"
   | "Plutip";
 
-export type ContractOutput<T> = T | ContractError;
+export type ContractOutput<T> = ContractOutputResult<T> | ContractOutputError;
+
+export type ContractOutputResult<T> = {
+  tag: "result";
+  value: T;
+};
+
+export type ContractOutputError = {
+  tag: "error";
+  value: ContractError;
+};
 
 export type ContractError = {
   errorCode: string;

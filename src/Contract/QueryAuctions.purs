@@ -16,15 +16,13 @@ import Control.Error.Util (bool)
 import Data.Array (mapMaybe) as Array
 import Data.Map (toUnfoldable) as Map
 import Data.Validation.Semigroup (isValid) as V
-import HydraAuctionOffchain.Contract.Scripts
-  ( auctionMetadataTokenName
-  , mkAuctionMetadataValidator
-  )
+import HydraAuctionOffchain.Contract.MintingPolicies (auctionMetadataTokenName)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfo(AuctionInfo)
   , AuctionTerms
   , validateAuctionTerms
   )
+import HydraAuctionOffchain.Contract.Validators (mkAuctionMetadataValidator)
 
 -- | Queries all currently existing auctions at the auction metadata validator address,
 -- | filtering out invalid entries.
