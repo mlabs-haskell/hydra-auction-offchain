@@ -4,6 +4,7 @@ module HydraAuctionOffchain.Config
   , demoServerConfig
   , mkContractParams
   , plutipConfig
+  , readHostPort
   ) where
 
 import Prelude

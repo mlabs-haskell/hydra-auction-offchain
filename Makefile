@@ -11,7 +11,7 @@ bundle: build
 	node bundle.js && tsc --emitDeclarationOnly && cd demo && node bundle.js 
 
 serve: bundle
-	http-server demo -a 0.0.0.0 -p 8080 -c-1 -P http://localhost:1443
+	http-server demo -a 0.0.0.0 -p 8080 -c-1 -P http://localhost:1443 --cors
 
 repl:
 	spago repl
