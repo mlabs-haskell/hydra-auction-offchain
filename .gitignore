@@ -9,3 +9,4 @@
 /.envrc
 /dist/
 /demo/index.js
+/plutip-env/payment.skey

@@ -13,4 +13,6 @@ export const announceAuction = async (
   params: AnnounceAuctionContractParams
 ): Promise<ContractOutput<TransactionHash>> => Purs.announceAuction(walletApp)(params)();
 
-export const queryAuctions = async (): Promise<Array<AuctionInfo>> => Purs.queryAuctions();
+export const queryAuctions = async (
+  walletApp: WalletApp | null
+): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();

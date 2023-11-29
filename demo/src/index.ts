@@ -8,10 +8,11 @@ import type {
 
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
-  const result = await runAnnounceAuction();
+  const walletApp: WalletApp = "Plutip";
+  const result = await runAnnounceAuction(walletApp);
   console.log("AnnounceAuction:", result);
 
-  const auctions = await queryAuctions();
+  const auctions = await queryAuctions(walletApp);
   console.log("QueryAuctions:", auctions);
 })();
 
@@ -19,8 +20,9 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runAnnounceAuction(): Promise<ContractOutput<TransactionHash>> {
-  const walletApp: WalletApp = "Nami";
+async function runAnnounceAuction(
+  walletApp: WalletApp
+): Promise<ContractOutput<TransactionHash>> {
   const params: AnnounceAuctionContractParams = {
     auctionTerms: {
       auctionLot: [
