@@ -4,10 +4,9 @@ module HydraAuctionOffchain.Contract.MintingPolicies.AlwaysMints
 
 import Contract.Prelude
 
-import Contract.Monad (Contract, liftContractM)
-import Contract.Scripts (MintingPolicy(PlutusMintingPolicy), PlutusScript)
+import Contract.Monad (Contract)
+import Contract.Scripts (MintingPolicy(PlutusMintingPolicy))
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Contract.Value (CurrencySymbol, scriptCurrencySymbol)
 import Control.Monad.Error.Class (liftMaybe)
 import Effect.Exception (error)
 

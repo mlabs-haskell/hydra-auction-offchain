@@ -11,7 +11,6 @@ import Contract.Transaction (TransactionInput)
 import Contract.Value (TokenName)
 import HydraAuctionOffchain.Contract.MintingPolicies.AlwaysMints (mkAlwaysMintsPolicy)
 import HydraAuctionOffchain.Helpers (tokenNameFromAsciiUnsafe)
-import Undefined (undefined)
 
 mkAuctionMintingPolicy :: TransactionInput -> Contract MintingPolicy
 mkAuctionMintingPolicy _nonce = mkAlwaysMintsPolicy

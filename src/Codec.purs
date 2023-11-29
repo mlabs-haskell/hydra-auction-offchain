@@ -204,3 +204,6 @@ instance HasJson ByteArray where
 
 instance HasJson TransactionHash where
   jsonCodec = const transactionHashCodec
+
+instance HasJson TokenName where
+  jsonCodec = const tokenNameCodec
