@@ -6,8 +6,12 @@ import Prelude
 
 import Aeson (encodeAeson, stringifyAeson)
 import Contract.Wallet.KeyFile (privatePaymentKeyFromFile)
+import Control.Error.Util (bool)
 import Ctl.Internal.ServerConfig (mkHttpUrl)
+import Data.Maybe (Maybe(Just))
 import Data.Newtype (unwrap)
+import Data.String (Pattern(Pattern))
+import Data.String (stripPrefix) as String
 import Data.Tuple.Nested ((/\))
 import Data.UInt (toInt) as UInt
 import Effect.Aff (Aff)
@@ -15,6 +19,7 @@ import Effect.Class.Console (log)
 import HTTPure (Method(Get, Options), (!?), (!@))
 import HTTPure as HTTPure
 import HTTPure.Status (ok) as HTTPureStatus
+import HydraAuctionOffchain.Config (HostPort, readHostPort)
 import HydraAuctionOffchain.Config (config, demoServerConfig) as Config
 import PlutipEnv.Config (PlutipEnvConfig)
 
@@ -38,16 +43,27 @@ routerCors config { method: Get, path: [ "skey" ] } = do
 
 routerCors _ _ = HTTPure.notFound
 
-demoOrigin :: String
-demoOrigin = mkHttpUrl Config.demoServerConfig
+demoOrigin :: HTTPure.Headers -> String
+demoOrigin reqHeaders =
+  case origin of
+    Just { host } | localhost host == localhost Config.demoServerConfig.host ->
+      mkHttpUrl $ Config.demoServerConfig { host = host }
+    _ ->
+      mkHttpUrl Config.demoServerConfig
+  where
+  origin :: Maybe HostPort
+  origin = readHostPort =<< String.stripPrefix (Pattern "http://") (reqHeaders !@ "Origin")
+
+  localhost :: String -> String
+  localhost host = bool host "127.0.0.1" $ host == "localhost"
 
 corsPreflightHandler :: HTTPure.Headers -> Aff HTTPure.Response
-corsPreflightHandler headers =
+corsPreflightHandler reqHeaders =
   HTTPure.emptyResponse' HTTPureStatus.ok $
     HTTPure.headers
-      [ "Access-Control-Allow-Origin" /\ demoOrigin
-      , "Access-Control-Allow-Methods" /\ (headers !@ "Access-Control-Request-Method")
-      , "Access-Control-Allow-Headers" /\ (headers !@ "Access-Control-Request-Headers")
+      [ "Access-Control-Allow-Origin" /\ demoOrigin reqHeaders
+      , "Access-Control-Allow-Methods" /\ (reqHeaders !@ "Access-Control-Request-Method")
+      , "Access-Control-Allow-Headers" /\ (reqHeaders !@ "Access-Control-Request-Headers")
       ]
 
 corsMiddleware
@@ -59,5 +75,5 @@ corsMiddleware router' request =
     response
       { headers =
           response.headers <>
-            HTTPure.header "Access-Control-Allow-Origin" demoOrigin
+            HTTPure.header "Access-Control-Allow-Origin" (demoOrigin request.headers)
       }
