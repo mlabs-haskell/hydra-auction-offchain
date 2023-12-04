@@ -8,7 +8,7 @@
     "dist/**/*"
   ],
   "scripts": {
-    "postinstall": "(if-env RUN_PREPARE=1 && install-purescript --purs-ver=0.15.8) || exit 0",
+    "postinstall": "(if-env RUN_PREPARE=1 && handpick --target=pursDependencies) || exit 0",
     "prepare": "(if-env RUN_PREPARE=1 && spago build && node bundle.js && tsc --emitDeclarationOnly) || exit 0"
   },
   "dependencies": {
@@ -40,10 +40,13 @@
     "esbuild": "0.18.11",
     "esbuild-plugin-polyfill-node": "^0.3.0",
     "esbuild-plugin-wasm": "^1.1.0",
+    "handpick": "7.1.1",
     "http-server": "14.1.1",
     "if-env": "1.0.4",
-    "purescript-installer": "0.3.5",
-    "spago": "0.21.0",
     "typescript": "5.0.4"
+  },
+  "pursDependencies": {
+    "purescript": "0.8.5",
+    "spago": "0.21.0"
   }
 }

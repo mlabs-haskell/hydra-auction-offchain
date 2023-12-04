@@ -8,10 +8,10 @@ build:
 	spago build --purs-args ${purs-args}
 
 bundle: build
-	node bundle.js && tsc --emitDeclarationOnly && cd demo && node bundle.js 
+	node bundle.js && tsc --emitDeclarationOnly
 
 serve: bundle
-	http-server demo -a 0.0.0.0 -p 8080 -c-1 -P http://localhost:1443 --cors
+	cd demo && npm run serve
 
 repl:
 	spago repl
