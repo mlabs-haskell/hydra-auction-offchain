@@ -3,7 +3,7 @@ import {
   awaitTxConfirmed,
   mintTokenUsingAlwaysMints,
   queryAuctions
-} from "../../dist";
+} from "hydra-auction-offchain";
 import type {
   AnnounceAuctionContractParams,
   ContractOutput,
@@ -11,7 +11,7 @@ import type {
   TokenName,
   TransactionHash,
   WalletApp
-} from "../../dist";
+} from "hydra-auction-offchain";
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
