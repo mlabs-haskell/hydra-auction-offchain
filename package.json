@@ -8,13 +8,14 @@
     "dist/**/*"
   ],
   "scripts": {
-    "build": "make bundle"
+    "postinstall": "(if-env RUN_PREPARE=1 && install-purescript --purs-ver=0.15.8) || exit 0",
+    "prepare": "(if-env RUN_PREPARE=1 && spago build && node bundle.js && tsc --emitDeclarationOnly) || exit 0"
   },
   "dependencies": {
     "@emurgo/cardano-message-signing-browser": "1.0.1",
     "@emurgo/cardano-serialization-lib-browser": "11.2.1",
     "@mlabs-haskell/csl-gc-wrapper": "^1.0.1",
-    "@mlabs-haskell/json-bigint": " 1.0.0",
+    "@mlabs-haskell/json-bigint": "1.0.0",
     "@noble/secp256k1": "^1.7.0",
     "apply-args-browser": "0.0.1",
     "base64-js": "^1.5.1",
@@ -40,6 +41,9 @@
     "esbuild-plugin-polyfill-node": "^0.3.0",
     "esbuild-plugin-wasm": "^1.1.0",
     "http-server": "14.1.1",
+    "if-env": "1.0.4",
+    "purescript-installer": "0.3.5",
+    "spago": "0.21.0",
     "typescript": "5.0.4"
   }
 }
