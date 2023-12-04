@@ -2,10 +2,10 @@
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**
 
 - [Environment](#environment)
 - [Workflows](#workflows)
+  - [Use as an NPM dependency](#use-as-an-npm-dependency)
   - [Bundle](#bundle)
   - [Serve demo](#serve-demo)
   - [Deploy locally using Plutip](#deploy-locally-using-plutip)
@@ -23,16 +23,62 @@ Follow these steps:
 2. Set the required environment variables:
 
 ```shell
+export NPM_ENV=1
 export CARDANO_NETWORK=preprod
 export BLOCKFROST_API_KEY=<your key>
 export PLUTIP_ENV_HOST_PORT=localhost:8083 
 export DEMO_HOST_PORT=localhost:8080
 ```
 
+**Important**: Set `NPM_ENV` to 1 if you intend to [use `hydra-auction-offchain`
+as an NPM dependency](#use-as-an-npm-dependency). If you need to enter the Nix development environment, 
+leave this variable unset.
+
 Note: Blockfrost API key for preprod network can be generated at 
 [Blockfrost](https://blockfrost.io/).
 
 ## Workflows
+
+### Use as an NPM dependency
+
+The easiest way to start using `hydra-auction-offchain` is to specify it as a
+git dependency in your `package.json`. Running `npm install` from within your
+project will fetch the library from GitHub and generate the `dist` folder using
+the environment variables set beforehand.  
+
+**Important**: Before executing `npm install`, ensure that you have set 
+`NPM_ENV` environment variable to 1 (don't forget to set other required env
+variables too). Otherwise, the necessary `postinstall` and `prepare` npm scripts
+won't run, resulting in the failure to generate the `dist` folder.
+
+Specify the dependency in `package.json` as follows:
+
+```json
+"dependencies": {
+  "hydra-auction-offchain": "git+ssh://git@github.com:mlabs-haskell/hydra-auction-offchain"
+}
+```
+
+Then, import the API into your project as shown below:
+
+```TypeScript
+import {
+  announceAuction,
+  awaitTxConfirmed,
+  mintTokenUsingAlwaysMints,
+  queryAuctions
+} from "hydra-auction-offchain";
+import type {
+  AnnounceAuctionContractParams,
+  ContractOutput,
+  POSIXTime,
+  TokenName,
+  TransactionHash,
+  WalletApp
+} from "hydra-auction-offchain";
+```
+
+For a complete example, refer to [demo/src/index.ts](./demo/src/index.ts).
 
 ### Bundle
 
