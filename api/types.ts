@@ -81,6 +81,8 @@ export type TransactionInput = {
 
 export type TransactionHash = string;
 
+export type TxCbor = string;
+
 export type UInt = string;
 
 export type Value = Array<ValueEntry>;
@@ -90,3 +92,5 @@ export type ValueEntry = {
   tn: TokenName;
   quantity: BigInt;
 };
+
+export type VerificationKey = string;
