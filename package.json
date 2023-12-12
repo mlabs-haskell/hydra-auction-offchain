@@ -8,8 +8,8 @@
     "dist/**/*"
   ],
   "scripts": {
-    "postinstall": "(if-env NPM_ENV=1 && handpick --target=pursDependencies) || exit 0",
-    "prepare": "(if-env NPM_ENV=1 && spago build && node bundle.js && tsc --emitDeclarationOnly) || exit 0"
+    "postinstall": "handpick --target=pursDependencies",
+    "prepare": "spago build && node bundle.js && tsc --emitDeclarationOnly"
   },
   "dependencies": {
     "@emurgo/cardano-message-signing-browser": "1.0.1",
