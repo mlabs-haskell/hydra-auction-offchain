@@ -8,10 +8,43 @@
     "dist/**/*"
   ],
   "scripts": {
-    "postinstall": "handpick --target=pursDependencies",
-    "prepare": "spago build && node bundle.js && tsc --emitDeclarationOnly"
+    "prepare": "(if-env NPM_ENV=1 && handpick --target=bundleDependencies && spago build && node ./bundle.js && tsc --emitDeclarationOnly && rm -r node_modules) || exit 0"
   },
   "dependencies": {
+    "@emurgo/cardano-message-signing-browser": "1.0.1",
+    "@emurgo/cardano-serialization-lib-browser": "11.2.1",
+    "@mlabs-haskell/csl-gc-wrapper": "^1.0.1",
+    "@mlabs-haskell/json-bigint": "1.0.0",
+    "@noble/secp256k1": "^1.7.0",
+    "apply-args-browser": "0.0.1",
+    "base64-js": "^1.5.1",
+    "big-integer": "1.6.51",
+    "bignumber.js": "^9.1.1",
+    "bip39": "^3.1.0",
+    "blakejs": "1.2.1",
+    "bufferutil": "4.0.5",
+    "handpick": "7.1.1",
+    "if-env": "1.0.4",
+    "jssha": "3.2.0",
+    "puppeteer-core": "^15.3.2",
+    "reconnecting-websocket": "4.4.0",
+    "uniqid": "5.4.0",
+    "ws": "8.4.0",
+    "xhr2": "0.2.1"
+  },
+  "devDependencies": {
+    "@emurgo/cardano-message-signing-nodejs": "1.0.1",
+    "@emurgo/cardano-serialization-lib-nodejs": "11.2.1",
+    "apply-args-nodejs": "0.0.1",
+    "buffer": "6.0.3",
+    "doctoc": "^2.2.1",
+    "esbuild": "0.18.11",
+    "esbuild-plugin-polyfill-node": "^0.3.0",
+    "esbuild-plugin-wasm": "^1.1.0",
+    "http-server": "14.1.1",
+    "typescript": "5.0.4"
+  },
+  "bundleDependencies": {
     "@emurgo/cardano-message-signing-browser": "1.0.1",
     "@emurgo/cardano-serialization-lib-browser": "11.2.1",
     "@mlabs-haskell/csl-gc-wrapper": "^1.0.1",
@@ -29,24 +62,12 @@
     "reconnecting-websocket": "4.4.0",
     "uniqid": "5.4.0",
     "ws": "8.4.0",
-    "xhr2": "0.2.1"
-  },
-  "devDependencies": {
-    "@emurgo/cardano-message-signing-nodejs": "1.0.1",
-    "@emurgo/cardano-serialization-lib-nodejs": "11.2.1",
-    "apply-args-nodejs": "0.0.1",
-    "buffer": "6.0.3",
-    "doctoc": "^2.2.1",
+    "xhr2": "0.2.1",
     "esbuild": "0.18.11",
     "esbuild-plugin-polyfill-node": "^0.3.0",
     "esbuild-plugin-wasm": "^1.1.0",
-    "handpick": "7.1.1",
-    "http-server": "14.1.1",
-    "if-env": "1.0.4",
-    "typescript": "5.0.4"
-  },
-  "pursDependencies": {
     "purescript": "0.15.8",
-    "spago": "0.21.0"
+    "spago": "0.21.0",
+    "typescript": "5.0.4"
   }
 }
