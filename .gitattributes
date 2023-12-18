@@ -1,3 +1,4 @@
 spago-packages.nix linguist-generated=true
 flake.lock linguist-generated=true
 package-lock.json linguist-generated=true
+demo/package-lock.json linguist-generated=true
