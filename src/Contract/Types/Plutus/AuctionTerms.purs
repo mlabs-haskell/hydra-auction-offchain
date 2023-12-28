@@ -12,6 +12,8 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , NoDelegatesError
       )
   , auctionTermsCodec
+  , biddingPeriod
+  , registrationPeriod
   , validateAuctionTerms
   ) where
 
@@ -23,7 +25,7 @@ import Contract.Hashing (blake2b224Hash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
-import Contract.Time (POSIXTime)
+import Contract.Time (POSIXTime, POSIXTimeRange, mkFiniteInterval, to)
 import Contract.Value (Value)
 import Contract.Value (gt) as Value
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
@@ -116,6 +118,18 @@ auctionTermsCodec =
     , minBidIncrement: bigIntCodec
     , minDepositAmount: bigIntCodec
     }
+
+--------------------------------------------------------------------------------
+-- Auction Lifecycle
+--------------------------------------------------------------------------------
+
+registrationPeriod :: AuctionTerms -> POSIXTimeRange
+registrationPeriod (AuctionTerms rec) =
+  to $ rec.biddingStart - one
+
+biddingPeriod :: AuctionTerms -> POSIXTimeRange
+biddingPeriod (AuctionTerms rec) =
+  mkFiniteInterval rec.biddingStart $ rec.biddingEnd - one
 
 --------------------------------------------------------------------------------
 -- Validation

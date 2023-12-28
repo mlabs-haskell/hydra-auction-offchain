@@ -9,6 +9,7 @@ import type {
   ContractOutput,
   CurrencySymbol,
   PubKeyHash,
+  StartBiddingContractParams,
   TokenName,
   TransactionHash,
   TxCbor,
@@ -45,8 +46,9 @@ export const authorizeBidders = async (
  * Initiate the auction, enabling bidders to place their bids.
  */
 export const startBidding = async (
-  auctionCs: CurrencySymbol
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  walletApp: WalletApp,
+  params: StartBiddingContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.startBidding(walletApp)(params)();
 
 /**
  * Claim the auction lot and deposit if the auction lot has not been purchased

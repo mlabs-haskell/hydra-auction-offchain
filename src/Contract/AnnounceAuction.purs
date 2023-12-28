@@ -22,7 +22,6 @@ import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
-import Contract.Time (to) as Time
 import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutputWithRefScript)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
@@ -74,6 +73,7 @@ import HydraAuctionOffchain.Contract.Types
   , submitTxReturningContractResult
   , validateAuctionTerms
   )
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (registrationPeriod)
 import HydraAuctionOffchain.Contract.Validators
   ( mkAuctionMetadataValidator
   , mkAuctionValidators
@@ -204,8 +204,8 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , Constraints.mustPayToScript metadataValidatorHash auctionInfoDatum DatumInline
           auctionInfoValue
 
-      -- Tx must be included in the block before bidding starts:
-      , Constraints.mustValidateIn $ Time.to biddingStart
+      -- Set transaction validity interval to registration period:
+      , Constraints.mustValidateIn $ registrationPeriod params.auctionTerms
       ]
 
     lookups :: ScriptLookups Void

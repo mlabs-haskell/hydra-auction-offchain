@@ -1,4 +1,19 @@
-module HydraAuctionOffchain.Contract.StartBidding where
+module HydraAuctionOffchain.Contract.StartBidding
+  ( StartBiddingContractError
+      ( StartBidding_Error_InvalidAuctionTerms
+      , StartBidding_Error_CouldNotGetOwnPubKeyHash
+      , StartBidding_Error_ContractNotInitiatedBySeller
+      , StartBidding_Error_CurrentTimeBeforeBiddingStart
+      , StartBidding_Error_CurrentTimeAfterBiddingEnd
+      , StartBidding_Error_CouldNotBuildAuctionEscrowValidator
+      , StartBidding_Error_AuctionEscrowValidatorAddressMismatch
+      , StartBidding_Error_CouldNotGetStandingBidValidatorHash
+      , StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
+      )
+  , StartBiddingContractParams(StartBiddingContractParams)
+  , mkStartBiddingContractWithErrors
+  , startBiddingContract
+  ) where
 
 import Contract.Prelude
 
@@ -7,20 +22,34 @@ import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
-import Contract.ScriptLookups (unspentOutputs) as Lookups
+import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
-import Contract.Transaction (TransactionInput, TransactionOutput(TransactionOutput))
+import Contract.Transaction
+  ( TransactionHash
+  , TransactionInput
+  , TransactionOutput(TransactionOutput)
+  )
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
-import Contract.TxConstraints (mustPayToScript, mustSpendScriptOutput) as Constraints
+import Contract.TxConstraints
+  ( mustBeSignedBy
+  , mustPayToScript
+  , mustSpendScriptOutput
+  , mustValidateIn
+  ) as Constraints
 import Contract.Utxos (utxosAt)
 import Contract.Value (TokenName, Value)
 import Contract.Value (leq, singleton) as Value
+import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (find) as Array
+import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (singleton, toUnfoldable) as Map
+import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
+import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , standingBidTokenName
@@ -32,13 +61,17 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionInfo(AuctionInfo)
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
+  , ContractOutput
   , ContractResult
   , StandingBidState(StandingBidState)
   , Utxo
+  , auctionInfoCodec
   , emptySubmitTxData
+  , mkContractOutput
   , submitTxReturningContractResult
   , validateAuctionTerms
   )
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (biddingPeriod)
 import HydraAuctionOffchain.Contract.Validators
   ( MkAuctionEscrowValidatorError
   , mkAuctionEscrowValidator
@@ -47,6 +80,29 @@ import HydraAuctionOffchain.Contract.Validators
 newtype StartBiddingContractParams = StartBiddingContractParams
   { auctionInfo :: AuctionInfo
   }
+
+derive instance Generic StartBiddingContractParams _
+derive instance Newtype StartBiddingContractParams _
+derive instance Eq StartBiddingContractParams
+
+instance Show StartBiddingContractParams where
+  show = genericShow
+
+instance HasJson StartBiddingContractParams where
+  jsonCodec = const startBiddingContractParamsCodec
+
+startBiddingContractParamsCodec :: CA.JsonCodec StartBiddingContractParams
+startBiddingContractParamsCodec =
+  wrapIso StartBiddingContractParams $ CA.object "StartBiddingContractParams" $
+    CAR.record
+      { auctionInfo: auctionInfoCodec
+      }
+
+startBiddingContract
+  :: StartBiddingContractParams
+  -> Contract (ContractOutput TransactionHash)
+startBiddingContract =
+  mkContractOutput _.txHash <<< mkStartBiddingContractWithErrors
 
 mkStartBiddingContractWithErrors
   :: StartBiddingContractParams
@@ -59,6 +115,11 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
   -- Check auction terms:
   validateAuctionTerms auctionTerms #
     validation (throwError <<< StartBidding_Error_InvalidAuctionTerms) pure
+
+  -- Check that the contract is initiated by the seller:
+  ownPkh <- ownPaymentPubKeyHash !? StartBidding_Error_CouldNotGetOwnPubKeyHash
+  when (unwrap ownPkh /= auctionTermsRec.sellerPkh) $
+    throwError StartBidding_Error_ContractNotInitiatedBySeller
 
   -- Check that the current time is within the bidding period:
   nowTime <- lift currentTime
@@ -130,11 +191,18 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
         -- standing bid validator address:
         Constraints.mustPayToScript standingBidValidatorHash standingBidDatum DatumInline
           standingBidTokenValue
+
+      , -- This transaction must be signed by the seller:
+        Constraints.mustBeSignedBy $ wrap auctionTermsRec.sellerPkh
+
+      , -- Set transaction validity interval to bidding period:
+        Constraints.mustValidateIn $ biddingPeriod auctionTerms
       ]
 
     lookups :: ScriptLookups Void
     lookups = mconcat
       [ Lookups.unspentOutputs $ Map.singleton auctionEscrowOref $ snd auctionEscrowUtxo
+      , Lookups.validator auctionEscrowValidator
       ]
 
   lift $ submitTxReturningContractResult {} $ emptySubmitTxData
@@ -171,6 +239,8 @@ queryAuctionEscrowUtxo (AuctionInfo auctionInfo) =
 
 data StartBiddingContractError
   = StartBidding_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)
+  | StartBidding_Error_CouldNotGetOwnPubKeyHash
+  | StartBidding_Error_ContractNotInitiatedBySeller
   | StartBidding_Error_CurrentTimeBeforeBiddingStart
   | StartBidding_Error_CurrentTimeAfterBiddingEnd
   | StartBidding_Error_CouldNotBuildAuctionEscrowValidator MkAuctionEscrowValidatorError
@@ -190,29 +260,37 @@ instance ToContractError StartBiddingContractError where
       { errorCode: "StartBidding01"
       , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
       }
-    StartBidding_Error_CurrentTimeBeforeBiddingStart ->
+    StartBidding_Error_CouldNotGetOwnPubKeyHash ->
       { errorCode: "StartBidding02"
+      , message: "Could not get own public key hash."
+      }
+    StartBidding_Error_ContractNotInitiatedBySeller ->
+      { errorCode: "StartBidding03"
+      , message: "Contract must be initiated by the seller."
+      }
+    StartBidding_Error_CurrentTimeBeforeBiddingStart ->
+      { errorCode: "StartBidding04"
       , message: "Tx cannot be submitted before bidding start time."
       }
     StartBidding_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "StartBidding03"
+      { errorCode: "StartBidding05"
       , message: "Tx cannot be submitted after bidding end time."
       }
     StartBidding_Error_CouldNotBuildAuctionEscrowValidator err ->
-      { errorCode: "StartBidding04"
+      { errorCode: "StartBidding06"
       , message: "Could not build auction escrow validator, error: " <> show err <> "."
       }
     StartBidding_Error_AuctionEscrowValidatorAddressMismatch ->
-      { errorCode: "StartBidding05"
+      { errorCode: "StartBidding07"
       , message:
           "Computed auction escrow validator address doesn't match \
           \the address provided in AuctionInfo."
       }
     StartBidding_Error_CouldNotGetStandingBidValidatorHash ->
-      { errorCode: "StartBidding06"
+      { errorCode: "StartBidding08"
       , message: "Impossible: Could not get standing bid validator hash."
       }
     StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo ->
-      { errorCode: "StartBidding07"
+      { errorCode: "StartBidding09"
       , message: "Could not find current auction escrow utxo."
       }

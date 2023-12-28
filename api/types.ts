@@ -5,6 +5,10 @@ export type AnnounceAuctionContractParams = {
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
 
+export type StartBiddingContractParams = {
+  auctionInfo: AuctionInfo;
+};
+
 export type AuctionInfo = {
   auctionId: CurrencySymbol;
   auctionTerms: AuctionTerms;

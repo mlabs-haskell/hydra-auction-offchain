@@ -47,6 +47,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionEscrowState
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
   ( AuctionInfo(AuctionInfo)
+  , auctionInfoCodec
   ) as ExportPlutusAuctionInfo
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
