@@ -45,6 +45,7 @@ import HydraAuctionOffchain.Codec
   , pubKeyHashCodec
   , valueCodec
   )
+import Ply.Typename (class PlyTypeName)
 import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionTerms = AuctionTerms
@@ -95,6 +96,9 @@ instance FromData AuctionTerms where
     | n == BigNum.zero && recLength (Proxy :: Proxy AuctionTerms) == length pd =
         wrap <$> fromDataRec auctionTermsSchema pd
   fromData _ = Nothing
+
+instance PlyTypeName AuctionTerms where
+  plyTypeName _ = "HydraAuctionOnchain.Types.AuctionTerms:AuctionTerms"
 
 auctionTermsCodec :: CA.JsonCodec AuctionTerms
 auctionTermsCodec =
