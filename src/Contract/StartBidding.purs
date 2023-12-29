@@ -74,7 +74,7 @@ import HydraAuctionOffchain.Contract.Types
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (biddingPeriod)
 import HydraAuctionOffchain.Contract.Validators
   ( MkAuctionEscrowValidatorError
-  , mkAuctionEscrowValidator
+  , mkAuctionEscrowValidatorFromAuctionInfo
   )
 
 newtype StartBiddingContractParams = StartBiddingContractParams
@@ -131,7 +131,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
   -- Build auction escrow validator:
   auctionEscrowValidator <-
     withExceptT StartBidding_Error_CouldNotBuildAuctionEscrowValidator $
-      mkAuctionEscrowValidator auctionInfo
+      mkAuctionEscrowValidatorFromAuctionInfo auctionInfo
   let
     auctionEscrowValidatorHash = validatorHash auctionEscrowValidator
     auctionEscrowValidatorAddress = scriptHashAddress auctionEscrowValidatorHash Nothing

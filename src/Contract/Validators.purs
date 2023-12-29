@@ -2,6 +2,7 @@ module HydraAuctionOffchain.Contract.Validators
   ( module ExportAuctionEscrow
   , module ExportAuctionMetadata
   , module ExportAuctionValidators
+  , module ExportStandingBid
   ) where
 
 import HydraAuctionOffchain.Contract.Validators.AuctionEscrow
@@ -11,6 +12,7 @@ import HydraAuctionOffchain.Contract.Validators.AuctionEscrow
       , AuctionEscrowValidatorReificationError
       )
   , mkAuctionEscrowValidator
+  , mkAuctionEscrowValidatorFromAuctionInfo
   ) as ExportAuctionEscrow
 
 import HydraAuctionOffchain.Contract.Validators.AuctionMetadata
@@ -19,5 +21,10 @@ import HydraAuctionOffchain.Contract.Validators.AuctionMetadata
 
 import HydraAuctionOffchain.Contract.Validators.AuctionValidators
   ( AuctionValidators(AuctionValidators)
+  , MkAuctionValidatorsError(MkStandingBidValidatorError, MkAuctionEscrowValidatorError)
   , mkAuctionValidators
   ) as ExportAuctionValidators
+
+import HydraAuctionOffchain.Contract.Validators.StandingBid
+  ( mkStandingBidValidator
+  ) as ExportStandingBid

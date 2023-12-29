@@ -1,12 +1,13 @@
 module HydraAuctionOffchain.Contract.AnnounceAuction
   ( AnnounceAuctionContractError
-      ( AnnounceAuctionInvalidAuctionTerms
-      , AnnounceAuctionCouldNotGetWalletUtxos
-      , AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
-      , AnnounceAuctionCouldNotCoverAuctionLot
-      , AnnounceAuctionEmptyAuctionLotUtxoMap
-      , AnnounceAuctionCurrentTimeAfterBiddingStart
-      , AnnounceAuctionCouldNotGetAuctionCurrencySymbol
+      ( AnnounceAuction_Error_InvalidAuctionTerms
+      , AnnounceAuction_Error_CouldNotGetWalletUtxos
+      , AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos
+      , AnnounceAuction_Error_CouldNotCoverAuctionLot
+      , AnnounceAuction_Error_EmptyAuctionLotUtxoMap
+      , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
+      , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
+      , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       )
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
   , announceAuctionContract
@@ -35,7 +36,7 @@ import Contract.Value (TokenName, Value, scriptCurrencySymbol)
 import Contract.Value (singleton) as Value
 import Contract.Wallet (getWalletUtxos)
 import Control.Error.Util ((!?), (??))
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Except (ExceptT, runExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Parallel (parTraverse)
 import Ctl.Internal.BalanceTx.CoinSelection
@@ -75,7 +76,8 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (registrationPeriod)
 import HydraAuctionOffchain.Contract.Validators
-  ( mkAuctionMetadataValidator
+  ( MkAuctionValidatorsError
+  , mkAuctionMetadataValidator
   , mkAuctionValidators
   )
 import Partial.Unsafe (unsafePartial)
@@ -117,17 +119,18 @@ mkAnnounceAuctionContractWithErrors
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Check auction terms:
   validateAuctionTerms params.auctionTerms #
-    validation (throwError <<< AnnounceAuctionInvalidAuctionTerms) pure
+    validation (throwError <<< AnnounceAuction_Error_InvalidAuctionTerms) pure
 
   -- Select utxos to cover auction lot Value:
   let { auctionLot, biddingStart } = unwrap params.auctionTerms
-  utxos <- getWalletUtxos !? AnnounceAuctionCouldNotGetWalletUtxos
+  utxos <- getWalletUtxos !? AnnounceAuction_Error_CouldNotGetWalletUtxos
   additionalAuctionLotUtxos <- queryUtxos params.additionalAuctionLotOrefs
-    !? AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
+    !? AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos
   let utxos' = Map.union utxos additionalAuctionLotUtxos
-  auctionLotUtxos <- selectUtxos utxos' auctionLot !? AnnounceAuctionCouldNotCoverAuctionLot
+  auctionLotUtxos <- selectUtxos utxos' auctionLot
+    !? AnnounceAuction_Error_CouldNotCoverAuctionLot
   when (Map.isEmpty auctionLotUtxos) $
-    throwError AnnounceAuctionEmptyAuctionLotUtxoMap -- impossible
+    throwError AnnounceAuction_Error_EmptyAuctionLotUtxoMap -- impossible
 
   -- Select nonce utxo from the auction lot utxos:
   let nonceUtxo = unsafePartial fromJust $ Array.head $ Map.toUnfoldable auctionLotUtxos
@@ -136,22 +139,25 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Check that the current time < bidding start time:
   nowTime <- lift currentTime
   unless (nowTime < biddingStart) $
-    throwError AnnounceAuctionCurrentTimeAfterBiddingStart
+    throwError AnnounceAuction_Error_CurrentTimeAfterBiddingStart
 
   -- Get auction minting policy:
   auctionMintingPolicy <- lift $ mkAuctionMintingPolicy nonceOref
-  auctionCurrencySymbol <- scriptCurrencySymbol auctionMintingPolicy ??
-    AnnounceAuctionCouldNotGetAuctionCurrencySymbol
+  auctionCs <- scriptCurrencySymbol auctionMintingPolicy ??
+    AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
 
   -- Get auction validators:
-  validatorHashes <- lift $ map validatorHash <$> mkAuctionValidators params.auctionTerms
+  validators <-
+    withExceptT AnnounceAuction_Error_CouldNotBuildAuctionValidators $
+      mkAuctionValidators auctionCs params.auctionTerms
+  let validatorHashes = validatorHash <$> validators
   let validatorAddresses = unwrap $ flip scriptHashAddress Nothing <$> validatorHashes
 
   -- Get auction metadata validator hash:
   metadataValidatorHash <- lift $ validatorHash <$> mkAuctionMetadataValidator
   let
     mkAuctionToken :: TokenName -> Value
-    mkAuctionToken tokenName = Value.singleton auctionCurrencySymbol tokenName one
+    mkAuctionToken tokenName = Value.singleton auctionCs tokenName one
 
     auctionTokenBundle :: Value
     auctionTokenBundle = foldMap mkAuctionToken
@@ -178,7 +184,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
 
     auctionInfoDatum :: Datum
     auctionInfoDatum = wrap $ toData $ AuctionInfo
-      { auctionId: auctionCurrencySymbol
+      { auctionId: auctionCs
       , auctionTerms: params.auctionTerms
       , auctionEscrowAddr: validatorAddresses.auctionEscrow
       , bidderDepositAddr: validatorAddresses.bidderDeposit
@@ -244,13 +250,14 @@ queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
 --------------------------------------------------------------------------------
 
 data AnnounceAuctionContractError
-  = AnnounceAuctionInvalidAuctionTerms (Array AuctionTermsValidationError)
-  | AnnounceAuctionCouldNotGetWalletUtxos
-  | AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
-  | AnnounceAuctionCouldNotCoverAuctionLot
-  | AnnounceAuctionEmptyAuctionLotUtxoMap
-  | AnnounceAuctionCurrentTimeAfterBiddingStart
-  | AnnounceAuctionCouldNotGetAuctionCurrencySymbol
+  = AnnounceAuction_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)
+  | AnnounceAuction_Error_CouldNotGetWalletUtxos
+  | AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos
+  | AnnounceAuction_Error_CouldNotCoverAuctionLot
+  | AnnounceAuction_Error_EmptyAuctionLotUtxoMap
+  | AnnounceAuction_Error_CurrentTimeAfterBiddingStart
+  | AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
+  | AnnounceAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
 
 derive instance Generic AnnounceAuctionContractError _
 derive instance Eq AnnounceAuctionContractError
@@ -260,31 +267,35 @@ instance Show AnnounceAuctionContractError where
 
 instance ToContractError AnnounceAuctionContractError where
   toContractError = wrap <<< case _ of
-    AnnounceAuctionInvalidAuctionTerms validationErrors ->
+    AnnounceAuction_Error_InvalidAuctionTerms validationErrors ->
       { errorCode: "AnnounceAuction01"
       , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
       }
-    AnnounceAuctionCouldNotGetWalletUtxos ->
+    AnnounceAuction_Error_CouldNotGetWalletUtxos ->
       { errorCode: "AnnounceAuction02"
       , message: "Could not get wallet utxos."
       }
-    AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos ->
+    AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos ->
       { errorCode: "AnnounceAuction03"
       , message: "Could not resolve provided action lot output references."
       }
-    AnnounceAuctionCouldNotCoverAuctionLot ->
+    AnnounceAuction_Error_CouldNotCoverAuctionLot ->
       { errorCode: "AnnounceAuction04"
       , message: "Could not cover auction lot Value."
       }
-    AnnounceAuctionEmptyAuctionLotUtxoMap ->
+    AnnounceAuction_Error_EmptyAuctionLotUtxoMap ->
       { errorCode: "AnnounceAuction05"
       , message: "Impossible: Auction lot utxo map cannot be empty."
       }
-    AnnounceAuctionCurrentTimeAfterBiddingStart ->
+    AnnounceAuction_Error_CurrentTimeAfterBiddingStart ->
       { errorCode: "AnnounceAuction06"
       , message: "Tx cannot be submitted after bidding start time."
       }
-    AnnounceAuctionCouldNotGetAuctionCurrencySymbol ->
+    AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol ->
       { errorCode: "AnnounceAuction07"
       , message: "Could not get Auction currency symbol from minting policy."
+      }
+    AnnounceAuction_Error_CouldNotBuildAuctionValidators err ->
+      { errorCode: "AnnounceAuction08"
+      , message: "Could not build auction validators, error: " <> show err <> "."
       }

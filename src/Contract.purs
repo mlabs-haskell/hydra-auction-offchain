@@ -7,13 +7,14 @@ module HydraAuctionOffchain.Contract
 
 import HydraAuctionOffchain.Contract.AnnounceAuction
   ( AnnounceAuctionContractError
-      ( AnnounceAuctionInvalidAuctionTerms
-      , AnnounceAuctionCouldNotGetWalletUtxos
-      , AnnounceAuctionCouldNotGetAdditionalAuctionLotUtxos
-      , AnnounceAuctionCouldNotCoverAuctionLot
-      , AnnounceAuctionEmptyAuctionLotUtxoMap
-      , AnnounceAuctionCurrentTimeAfterBiddingStart
-      , AnnounceAuctionCouldNotGetAuctionCurrencySymbol
+      ( AnnounceAuction_Error_InvalidAuctionTerms
+      , AnnounceAuction_Error_CouldNotGetWalletUtxos
+      , AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos
+      , AnnounceAuction_Error_CouldNotCoverAuctionLot
+      , AnnounceAuction_Error_EmptyAuctionLotUtxoMap
+      , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
+      , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
+      , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       )
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
   , announceAuctionContract
