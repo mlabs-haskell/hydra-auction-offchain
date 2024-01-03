@@ -8,6 +8,8 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
       , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
+      , AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
+      , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
   , announceAuctionContract
@@ -23,6 +25,7 @@ import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
+import Contract.Time (POSIXTimeRange, to)
 import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutputWithRefScript)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
@@ -34,7 +37,7 @@ import Contract.TxConstraints
 import Contract.Utxos (UtxoMap, getUtxo)
 import Contract.Value (TokenName, Value, scriptCurrencySymbol)
 import Contract.Value (singleton) as Value
-import Contract.Wallet (getWalletUtxos)
+import Contract.Wallet (getWalletUtxos, ownPaymentPubKeyHash)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, runExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -46,6 +49,7 @@ import Ctl.Internal.BalanceTx.CoinSelection
 import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
 import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
 import Data.Array (head) as Array
+import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
@@ -64,26 +68,27 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionEscrowState(AuctionAnnounced)
   , AuctionInfo(AuctionInfo)
   , AuctionPolicyRedeemer(MintAuction)
-  , AuctionTerms
+  , AuctionTermsInput
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult
-  , auctionTermsCodec
+  , auctionTermsInputCodec
   , emptySubmitTxData
+  , mkAuctionTerms
   , mkContractOutput
   , submitTxReturningContractResult
   , validateAuctionTerms
   )
-import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (registrationPeriod)
 import HydraAuctionOffchain.Contract.Validators
   ( MkAuctionValidatorsError
   , mkAuctionMetadataValidator
   , mkAuctionValidators
   )
+import HydraAuctionOffchain.Wallet (GetWalletPubKeyBytesError, getWalletPubKeyBytes)
 import Partial.Unsafe (unsafePartial)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
-  { auctionTerms :: AuctionTerms
+  { auctionTerms :: AuctionTermsInput
   -- Allows the user to provide additional utxos to cover auction lot Value. This can be useful
   -- if some portion of the Value is, for example, locked at a multi-signature address.
   , additionalAuctionLotOrefs :: Array TransactionInput
@@ -103,7 +108,7 @@ announceAuctionContractParamsCodec :: CA.JsonCodec AnnounceAuctionContractParams
 announceAuctionContractParamsCodec =
   wrapIso AnnounceAuctionContractParams $ CA.object "AnnounceAuctionContractParams" $
     CAR.record
-      { auctionTerms: auctionTermsCodec
+      { auctionTerms: auctionTermsInputCodec
       , additionalAuctionLotOrefs: CA.array orefCodec
       }
 
@@ -117,12 +122,17 @@ mkAnnounceAuctionContractWithErrors
   :: AnnounceAuctionContractParams
   -> ExceptT AnnounceAuctionContractError Contract ContractResult
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
+  -- Get pkh and vkey, build AuctionTerms:
+  sellerPkh <- ownPaymentPubKeyHash !? AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
+  sellerVk <- withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey getWalletPubKeyBytes
+  let auctionTerms = mkAuctionTerms params.auctionTerms (unwrap sellerPkh) sellerVk
+
   -- Check auction terms:
-  validateAuctionTerms params.auctionTerms #
+  validateAuctionTerms auctionTerms #
     validation (throwError <<< AnnounceAuction_Error_InvalidAuctionTerms) pure
 
   -- Select utxos to cover auction lot Value:
-  let { auctionLot, biddingStart } = unwrap params.auctionTerms
+  let { auctionLot, biddingStart } = unwrap auctionTerms
   utxos <- getWalletUtxos !? AnnounceAuction_Error_CouldNotGetWalletUtxos
   additionalAuctionLotUtxos <- queryUtxos params.additionalAuctionLotOrefs
     !? AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos
@@ -149,7 +159,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get auction validators:
   validators <-
     withExceptT AnnounceAuction_Error_CouldNotBuildAuctionValidators $
-      mkAuctionValidators auctionCs params.auctionTerms
+      mkAuctionValidators auctionCs auctionTerms
   let validatorHashes = validatorHash <$> validators
   let validatorAddresses = unwrap $ flip scriptHashAddress Nothing <$> validatorHashes
 
@@ -185,12 +195,15 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     auctionInfoDatum :: Datum
     auctionInfoDatum = wrap $ toData $ AuctionInfo
       { auctionId: auctionCs
-      , auctionTerms: params.auctionTerms
+      , auctionTerms
       , auctionEscrowAddr: validatorAddresses.auctionEscrow
       , bidderDepositAddr: validatorAddresses.bidderDeposit
       , feeEscrowAddr: validatorAddresses.feeEscrow
       , standingBidAddr: validatorAddresses.standingBid
       }
+
+    txValidRange :: POSIXTimeRange
+    txValidRange = to $ biddingStart - wrap (BigInt.fromInt 1000)
 
     constraints :: TxConstraints Void Void
     constraints = mconcat
@@ -211,7 +224,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
           auctionInfoValue
 
       -- Set transaction validity interval to registration period:
-      , Constraints.mustValidateIn $ registrationPeriod params.auctionTerms
+      , Constraints.mustValidateIn txValidRange
       ]
 
     lookups :: ScriptLookups Void
@@ -258,6 +271,8 @@ data AnnounceAuctionContractError
   | AnnounceAuction_Error_CurrentTimeAfterBiddingStart
   | AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
   | AnnounceAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
+  | AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
+  | AnnounceAuction_Error_CouldNotGetOwnPubKey GetWalletPubKeyBytesError
 
 derive instance Generic AnnounceAuctionContractError _
 derive instance Eq AnnounceAuctionContractError
@@ -299,3 +314,12 @@ instance ToContractError AnnounceAuctionContractError where
       { errorCode: "AnnounceAuction08"
       , message: "Could not build auction validators, error: " <> show err <> "."
       }
+    AnnounceAuction_Error_CouldNotGetOwnPubKeyHash ->
+      { errorCode: "AnnounceAuction09"
+      , message: "Could not get own public key hash."
+      }
+    AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
+      { errorCode: "AnnounceAuction10"
+      , message: "Could not get own public key, error: " <> show err <> "."
+      }
+

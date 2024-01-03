@@ -24,6 +24,7 @@ import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
+import Contract.Time (POSIXTimeRange, mkFiniteInterval)
 import Contract.Transaction
   ( TransactionHash
   , TransactionInput
@@ -44,6 +45,7 @@ import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (find) as Array
+import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (singleton, toUnfoldable) as Map
@@ -71,7 +73,6 @@ import HydraAuctionOffchain.Contract.Types
   , submitTxReturningContractResult
   , validateAuctionTerms
   )
-import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (biddingPeriod)
 import HydraAuctionOffchain.Contract.Validators
   ( MkAuctionEscrowValidatorError
   , mkAuctionEscrowValidatorFromAuctionInfo
@@ -177,6 +178,11 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
 
     --
 
+    txValidRange :: POSIXTimeRange
+    txValidRange =
+      mkFiniteInterval nowTime
+        (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
+
     constraints :: TxConstraints Void Void
     constraints = mconcat
       [ -- Spend auction escrow utxo:
@@ -196,7 +202,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
         Constraints.mustBeSignedBy $ wrap auctionTermsRec.sellerPkh
 
       , -- Set transaction validity interval to bidding period:
-        Constraints.mustValidateIn $ biddingPeriod auctionTerms
+        Constraints.mustValidateIn txValidRange
       ]
 
     lookups :: ScriptLookups Void

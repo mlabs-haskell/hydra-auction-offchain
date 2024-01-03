@@ -21,7 +21,7 @@ function delay(ms: number) {
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
   const walletApp: WalletApp = "Plutip";
-  const biddingStart = walletApp === "Plutip" ? 5000 : 120000;
+  const biddingStart = walletApp === "Plutip" ? 5000 : 60000;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
   const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
@@ -64,8 +64,6 @@ async function runAnnounceAuction(
           quantity: "1"
         }
       ],
-      sellerPkh: "2bcc4ca387f39d2e792d7d08484c96d0d59b26cbfafc1fa4ffad486c",
-      sellerVk: "400d8729d8be39372f3bc6241af2f0e44892a4e065848d39c1006d2329e64db9",
       delegates: ["2bcc4ca387f39d2e792d7d08484c96d0d59b26cbfafc1fa4ffad486c"],
       biddingStart: (nowTime + biddingStart).toString(),
       biddingEnd: (nowTime + 600000).toString(),

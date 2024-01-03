@@ -1,7 +1,7 @@
 // AnnounceAuction -------------------------------------------------------------
 
 export type AnnounceAuctionContractParams = {
-  auctionTerms: AuctionTerms;
+  auctionTerms: AuctionTermsInput;
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
 
@@ -18,10 +18,8 @@ export type AuctionInfo = {
   standingBidAddr: Address;
 };
 
-export type AuctionTerms = {
+export interface AuctionTermsInput {
   auctionLot: Value;
-  sellerPkh: PubKeyHash;
-  sellerVk: ByteArray;
   delegates: Array<PubKeyHash>;
   biddingStart: POSIXTime;
   biddingEnd: POSIXTime;
@@ -31,7 +29,12 @@ export type AuctionTerms = {
   startingBid: BigInt;
   minBidIncrement: BigInt;
   minDepositAmount: BigInt;
-};
+}
+
+export interface AuctionTerms extends AuctionTermsInput {
+  sellerPkh: PubKeyHash;
+  sellerVk: ByteArray;
+}
 
 // Common ----------------------------------------------------------------------
 

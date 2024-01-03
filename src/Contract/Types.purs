@@ -56,6 +56,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
+  , AuctionTermsInput
   , AuctionTermsValidationError
       ( NonPositiveAuctionLotValueError
       , SellerVkPkhMismatchError
@@ -68,6 +69,8 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , NoDelegatesError
       )
   , auctionTermsCodec
+  , auctionTermsInputCodec
+  , mkAuctionTerms
   , validateAuctionTerms
   ) as ExportPlutusAuctionTerms
 

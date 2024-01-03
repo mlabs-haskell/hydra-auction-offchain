@@ -1,5 +1,8 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
+  , AuctionTermsInput
+  , AuctionTermsInputRec
+  , AuctionTermsRec
   , AuctionTermsValidationError
       ( NonPositiveAuctionLotValueError
       , SellerVkPkhMismatchError
@@ -12,8 +15,8 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , NoDelegatesError
       )
   , auctionTermsCodec
-  , biddingPeriod
-  , registrationPeriod
+  , auctionTermsInputCodec
+  , mkAuctionTerms
   , validateAuctionTerms
   ) where
 
@@ -25,7 +28,7 @@ import Contract.Hashing (blake2b224Hash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
-import Contract.Time (POSIXTime, POSIXTimeRange, mkFiniteInterval, to)
+import Contract.Time (POSIXTime)
 import Contract.Value (Value)
 import Contract.Value (gt) as Value
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
@@ -50,10 +53,12 @@ import HydraAuctionOffchain.Codec
 import Ply.Typename (class PlyTypeName)
 import Type.Proxy (Proxy(Proxy))
 
-newtype AuctionTerms = AuctionTerms
-  { auctionLot :: Value
-  , sellerPkh :: PubKeyHash
-  , sellerVk :: ByteArray
+----------------------------------------------------------------------
+-- AuctionTermsInput
+----------------------------------------------------------------------
+
+type AuctionTermsInputRec (r :: Row Type) =
+  ( auctionLot :: Value
   , delegates :: Array PubKeyHash
   , biddingStart :: POSIXTime
   , biddingEnd :: POSIXTime
@@ -63,7 +68,51 @@ newtype AuctionTerms = AuctionTerms
   , startingBid :: BigInt
   , minBidIncrement :: BigInt
   , minDepositAmount :: BigInt
+  | r
+  )
+
+type AuctionTermsInput = Record (AuctionTermsInputRec ())
+
+auctionTermsInputCodec :: CA.JsonCodec AuctionTermsInput
+auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
+  { auctionLot: valueCodec
+  , delegates: CA.array pubKeyHashCodec
+  , biddingStart: posixTimeCodec
+  , biddingEnd: posixTimeCodec
+  , purchaseDeadline: posixTimeCodec
+  , cleanup: posixTimeCodec
+  , auctionFeePerDelegate: bigIntCodec
+  , startingBid: bigIntCodec
+  , minBidIncrement: bigIntCodec
+  , minDepositAmount: bigIntCodec
   }
+
+mkAuctionTerms :: AuctionTermsInput -> PubKeyHash -> ByteArray -> AuctionTerms
+mkAuctionTerms rec sellerPkh sellerVk = wrap
+  { auctionLot: rec.auctionLot
+  , sellerPkh
+  , sellerVk
+  , delegates: rec.delegates
+  , biddingStart: rec.biddingStart
+  , biddingEnd: rec.biddingEnd
+  , purchaseDeadline: rec.purchaseDeadline
+  , cleanup: rec.cleanup
+  , auctionFeePerDelegate: rec.auctionFeePerDelegate
+  , startingBid: rec.startingBid
+  , minBidIncrement: rec.minBidIncrement
+  , minDepositAmount: rec.minDepositAmount
+  }
+
+----------------------------------------------------------------------
+-- AuctionTerms
+----------------------------------------------------------------------
+
+type AuctionTermsRec = AuctionTermsInputRec
+  ( sellerPkh :: PubKeyHash
+  , sellerVk :: ByteArray
+  )
+
+newtype AuctionTerms = AuctionTerms (Record AuctionTermsRec)
 
 derive instance Generic AuctionTerms _
 derive instance Newtype AuctionTerms _
@@ -118,18 +167,6 @@ auctionTermsCodec =
     , minBidIncrement: bigIntCodec
     , minDepositAmount: bigIntCodec
     }
-
---------------------------------------------------------------------------------
--- Auction Lifecycle
---------------------------------------------------------------------------------
-
-registrationPeriod :: AuctionTerms -> POSIXTimeRange
-registrationPeriod (AuctionTerms rec) =
-  to $ rec.biddingStart - one
-
-biddingPeriod :: AuctionTerms -> POSIXTimeRange
-biddingPeriod (AuctionTerms rec) =
-  mkFiniteInterval rec.biddingStart $ rec.biddingEnd - one
 
 --------------------------------------------------------------------------------
 -- Validation
