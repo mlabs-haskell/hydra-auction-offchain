@@ -20,8 +20,8 @@ function delay(ms: number) {
 
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
-  const walletApp: WalletApp = "Plutip";
-  const biddingStart = walletApp === "Plutip" ? 5000 : 60000;
+  const walletApp: WalletApp = "Nami";
+  const biddingStart = walletApp === "Plutip" ? 5000 : 90000;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
   const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
@@ -40,7 +40,11 @@ function delay(ms: number) {
   if (auctions.length > 0) {
     await delay(biddingStart + 2000);
 
-    const startBiddingResult = await startBidding(walletApp, { auctionInfo: auctions[0] });
+    const auctionInfo = auctions.reduce((acc, x) =>
+      BigInt(x.auctionTerms.biddingStart) > BigInt(acc.auctionTerms.biddingStart) ? x : acc
+    );
+
+    const startBiddingResult = await startBidding(walletApp, { auctionInfo });
     console.log("StartBidding:", startBiddingResult);
 
     if (startBiddingResult.tag === "result") {

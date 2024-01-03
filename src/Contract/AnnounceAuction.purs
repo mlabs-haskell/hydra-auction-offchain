@@ -8,7 +8,6 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
       , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
-      , AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
@@ -37,7 +36,7 @@ import Contract.TxConstraints
 import Contract.Utxos (UtxoMap, getUtxo)
 import Contract.Value (TokenName, Value, scriptCurrencySymbol)
 import Contract.Value (singleton) as Value
-import Contract.Wallet (getWalletUtxos, ownPaymentPubKeyHash)
+import Contract.Wallet (getWalletUtxos)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, runExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -123,9 +122,12 @@ mkAnnounceAuctionContractWithErrors
   -> ExceptT AnnounceAuctionContractError Contract ContractResult
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
-  sellerPkh <- ownPaymentPubKeyHash !? AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
-  sellerVk <- withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey getWalletPubKeyBytes
-  let auctionTerms = mkAuctionTerms params.auctionTerms (unwrap sellerPkh) sellerVk
+  pkh /\ vkey <-
+    withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey $
+      getWalletPubKeyBytes
+        "By signing this message, you authorize hydra-auction to read \
+        \your public key."
+  let auctionTerms = mkAuctionTerms params.auctionTerms pkh vkey
 
   -- Check auction terms:
   validateAuctionTerms auctionTerms #
@@ -271,7 +273,6 @@ data AnnounceAuctionContractError
   | AnnounceAuction_Error_CurrentTimeAfterBiddingStart
   | AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
   | AnnounceAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
-  | AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
   | AnnounceAuction_Error_CouldNotGetOwnPubKey GetWalletPubKeyBytesError
 
 derive instance Generic AnnounceAuctionContractError _
@@ -314,12 +315,8 @@ instance ToContractError AnnounceAuctionContractError where
       { errorCode: "AnnounceAuction08"
       , message: "Could not build auction validators, error: " <> show err <> "."
       }
-    AnnounceAuction_Error_CouldNotGetOwnPubKeyHash ->
-      { errorCode: "AnnounceAuction09"
-      , message: "Could not get own public key hash."
-      }
     AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
-      { errorCode: "AnnounceAuction10"
+      { errorCode: "AnnounceAuction09"
       , message: "Could not get own public key, error: " <> show err <> "."
       }
 

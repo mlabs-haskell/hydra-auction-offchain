@@ -15,7 +15,6 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
       , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
-      , AnnounceAuction_Error_CouldNotGetOwnPubKeyHash
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
