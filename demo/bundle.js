@@ -10,7 +10,7 @@ esbuild.build({
         const skipResolve = "skipResolve";
         build.onResolve({ filter: /^hydra-auction-offchain$/ }, async (args) => {
           if (args.pluginData === skipResolve) return;
-          const isNixEnv = typeof process.env.NPM_ENV === "undefined" || !process.env.NPM_ENV;
+          const isNixEnv = process.env.NPM_ENV !== "1";
           if (isNixEnv) {
             args.path = args.path.replace("hydra-auction-offchain", "../../dist");
           }
