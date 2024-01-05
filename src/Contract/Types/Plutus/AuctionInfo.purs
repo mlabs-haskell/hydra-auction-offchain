@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
   ( AuctionInfo(AuctionInfo)
+  , auctionInfoCodec
   ) where
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
