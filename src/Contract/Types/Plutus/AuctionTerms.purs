@@ -4,7 +4,8 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   , AuctionTermsInputRec
   , AuctionTermsRec
   , AuctionTermsValidationError
-      ( NonPositiveAuctionLotValueError
+      ( AuctionLotNonZeroAdaError
+      , NonPositiveAuctionLotValueError
       , SellerVkPkhMismatchError
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
@@ -24,14 +25,12 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Contract.Address (PubKeyHash)
-import Contract.Hashing (blake2b224Hash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Time (POSIXTime)
-import Contract.Value (Value)
+import Contract.Value (Value, valueToCoin)
 import Contract.Value (gt) as Value
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
@@ -42,7 +41,7 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import Data.Validation.Semigroup (V, invalid)
+import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
   ( bigIntCodec
   , byteArrayCodec
@@ -50,6 +49,8 @@ import HydraAuctionOffchain.Codec
   , pubKeyHashCodec
   , valueCodec
   )
+import HydraAuctionOffchain.Helpers (errV)
+import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import Ply.Typename (class PlyTypeName)
 import Type.Proxy (Proxy(Proxy))
 
@@ -173,7 +174,8 @@ auctionTermsCodec =
 --------------------------------------------------------------------------------
 
 data AuctionTermsValidationError
-  = NonPositiveAuctionLotValueError
+  = AuctionLotNonZeroAdaError
+  | NonPositiveAuctionLotValueError
   | SellerVkPkhMismatchError
   | BiddingStartNotBeforeBiddingEndError
   | BiddingEndNotBeforePurchaseDeadlineError
@@ -195,25 +197,24 @@ minAuctionFee = BigInt.fromInt 2_000_000
 
 validateAuctionTerms :: AuctionTerms -> V (Array AuctionTermsValidationError) Unit
 validateAuctionTerms (AuctionTerms rec) = fold
-  [ (rec.auctionLot `Value.gt` mempty)
-      `err` NonPositiveAuctionLotValueError
-  , (Just rec.sellerPkh == map wrap (ed25519KeyHashFromBytes $ blake2b224Hash rec.sellerVk))
-      `err` SellerVkPkhMismatchError
+  [ (valueToCoin rec.auctionLot == mempty)
+      `errV` AuctionLotNonZeroAdaError
+  , (rec.auctionLot `Value.gt` mempty)
+      `errV` NonPositiveAuctionLotValueError
+  , (Just rec.sellerPkh == hashVk rec.sellerVk)
+      `errV` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
-      `err` BiddingStartNotBeforeBiddingEndError
+      `errV` BiddingStartNotBeforeBiddingEndError
   , (rec.biddingEnd < rec.purchaseDeadline)
-      `err` BiddingEndNotBeforePurchaseDeadlineError
+      `errV` BiddingEndNotBeforePurchaseDeadlineError
   , (rec.purchaseDeadline < rec.cleanup)
-      `err` PurchaseDeadlineNotBeforeCleanupError
+      `errV` PurchaseDeadlineNotBeforeCleanupError
   , (rec.minBidIncrement > zero)
-      `err` NonPositiveMinBidIncrementError
+      `errV` NonPositiveMinBidIncrementError
   , (rec.startingBid > rec.auctionFeePerDelegate * length rec.delegates)
-      `err` InvalidStartingBidError
+      `errV` InvalidStartingBidError
   , (rec.auctionFeePerDelegate > minAuctionFee)
-      `err` InvalidAuctionFeePerDelegateError
+      `errV` InvalidAuctionFeePerDelegateError
   , (length rec.delegates > 0)
-      `err` NoDelegatesError
+      `errV` NoDelegatesError
   ]
-  where
-  err :: Boolean -> AuctionTermsValidationError -> V (Array AuctionTermsValidationError) Unit
-  err x error = if x then pure unit else invalid [ error ]

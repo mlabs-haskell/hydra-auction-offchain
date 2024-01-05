@@ -33,9 +33,8 @@ import HydraAuctionOffchain.Contract.StartBidding
       , StartBidding_Error_ContractNotInitiatedBySeller
       , StartBidding_Error_CurrentTimeBeforeBiddingStart
       , StartBidding_Error_CurrentTimeAfterBiddingEnd
-      , StartBidding_Error_CouldNotBuildAuctionEscrowValidator
-      , StartBidding_Error_AuctionEscrowValidatorAddressMismatch
-      , StartBidding_Error_CouldNotGetStandingBidValidatorHash
+      , StartBidding_Error_CouldNotBuildAuctionValidators
+      , StartBidding_Error_InvalidAuctionInfo
       , StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
       )
   , StartBiddingContractParams(StartBiddingContractParams)

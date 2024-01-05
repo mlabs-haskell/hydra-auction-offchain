@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Helpers
-  ( exceptNoteE
+  ( errV
+  , exceptNoteE
   , liftEitherShow
   , tokenNameFromAsciiUnsafe
   , (!*)
@@ -15,6 +16,7 @@ import Control.Monad.Except (ExceptT)
 import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Maybe (fromJust)
+import Data.Validation.Semigroup (V, invalid)
 import Effect.Exception (Error, error)
 import Partial.Unsafe (unsafePartial)
 
@@ -29,3 +31,6 @@ exceptNoteE :: forall a e e' m. MonadError e' m => m a -> e -> ExceptT e m a
 exceptNoteE action err = (hush <$> try action) !? err
 
 infixl 9 exceptNoteE as !*
+
+errV :: forall e. Boolean -> e -> V (Array e) Unit
+errV x error = if x then pure unit else invalid [ error ]
