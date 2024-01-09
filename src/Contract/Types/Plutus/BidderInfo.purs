@@ -5,7 +5,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (Address)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
@@ -17,7 +17,7 @@ import Data.Show.Generic (genericShow)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidderInfo = BidderInfo
-  { bidderPkh :: PubKeyHash
+  { bidderAddress :: Address
   , bidderVk :: ByteArray
   }
 
@@ -29,7 +29,7 @@ instance Show BidderInfo where
   show = genericShow
 
 type BidderInfoSchema =
-  ("bidderPkh" :~: PubKeyHash)
+  ("bidderAddress" :~: Address)
     :$: ("bidderVk" :~: ByteArray)
     :$: Nil
 

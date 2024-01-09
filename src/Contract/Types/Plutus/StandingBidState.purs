@@ -11,6 +11,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
+import Effect (Effect)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
 import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms (BidTerms, validateBidTerms)
 
@@ -34,13 +35,13 @@ validateNewBid
   -> AuctionTerms
   -> StandingBidState
   -> StandingBidState
-  -> Boolean
+  -> Effect Boolean
 validateNewBid auctionCs auctionTerms oldBidState newBidState =
   case unwrap newBidState of
-    Nothing -> false
+    Nothing -> pure false
     Just newTerms ->
-      validateBidTerms auctionCs auctionTerms newTerms
-        && validateCompareBids auctionTerms oldBidState newTerms
+      conj (validateCompareBids auctionTerms oldBidState newTerms) <$>
+        validateBidTerms auctionCs auctionTerms newTerms
 
 validateCompareBids :: AuctionTerms -> StandingBidState -> BidTerms -> Boolean
 validateCompareBids auctionTerms oldBidState newTerms =

@@ -1,7 +1,7 @@
 module HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError
       ( StartBidding_Error_InvalidAuctionTerms
-      , StartBidding_Error_CouldNotGetOwnPubKeyHash
+      , StartBidding_Error_CouldNotGetOwnAddress
       , StartBidding_Error_ContractNotInitiatedBySeller
       , StartBidding_Error_CurrentTimeBeforeBiddingStart
       , StartBidding_Error_CurrentTimeAfterBiddingEnd
@@ -16,6 +16,7 @@ module HydraAuctionOffchain.Contract.StartBidding
 
 import Contract.Prelude
 
+import Contract.Address (PaymentPubKeyHash, toPubKeyHash)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, toData)
@@ -38,7 +39,7 @@ import Contract.TxConstraints
 import Contract.Utxos (utxosAt)
 import Contract.Value (TokenName, Value)
 import Contract.Value (leq, singleton) as Value
-import Contract.Wallet (ownPaymentPubKeyHash)
+import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -47,6 +48,7 @@ import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (singleton, toUnfoldable) as Map
+import Data.Maybe (fromJust)
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson)
@@ -74,6 +76,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import Partial.Unsafe (unsafePartial)
 
 newtype StartBiddingContractParams = StartBiddingContractParams
   { auctionInfo :: AuctionInfo
@@ -116,8 +119,8 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     validation (throwError <<< StartBidding_Error_InvalidAuctionTerms) pure
 
   -- Check that the contract is initiated by the seller:
-  ownPkh <- ownPaymentPubKeyHash !? StartBidding_Error_CouldNotGetOwnPubKeyHash
-  when (unwrap ownPkh /= auctionTermsRec.sellerPkh) $
+  ownAddress <- getWalletAddress !? StartBidding_Error_CouldNotGetOwnAddress
+  when (ownAddress /= auctionTermsRec.sellerAddress) $
     throwError StartBidding_Error_ContractNotInitiatedBySeller
 
   -- Check that the current time is within the bidding period:
@@ -175,6 +178,9 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
       mkFiniteInterval nowTime
         (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
 
+    sellerPkh :: PaymentPubKeyHash
+    sellerPkh = wrap $ unsafePartial fromJust $ toPubKeyHash auctionTermsRec.sellerAddress
+
     constraints :: TxConstraints Void Void
     constraints = mconcat
       [ -- Spend auction escrow utxo:
@@ -192,7 +198,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
           standingBidTokenValue
 
       , -- This transaction must be signed by the seller:
-        Constraints.mustBeSignedBy $ wrap auctionTermsRec.sellerPkh
+        Constraints.mustBeSignedBy sellerPkh
 
       , -- Set transaction validity interval to bidding period:
         Constraints.mustValidateIn txValidRange
@@ -238,7 +244,7 @@ queryAuctionEscrowUtxo (AuctionInfo auctionInfo) =
 
 data StartBiddingContractError
   = StartBidding_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)
-  | StartBidding_Error_CouldNotGetOwnPubKeyHash
+  | StartBidding_Error_CouldNotGetOwnAddress
   | StartBidding_Error_ContractNotInitiatedBySeller
   | StartBidding_Error_CurrentTimeBeforeBiddingStart
   | StartBidding_Error_CurrentTimeAfterBiddingEnd
@@ -258,9 +264,9 @@ instance ToContractError StartBiddingContractError where
       { errorCode: "StartBidding01"
       , message: "Invalid auction terms, errors: " <> show errors <> "."
       }
-    StartBidding_Error_CouldNotGetOwnPubKeyHash ->
+    StartBidding_Error_CouldNotGetOwnAddress ->
       { errorCode: "StartBidding02"
-      , message: "Could not get own public key hash."
+      , message: "Could not get own address."
       }
     StartBidding_Error_ContractNotInitiatedBySeller ->
       { errorCode: "StartBidding03"

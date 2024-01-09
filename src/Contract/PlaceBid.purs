@@ -4,14 +4,14 @@ import Contract.Prelude
 
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (OutputDatum(OutputDatum), Redeemer, fromData, toData)
+import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, fromData, toData)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
 import Contract.Transaction (TransactionInput, TransactionOutput(TransactionOutput))
-import Contract.TxConstraints (TxConstraints)
+import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
   , mustPayToScript
@@ -19,7 +19,9 @@ import Contract.TxConstraints
   , mustValidateIn
   ) as Constraints
 import Contract.Utxos (utxosAt)
-import Contract.Value (flattenNonAdaAssets) as Value
+import Contract.Value (Value)
+import Contract.Value (flattenNonAdaAssets, singleton) as Value
+import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -35,15 +37,21 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
+  , BidTerms(BidTerms)
+  , BidderInfo(BidderInfo)
   , ContractResult
   , StandingBidRedeemer(NewBidRedeemer)
   , StandingBidState
   , Utxo
+  , bidderSignatureMessage
+  , emptySubmitTxData
+  , submitTxReturningContractResult
   , validateAuctionInfo
   , validateAuctionTerms
+  , validateNewBid
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import Undefined (undefined)
+import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype PlaceBidContractParams = PlaceBidContractParams
   { auctionInfo :: AuctionInfo
@@ -61,7 +69,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 
   -- Check auction terms:
-  validateAuctionTerms #
+  validateAuctionTerms auctionTerms #
     validation (throwError <<< PlaceBid_Error_InvalidAuctionTerms) pure
 
   -- Check that the current time is within the bidding period:
@@ -85,6 +93,23 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     !? PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo
 
   -- Get bidder signature:
+  bidderPkh <- ownPaymentPubKeyHash !? PlaceBid_Error_CouldNotGetOwnPubKeyHash
+  let payload = bidderSignatureMessage auctionCs (unwrap bidderPkh) params.bidAmount
+  { signature: bidderSignature, vkey: bidderVk, address: bidderAddress } <-
+    withExceptT PlaceBid_Error_CouldNotSignBidderMessage $
+      signMessage payload
+
+  -- Check bid state transition:
+  let
+    newBidState :: StandingBidState
+    newBidState = wrap $ Just $ BidTerms
+      { bidder: BidderInfo { bidderAddress, bidderVk }
+      , price: params.bidAmount
+      , bidderSignature
+      , sellerSignature: params.sellerSignature
+      }
+  success <- liftEffect $ validateNewBid auctionCs auctionTerms oldBidState newBidState
+  unless success $ throwError PlaceBid_Error_InvalidBidStateTransition
 
   let
     validatorHashes = unwrap $ validatorHash <$> validators
@@ -96,6 +121,12 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
 
     standingBidRedeemer :: Redeemer
     standingBidRedeemer = wrap $ toData NewBidRedeemer
+
+    standingBidDatum :: Datum
+    standingBidDatum = wrap $ toData newBidState
+
+    standingBidTokenValue :: Value
+    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName one
 
     --
 
@@ -135,7 +166,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
 queryStandingBidUtxo :: AuctionInfo -> Contract (Maybe (Utxo /\ StandingBidState))
 queryStandingBidUtxo (AuctionInfo auctionInfo) =
   utxosAt auctionInfo.standingBidAddr
-    <#> Array.findMap (currentStandingBidState <<< _.output <<< unwrap <<< snd)
+    <#> Array.findMap (\x -> Tuple x <$> currentStandingBidState (_.output $ unwrap $ snd x))
     <<< Map.toUnfoldable
   where
   currentStandingBidState :: TransactionOutput -> Maybe StandingBidState
@@ -159,6 +190,9 @@ data PlaceBidContractError
   | PlaceBid_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
   | PlaceBid_Error_InvalidAuctionInfo (Array AuctionInfoValidationError)
   | PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo
+  | PlaceBid_Error_CouldNotGetOwnPubKeyHash
+  | PlaceBid_Error_CouldNotSignBidderMessage SignMessageError
+  | PlaceBid_Error_InvalidBidStateTransition
 
 derive instance Generic PlaceBidContractError _
 derive instance Eq PlaceBidContractError
@@ -166,7 +200,7 @@ derive instance Eq PlaceBidContractError
 instance Show PlaceBidContractError where
   show = genericShow
 
-instance ToContractError where
+instance ToContractError PlaceBidContractError where
   toContractError = wrap <<< case _ of
     PlaceBid_Error_InvalidAuctionTerms validationErrors ->
       { errorCode: "PlaceBid01"
@@ -191,4 +225,16 @@ instance ToContractError where
     PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo ->
       { errorCode: "PlaceBid06"
       , message: "Could not find current standing bid utxo."
+      }
+    PlaceBid_Error_CouldNotGetOwnPubKeyHash ->
+      { errorCode: "PlaceBid07"
+      , message: "Could not get own public key hash."
+      }
+    PlaceBid_Error_CouldNotSignBidderMessage err ->
+      { errorCode: "PlaceBid08"
+      , message: "Could not sign bidder message, error: " <> show err <> "."
+      }
+    PlaceBid_Error_InvalidBidStateTransition ->
+      { errorCode: "PlaceBid09"
+      , message: "Invalid bid state transition."
       }

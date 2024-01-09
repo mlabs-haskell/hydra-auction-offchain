@@ -6,6 +6,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   , AuctionTermsValidationError
       ( AuctionLotNonZeroAdaError
       , NonPositiveAuctionLotValueError
+      , SellerAddressLacksPubKeyCredentialError
       , SellerVkPkhMismatchError
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
@@ -24,7 +25,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (Address, PubKeyHash, toPubKeyHash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
@@ -37,18 +38,20 @@ import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Just, Nothing))
+import Data.Maybe (Maybe(Nothing), isJust)
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
-  ( bigIntCodec
+  ( addressCodec
+  , bigIntCodec
   , byteArrayCodec
   , posixTimeCodec
   , pubKeyHashCodec
   , valueCodec
   )
+import HydraAuctionOffchain.Config (config)
 import HydraAuctionOffchain.Helpers (errV)
 import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import Ply.Typename (class PlyTypeName)
@@ -88,10 +91,10 @@ auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
   , minDepositAmount: bigIntCodec
   }
 
-mkAuctionTerms :: AuctionTermsInput -> PubKeyHash -> ByteArray -> AuctionTerms
-mkAuctionTerms rec sellerPkh sellerVk = wrap
+mkAuctionTerms :: AuctionTermsInput -> Address -> ByteArray -> AuctionTerms
+mkAuctionTerms rec sellerAddress sellerVk = wrap
   { auctionLot: rec.auctionLot
-  , sellerPkh
+  , sellerAddress
   , sellerVk
   , delegates: rec.delegates
   , biddingStart: rec.biddingStart
@@ -109,7 +112,7 @@ mkAuctionTerms rec sellerPkh sellerVk = wrap
 ----------------------------------------------------------------------
 
 type AuctionTermsRec = AuctionTermsInputRec
-  ( sellerPkh :: PubKeyHash
+  ( sellerAddress :: Address
   , sellerVk :: ByteArray
   )
 
@@ -124,7 +127,7 @@ instance Show AuctionTerms where
 
 type AuctionTermsSchema =
   ("auctionLot" :~: Value)
-    :$: ("sellerPkh" :~: PubKeyHash)
+    :$: ("sellerAddress" :~: Address)
     :$: ("sellerVk" :~: ByteArray)
     :$: ("delegates" :~: Array PubKeyHash)
     :$: ("biddingStart" :~: POSIXTime)
@@ -156,7 +159,7 @@ auctionTermsCodec :: CA.JsonCodec AuctionTerms
 auctionTermsCodec =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
     { auctionLot: valueCodec
-    , sellerPkh: pubKeyHashCodec
+    , sellerAddress: addressCodec config.network
     , sellerVk: byteArrayCodec
     , delegates: CA.array pubKeyHashCodec
     , biddingStart: posixTimeCodec
@@ -176,6 +179,7 @@ auctionTermsCodec =
 data AuctionTermsValidationError
   = AuctionLotNonZeroAdaError
   | NonPositiveAuctionLotValueError
+  | SellerAddressLacksPubKeyCredentialError
   | SellerVkPkhMismatchError
   | BiddingStartNotBeforeBiddingEndError
   | BiddingEndNotBeforePurchaseDeadlineError
@@ -201,7 +205,9 @@ validateAuctionTerms (AuctionTerms rec) = fold
       `errV` AuctionLotNonZeroAdaError
   , (rec.auctionLot `Value.gt` mempty)
       `errV` NonPositiveAuctionLotValueError
-  , (Just rec.sellerPkh == hashVk rec.sellerVk)
+  , (isJust $ toPubKeyHash rec.sellerAddress)
+      `errV` SellerAddressLacksPubKeyCredentialError
+  , (toPubKeyHash rec.sellerAddress == hashVk rec.sellerVk)
       `errV` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
       `errV` BiddingStartNotBeforeBiddingEndError

@@ -124,14 +124,14 @@ mkAnnounceAuctionContractWithErrors
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
   let signAsciiMessage = signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
-  { pkh, vkey } <-
+  { vkey, address } <-
     withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey $
       signAsciiMessage
         "By signing this message, you authorize hydra-auction to read \
         \your public key."
-  let auctionTerms = mkAuctionTerms params.auctionTerms pkh vkey
 
   -- Check auction terms:
+  let auctionTerms = mkAuctionTerms params.auctionTerms address vkey
   validateAuctionTerms auctionTerms #
     validation (throwError <<< AnnounceAuction_Error_InvalidAuctionTerms) pure
 

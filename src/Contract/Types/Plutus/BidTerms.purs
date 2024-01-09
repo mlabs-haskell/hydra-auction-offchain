@@ -8,7 +8,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (PubKeyHash, toPubKeyHash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr), serializeData)
 import Contract.Prim.ByteArray (ByteArray)
@@ -16,13 +16,15 @@ import Contract.Value (CurrencySymbol)
 import Data.BigInt (BigInt)
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
+import Effect (Effect)
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms(AuctionTerms))
 import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo)
+import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
+import HydraAuctionOffchain.Lib.Crypto (verifySignature)
 import Type.Proxy (Proxy(Proxy))
-import Undefined (undefined)
 
 newtype BidTerms = BidTerms
   { bidder :: BidderInfo
@@ -61,8 +63,26 @@ instance FromData BidTerms where
 -- Validation
 --------------------------------------------------------------------------------
 
-validateBidTerms :: CurrencySymbol -> AuctionTerms -> BidTerms -> Boolean
-validateBidTerms = undefined
+validateBidTerms :: CurrencySymbol -> AuctionTerms -> BidTerms -> Effect Boolean
+validateBidTerms auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
+  conj <$> verifySellerSignature <*> verifyBidderSignature
+  where
+  bidderInfo = unwrap bidTerms.bidder
+
+  verifyBidderSignature :: Effect Boolean
+  verifyBidderSignature =
+    case bidderInfo.bidderAddress of
+      bidderAddress | Just bidderPkh <- toPubKeyHash bidderAddress -> do
+        let payload = bidderSignatureMessage auctionCs bidderPkh bidTerms.price
+        sigStruct <- mkSigStructure bidderAddress payload
+        verifySignature bidderInfo.bidderVk sigStruct bidTerms.bidderSignature
+      _ -> pure false
+
+  verifySellerSignature :: Effect Boolean
+  verifySellerSignature = do
+    let payload = sellerSignatureMessage auctionCs bidderInfo.bidderVk
+    sigStruct <- mkSigStructure auctionTerms.sellerAddress payload
+    verifySignature auctionTerms.sellerVk sigStruct bidTerms.sellerSignature
 
 bidderSignatureMessage :: CurrencySymbol -> PubKeyHash -> BigInt -> ByteArray
 bidderSignatureMessage auctionCs bidderPkh bidPrice =
