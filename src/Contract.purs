@@ -1,5 +1,8 @@
 module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
+  , module ExportAuthorizeBidders
+  , module ExportDiscoverBidders
+  , module ExportEnterAuction
   , module ExportMintTokens
   , module ExportStartBidding
   , module ExportQueryAuctions
@@ -17,10 +20,26 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
+  , AnnounceAuctionContractOutput(AnnounceAuctionContractOutput)
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
+  , AnnounceAuctionContractResult
   , announceAuctionContract
   , mkAnnounceAuctionContractWithErrors
   ) as ExportAnnounceAuction
+
+import HydraAuctionOffchain.Contract.AuthorizeBidders
+  ( AuthorizeBiddersContractParams(AuthorizeBiddersContractParams)
+  , authorizeBiddersContract
+  ) as ExportAuthorizeBidders
+
+import HydraAuctionOffchain.Contract.DiscoverBidders
+  ( discoverBidders
+  ) as ExportDiscoverBidders
+
+import HydraAuctionOffchain.Contract.EnterAuction
+  ( EnterAuctionContractParams(EnterAuctionContractParams)
+  , enterAuctionContract
+  ) as ExportEnterAuction
 
 import HydraAuctionOffchain.Contract.MintTokens
   ( mintTokenUsingAlwaysMints

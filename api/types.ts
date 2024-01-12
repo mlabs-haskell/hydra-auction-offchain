@@ -1,13 +1,49 @@
-// AnnounceAuction -------------------------------------------------------------
+// AnnounceAuction ---------------------------------------------------
 
 export type AnnounceAuctionContractParams = {
   auctionTerms: AuctionTermsInput;
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
 
+export type AnnounceAuctionContractOutput = {
+  txHash: TransactionHash;
+  auctionInfo: AuctionInfo;
+};
+
+// EnterAuction ------------------------------------------------------
+
+export type EnterAuctionContractParams = {
+  auctionInfo: AuctionInfo;
+  depositAmount: BigInt;
+};
+
+// AuthorizeBidders --------------------------------------------------
+
+export type AuthorizeBiddersContractParams = {
+  auctionCs: CurrencySymbol;
+  biddersToAuthorize: Array<VerificationKey>;
+};
+
+// DiscoverSellerSignature -------------------------------------------
+
+export type DiscoverSellerSigContractParams = {
+  auctionCs: CurrencySymbol;
+  // NOTE: sellerPkh will be replaced with sellerAddress: Address
+  sellerPkh: PubKeyHash;
+};
+
+export type DiscoverSellerSigContractOutput = {
+  txHash: TransactionHash;
+  signature: ByteArray;
+};
+
+// StartBidding ------------------------------------------------------
+
 export type StartBiddingContractParams = {
   auctionInfo: AuctionInfo;
 };
+
+// Auction -----------------------------------------------------------
 
 export type AuctionInfo = {
   auctionId: CurrencySymbol;
@@ -32,11 +68,18 @@ export interface AuctionTermsInput {
 }
 
 export interface AuctionTerms extends AuctionTermsInput {
+  // NOTE: sellerPkh will be replaced with sellerAddress: Address
   sellerPkh: PubKeyHash;
-  sellerVk: ByteArray;
+  sellerVk: VerificationKey;
 }
 
-// Common ----------------------------------------------------------------------
+export type BidderInfo = {
+  // NOTE: bidderPkh will be replaced with bidderAddress: Address
+  bidderPkh: PubKeyHash;
+  bidderVk: VerificationKey;
+};
+
+// Common ------------------------------------------------------------
 
 export type WalletApp =
   | "Nami"
@@ -65,7 +108,7 @@ export type ContractError = {
   message: string;
 };
 
-// Cardano ---------------------------------------------------------------------
+// Cardano -----------------------------------------------------------
 
 export type Address = string;
 
@@ -100,4 +143,4 @@ export type ValueEntry = {
   quantity: BigInt;
 };
 
-export type VerificationKey = string;
+export type VerificationKey = ByteArray;

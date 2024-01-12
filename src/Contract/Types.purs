@@ -76,6 +76,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
 
 import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo
   ( BidderInfo(BidderInfo)
+  , bidderInfoCodec
   ) as ExportPlutusBidderInfo
 
 import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms

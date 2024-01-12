@@ -34,6 +34,7 @@
   , "prelude"
   , "profunctor"
   , "profunctor-lenses"
+  , "quickcheck"
   , "read"
   , "record"
   , "strings"

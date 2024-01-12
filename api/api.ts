@@ -3,11 +3,17 @@ import unimplemented from "ts-unimplemented";
 
 import type {
   AnnounceAuctionContractParams,
+  AnnounceAuctionContractOutput,
+  AuthorizeBiddersContractParams,
   AuctionInfo,
+  BidderInfo,
   BigInt,
   ByteArray,
   ContractOutput,
   CurrencySymbol,
+  DiscoverSellerSigContractParams,
+  DiscoverSellerSigContractOutput,
+  EnterAuctionContractParams,
   PubKeyHash,
   StartBiddingContractParams,
   TokenName,
@@ -17,7 +23,32 @@ import type {
   WalletApp
 } from "./types";
 
-// Auctions (seller) -----------------------------------------------------------
+// L1 Auction workflow high-level pseudocode:
+// NOTE: uppercase functions should be implemented on frontend
+//
+// seller: auctionInfo <- announceAuction(auctionTerms)
+// bidder: auctionInfoArr <- queryAuctions()
+// bidder: auctionInfo = SELECT_AUCTION(auctionInfoArr)
+// bidder: depositAmount <- SELECT_DEPOSIT_AMOUNT(auctionInfo)
+// bidder: enterAuction(auctionInfo, depositAmount)
+// seller: bidders <- discoverBidders(auctionInfo)
+// seller: biddersToAuthorize <- SELECT_BIDDERS(bidders)
+// seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
+// TODO: bidder: sellerSig <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
+// TODO: ...
+//
+
+// Auctions (anyone) -------------------------------------------------
+
+export const queryAuctions = async (
+  walletApp: WalletApp | null
+): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
+
+export const cleanupAuction = async (
+  auctionCs: CurrencySymbol
+): Promise<ContractOutput<TransactionHash>> => unimplemented();
+
+// Auctions (seller) -------------------------------------------------
 
 /**
  * Announce auction by declaring the auction metadata and placing the auction
@@ -26,21 +57,31 @@ import type {
 export const announceAuction = async (
   walletApp: WalletApp,
   params: AnnounceAuctionContractParams
-): Promise<ContractOutput<TransactionHash>> => Purs.announceAuction(walletApp)(params)();
+): Promise<ContractOutput<AnnounceAuctionContractOutput>> =>
+  Purs.announceAuction(walletApp)(params)();
 
+/**
+ * Discover bidders who have indicated their interest in participating
+ * in the auction by paying a bidder deposit.
+ *
+ * NOTE: not implemented, returns stubbed data
+ */
 export const discoverBidders = async (
-  walletApp: WalletApp | null
-): Promise<Array<VerificationKey>> => unimplemented();
+  walletApp: WalletApp | null,
+  auctionInfo: AuctionInfo
+): Promise<Array<BidderInfo>> => Purs.discoverBidders(walletApp)(auctionInfo)();
 
 /**
  * Authorize bidders to participate in the auction by posting a list of
  * signatures onchain at the personal oracle validator. Bidders can then
- * discover these signatures using `discoverSellerSignature`.
+ * discover these signatures using `discoverSellerSignatures`.
+ *
+ * NOTE: not implemented, returns stubbed data
  */
 export const authorizeBidders = async (
-  auctionCs: CurrencySymbol,
-  biddersToAuthorize: Array<VerificationKey>
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  walletApp: WalletApp,
+  params: AuthorizeBiddersContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.authorizeBidders(walletApp)(params)();
 
 /**
  * Initiate the auction, enabling bidders to place their bids.
@@ -59,28 +100,32 @@ export const claimAuctionLotSeller = async (
   auctionCs: CurrencySymbol
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
-// Auctions (bidder) -----------------------------------------------------------
+// Auctions (bidder) -------------------------------------------------
 
 /**
  * Apply for participation in the auction by sending a deposit equal to or
  * greater than the `minDepositAmount` specified in `AuctionTerms`.
  *
  * If `depositAmount` is set to `null`, the minimum deposit will be made.
+ *
+ * NOTE: not implemented, returns stubbed data
  */
 export const enterAuction = async (
   walletApp: WalletApp,
-  auctionCs: CurrencySymbol,
-  bidderVk: VerificationKey,
-  depositAmount: BigInt | null
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  params: EnterAuctionContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.enterAuction(walletApp)(params)();
 
 /**
- * Discover the seller's signature required for placing bids.
+ * Discover bidder-auction authorization signature required for
+ * placing bids on a particular auction.
+ *
+ * NOTE: not implemented, returns stubbed data
  */
 export const discoverSellerSignature = async (
-  auctionCs: CurrencySymbol,
-  bidderVk: VerificationKey
-): Promise<ContractOutput<ByteArray>> => unimplemented();
+  walletApp: WalletApp,
+  params: DiscoverSellerSigContractParams
+): Promise<ContractOutput<DiscoverSellerSigContractOutput>> =>
+  Purs.discoverSellerSignature(walletApp)(params)();
 
 export const placeBid = async (
   auctionCs: CurrencySymbol,
@@ -103,17 +148,7 @@ export const claimDepositLoser = async (
   auctionCs: CurrencySymbol
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
-// Auctions (anyone) -----------------------------------------------------------
-
-export const queryAuctions = async (
-  walletApp: WalletApp | null
-): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
-
-export const cleanupAuction = async (
-  auctionCs: CurrencySymbol
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
-
-// Auctions (delegate) ---------------------------------------------------------
+// Auctions (delegate) -----------------------------------------------
 
 export const announceDelegateGroup = async (
   groupName: string,
@@ -121,7 +156,7 @@ export const announceDelegateGroup = async (
   delegates: Array<PubKeyHash>
 ): Promise<ContractOutput<TxCbor>> => unimplemented();
 
-// Helpers ---------------------------------------------------------------------
+// Helpers -----------------------------------------------------------
 
 export const awaitTxConfirmed = async (
   walletApp: WalletApp | null,
