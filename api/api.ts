@@ -26,22 +26,24 @@ import type {
 // High-level auction workflow pseudocode for L1:
 // NOTE: uppercase functions should be implemented on frontend
 //
-// seller: auctionTerms <- BUILD_AUCTION_TERMS()
-// seller: auctionInfo <- announceAuction(auctionTerms)
-// bidder: auctionInfoArr <- queryAuctions()
-// bidder: auctionInfo = SELECT_AUCTION(auctionInfoArr)
-// bidder: depositAmount <- SELECT_DEPOSIT_AMOUNT(auctionInfo)
-// bidder: enterAuction(auctionInfo, depositAmount)
-// seller: bidders <- discoverBidders(auctionInfo)
-// seller: biddersToAuthorize <- SELECT_BIDDERS(bidders)
-// seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
-// bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
-// seller: startBidding(auctionInfo)
-// bidder: bidState <- queryStandingBidState(auctionInfo)
-// bidder: bidAmound <- SELECT_BID_AMOUNT(auctionInfo, bidState.price)
-// TODO: bidder: placeBid(auctionInfo, sellerSignature, bidAmount)
-// TODO: ...
-//
+// 01. seller: auctionTerms <- BUILD_AUCTION_TERMS()
+// 02. seller: auctionInfo <- announceAuction(auctionTerms)
+// 03. bidder: auctionInfoArr <- queryAuctions()
+// 04. bidder: auctionInfo = SELECT_AUCTION(auctionInfoArr)
+// 05. bidder: depositAmount <- SELECT_DEPOSIT_AMOUNT(auctionInfo)
+// 06. bidder: enterAuction(auctionInfo, depositAmount)
+// 07. seller: bidders <- discoverBidders(auctionInfo)
+// 08. seller: biddersToAuthorize <- SELECT_BIDDERS(bidders)
+// 09. seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
+// 10. bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
+// 11. seller: startBidding(auctionInfo)
+// 12. bidder: bidState <- queryStandingBidState(auctionInfo)
+// 13. bidder: bidAmount <- SELECT_BID_AMOUNT(auctionInfo, bidState.price)
+// 14. bidder: placeBid(auctionInfo, sellerSignature, bidAmount)
+// 15. bidder(winner): claimAuctionLotBidder(auctionInfo)
+// 16. bidder(loser): claimDepositLoser(auctionInfo)
+// 17. seller(winner didn't buy): claimAuctionLotSeller(auctionInfo)
+// 18. anyone: cleanupAuction(auctionInfo)
 
 // Auctions (anyone) -------------------------------------------------
 
@@ -50,7 +52,7 @@ export const queryAuctions = async (
 ): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
 
 export const cleanupAuction = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
 export const queryStandingBidState = async (
@@ -107,7 +109,7 @@ export const startBidding = async (
  * to the delegates.
  */
 export const claimAuctionLotSeller = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
 // Auctions (bidder) -------------------------------------------------
@@ -147,14 +149,14 @@ export const placeBid = async (
  * auction fees to the delegates.
  */
 export const claimAuctionLotBidder = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
 /**
  * Reclaim the deposit if someone's else bid wins.
  */
 export const claimDepositLoser = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
 // Auctions (delegate) -----------------------------------------------
