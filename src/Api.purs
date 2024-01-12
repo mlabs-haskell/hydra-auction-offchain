@@ -3,10 +3,12 @@ module HydraAuctionOffchain.Api
   , authorizeBidders
   , awaitTxConfirmed
   , discoverBidders
+  , discoverSellerSignature
   , enterAuction
   , mintTokenUsingAlwaysMints
-  , startBidding
   , queryAuctions
+  , queryStandingBidState
+  , startBidding
   ) where
 
 import Prelude
@@ -22,11 +24,13 @@ import HydraAuctionOffchain.Config (mkContractParams)
 import HydraAuctionOffchain.Contract
   ( announceAuctionContract
   , authorizeBiddersContract
-  , discoverBiddersContract
+  , discoverBidders
+  , discoverSellerSignature
   , enterAuctionContract
   , mintTokenUsingAlwaysMints
-  , startBiddingContract
   , queryAuctions
+  , queryStandingBidState
+  , startBiddingContract
   ) as Contract
 
 ----------------------------------------------------------------------
@@ -45,7 +49,12 @@ enterAuction walletApp params = fromAff do
 discoverBidders :: Json -> Json -> Effect (Promise Json)
 discoverBidders walletApp auctionInfo = fromAff do
   contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.discoverBiddersContract $ fromJs auctionInfo)
+  toJs <$> runContract contractParams (Contract.discoverBidders $ fromJs auctionInfo)
+
+discoverSellerSignature :: Json -> Json -> Effect (Promise Json)
+discoverSellerSignature walletApp params = fromAff do
+  contractParams <- mkContractParams $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.discoverSellerSignature $ fromJs params)
 
 authorizeBidders :: Json -> Json -> Effect (Promise Json)
 authorizeBidders walletApp params = fromAff do
@@ -61,6 +70,11 @@ startBidding :: Json -> Json -> Effect (Promise Json)
 startBidding walletApp params = fromAff do
   contractParams <- mkContractParams $ Just $ fromJs walletApp
   toJs <$> runContract contractParams (Contract.startBiddingContract $ fromJs params)
+
+queryStandingBidState :: Json -> Json -> Effect (Promise Json)
+queryStandingBidState walletApp auctionInfo = fromAff do
+  contractParams <- mkContractParams $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.queryStandingBidState $ fromJs auctionInfo)
 
 ----------------------------------------------------------------------
 -- Helpers

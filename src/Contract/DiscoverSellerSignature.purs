@@ -1,6 +1,7 @@
 module HydraAuctionOffchain.Contract.DiscoverSellerSignature
   ( DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
-  , discoverSellerSigContract
+  , discoverSellerSignature
+  , genSignature
   ) where
 
 import Contract.Prelude
@@ -17,7 +18,7 @@ import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Codec (class HasJson, currencySymbolCodec, pubKeyHashCodec)
-import Test.QuickCheck.Gen (chooseInt, randomSampleOne, vectorOf)
+import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne, vectorOf)
 
 newtype DiscoverSellerSigContractParams = DiscoverSellerSigContractParams
   { auctionCs :: CurrencySymbol
@@ -42,10 +43,11 @@ discoverSellerSigContractParamsCodec =
       , sellerPkh: pubKeyHashCodec
       }
 
-discoverSellerSigContract :: DiscoverSellerSigContractParams -> Contract (Maybe ByteArray)
-discoverSellerSigContract = const discoverSellerSigContractStub
+discoverSellerSignature :: DiscoverSellerSigContractParams -> Contract (Maybe ByteArray)
+discoverSellerSignature = const discoverSellerSignatureStub
 
-discoverSellerSigContractStub :: Contract (Maybe ByteArray)
-discoverSellerSigContractStub =
-  liftEffect $ randomSampleOne
-    (genMaybe $ byteArrayFromIntArrayUnsafe <$> vectorOf 20 (chooseInt 0 255))
+discoverSellerSignatureStub :: Contract (Maybe ByteArray)
+discoverSellerSignatureStub = liftEffect $ randomSampleOne $ genMaybe genSignature
+
+genSignature :: Gen ByteArray
+genSignature = byteArrayFromIntArrayUnsafe <$> vectorOf 20 (chooseInt 0 255)

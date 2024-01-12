@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Contract
   , module ExportDiscoverSellerSignature
   , module ExportEnterAuction
   , module ExportMintTokens
+  , module ExportQueryStandingBidState
   , module ExportStartBidding
   , module ExportQueryAuctions
   ) where
@@ -34,12 +35,12 @@ import HydraAuctionOffchain.Contract.AuthorizeBidders
   ) as ExportAuthorizeBidders
 
 import HydraAuctionOffchain.Contract.DiscoverBidders
-  ( discoverBiddersContract
+  ( discoverBidders
   ) as ExportDiscoverBidders
 
 import HydraAuctionOffchain.Contract.DiscoverSellerSignature
   ( DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
-  , discoverSellerSigContract
+  , discoverSellerSignature
   ) as ExportDiscoverSellerSignature
 
 import HydraAuctionOffchain.Contract.EnterAuction
@@ -50,6 +51,10 @@ import HydraAuctionOffchain.Contract.EnterAuction
 import HydraAuctionOffchain.Contract.MintTokens
   ( mintTokenUsingAlwaysMints
   ) as ExportMintTokens
+
+import HydraAuctionOffchain.Contract.QueryStandingBidState
+  ( queryStandingBidState
+  ) as ExportQueryStandingBidState
 
 import HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError

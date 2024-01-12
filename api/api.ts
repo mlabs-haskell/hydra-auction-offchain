@@ -15,6 +15,7 @@ import type {
   EnterAuctionContractParams,
   PubKeyHash,
   StartBiddingContractParams,
+  StandingBidState,
   TokenName,
   TransactionHash,
   TxCbor,
@@ -25,6 +26,7 @@ import type {
 // High-level auction workflow pseudocode for L1:
 // NOTE: uppercase functions should be implemented on frontend
 //
+// seller: auctionTerms <- BUILD_AUCTION_TERMS()
 // seller: auctionInfo <- announceAuction(auctionTerms)
 // bidder: auctionInfoArr <- queryAuctions()
 // bidder: auctionInfo = SELECT_AUCTION(auctionInfoArr)
@@ -35,9 +37,9 @@ import type {
 // seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
 // bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
 // seller: startBidding(auctionInfo)
-// TODO: bidder: currentBid <- getCurrentBid(auctionInfo)
-// bidder: bidAmound <- SELECT_BID_AMOUNT(auctionInfo, currentBid)
-// bidder: placeBid(auctionInfo, sellerSignature, bidAmount)
+// bidder: bidState <- queryStandingBidState(auctionInfo)
+// bidder: bidAmound <- SELECT_BID_AMOUNT(auctionInfo, bidState.price)
+// TODO: bidder: placeBid(auctionInfo, sellerSignature, bidAmount)
 // TODO: ...
 //
 
@@ -50,6 +52,11 @@ export const queryAuctions = async (
 export const cleanupAuction = async (
   auctionCs: CurrencySymbol
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
+
+export const queryStandingBidState = async (
+  walletApp: WalletApp | null,
+  auctionInfo: AuctionInfo
+): Promise<StandingBidState> => Purs.queryStandingBidState(walletApp)(auctionInfo)();
 
 // Auctions (seller) -------------------------------------------------
 

@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
   ( BidTerms(BidTerms)
+  , bidTermsCodec
   ) where
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
@@ -9,12 +10,16 @@ import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
 import Data.BigInt (BigInt)
+import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
+import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo)
+import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
+import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidderInfoCodec)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidTerms = BidTerms
@@ -49,3 +54,15 @@ instance FromData BidTerms where
     | n == BigNum.zero && recLength (Proxy :: Proxy BidTerms) == length pd =
         wrap <$> fromDataRec bidTermsSchema pd
   fromData _ = Nothing
+
+instance HasJson BidTerms where
+  jsonCodec = const bidTermsCodec
+
+bidTermsCodec :: CA.JsonCodec BidTerms
+bidTermsCodec =
+  wrapIso BidTerms $ CA.object "BidTerms" $ CAR.record
+    { bidder: bidderInfoCodec
+    , price: bigIntCodec
+    , bidderSignature: byteArrayCodec
+    , sellerSignature: byteArrayCodec
+    }

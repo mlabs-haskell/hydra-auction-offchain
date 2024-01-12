@@ -74,6 +74,15 @@ export type BidderInfo = {
   bidderVk: VerificationKey;
 };
 
+export type BidTerms = {
+  bidder: BidderInfo;
+  price: BigInt;
+  bidderSignature: ByteArray;
+  sellerSignature: ByteArray;
+};
+
+export type StandingBidState = BidTerms | null;
+
 // Common ------------------------------------------------------------
 
 export type WalletApp =

@@ -82,6 +82,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo
 
 import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
   ( BidTerms(BidTerms)
+  , bidTermsCodec
   ) as ExportPlutusBidTerms
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass
@@ -102,6 +103,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
 
 import HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
   ( StandingBidState(StandingBidState)
+  , standingBidStateCodec
   ) as ExportPlutusStandingBidState
 
 import HydraAuctionOffchain.Contract.Types.VerificationKey

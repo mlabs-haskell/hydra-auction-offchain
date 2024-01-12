@@ -1,5 +1,5 @@
 module HydraAuctionOffchain.Contract.DiscoverBidders
-  ( discoverBiddersContract
+  ( discoverBidders
   ) where
 
 import Contract.Prelude
@@ -9,10 +9,10 @@ import HydraAuctionOffchain.Contract.Types (AuctionInfo, BidderInfo)
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne, vectorOf)
 
-discoverBiddersContract :: AuctionInfo -> Contract (Array BidderInfo)
-discoverBiddersContract = const discoverBiddersContractStub
+discoverBidders :: AuctionInfo -> Contract (Array BidderInfo)
+discoverBidders = const discoverBiddersStub
 
-discoverBiddersContractStub :: Contract (Array BidderInfo)
-discoverBiddersContractStub =
+discoverBiddersStub :: Contract (Array BidderInfo)
+discoverBiddersStub =
   liftEffect $ randomSampleOne
     (chooseInt 2 10 >>= flip vectorOf arbitrary)
