@@ -27,6 +27,7 @@ import Data.Show.Generic (genericShow)
 import Data.Tuple.Nested (type (/\), (/\))
 import Effect (Effect)
 import Effect.Class (liftEffect)
+import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyFromBytes)
 import HydraAuctionOffchain.Helpers ((!*))
 
 foreign import data CoseKey :: Type
@@ -49,7 +50,7 @@ instance Show GetWalletPubKeyBytesError where
 
 getWalletPubKeyBytes
   :: String
-  -> ExceptT GetWalletPubKeyBytesError Contract (PubKeyHash /\ ByteArray)
+  -> ExceptT GetWalletPubKeyBytesError Contract (PubKeyHash /\ VerificationKey)
 getWalletPubKeyBytes message = do
   addrPlutus <- getWalletAddressWithNetworkTag !? CouldNotGetWalletAddressError
   pkh <- toPubKeyHash (getAddress addrPlutus) ?? CouldNotGetWalletPubKeyHashError
@@ -57,5 +58,6 @@ getWalletPubKeyBytes message = do
   let addr = fromPlutusAddressWithNetworkTag addrPlutus
   { key: coseKeyBytes } <- signData addr payload !? SignDataFailedError
   coseKey <- liftEffect (fromBytesCoseKey coseKeyBytes) !* CouldNotDecodeCoseKeyError
-  vkey <- getCoseKeyHeaderX maybeFfiHelper coseKey ?? CouldNotGetPubKeyFromCoseKeyError
+  vkey <- (vkeyFromBytes =<< getCoseKeyHeaderX maybeFfiHelper coseKey)
+    ?? CouldNotGetPubKeyFromCoseKeyError
   pure $ pkh /\ vkey

@@ -12,6 +12,7 @@ module HydraAuctionOffchain.Contract.Types
   , module ExportPlutusExtraAssetClass
   , module ExportPlutusRedeemers
   , module ExportPlutusStandingBidState
+  , module ExportVerificationKey
   ) where
 
 import HydraAuctionOffchain.Contract.Types.Common
@@ -102,3 +103,11 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
 import HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
   ( StandingBidState(StandingBidState)
   ) as ExportPlutusStandingBidState
+
+import HydraAuctionOffchain.Contract.Types.VerificationKey
+  ( VerificationKey
+  , vkeyBytes
+  , vkeyCodec
+  , vkeyFromBytes
+  , vkeyLength
+  ) as ExportVerificationKey

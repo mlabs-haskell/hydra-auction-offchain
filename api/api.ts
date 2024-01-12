@@ -23,7 +23,7 @@ import type {
   WalletApp
 } from "./types";
 
-// L1 Auction workflow high-level pseudocode:
+// High-level auction workflow pseudocode for L1:
 // NOTE: uppercase functions should be implemented on frontend
 //
 // seller: auctionInfo <- announceAuction(auctionTerms)

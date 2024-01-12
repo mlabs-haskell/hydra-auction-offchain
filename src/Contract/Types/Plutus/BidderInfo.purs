@@ -9,21 +9,28 @@ import Prelude
 import Contract.Address (PubKeyHash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
-import Contract.Prim.ByteArray (ByteArray)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(Nothing), fromJust)
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (class HasJson, byteArrayCodec, pubKeyHashCodec)
+import HydraAuctionOffchain.Codec (class HasJson, pubKeyHashCodec)
+import HydraAuctionOffchain.Contract.Types.VerificationKey
+  ( VerificationKey
+  , vkeyBytes
+  , vkeyCodec
+  )
+import HydraAuctionOffchain.Lib.Crypto (hashVk)
+import Partial.Unsafe (unsafePartial)
+import Test.QuickCheck (class Arbitrary, arbitrary)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidderInfo = BidderInfo
   { bidderPkh :: PubKeyHash
-  , bidderVk :: ByteArray
+  , bidderVk :: VerificationKey
   }
 
 derive instance Generic BidderInfo _
@@ -35,7 +42,7 @@ instance Show BidderInfo where
 
 type BidderInfoSchema =
   ("bidderPkh" :~: PubKeyHash)
-    :$: ("bidderVk" :~: ByteArray)
+    :$: ("bidderVk" :~: VerificationKey)
     :$: Nil
 
 bidderInfoSchema :: Proxy BidderInfoSchema
@@ -57,5 +64,11 @@ bidderInfoCodec :: CA.JsonCodec BidderInfo
 bidderInfoCodec =
   wrapIso BidderInfo $ CA.object "BidderInfo" $ CAR.record
     { bidderPkh: pubKeyHashCodec
-    , bidderVk: byteArrayCodec
+    , bidderVk: vkeyCodec
     }
+
+instance Arbitrary BidderInfo where
+  arbitrary = do
+    bidderVk <- arbitrary
+    let bidderPkh = unsafePartial fromJust $ hashVk $ vkeyBytes bidderVk
+    pure $ wrap { bidderPkh, bidderVk }

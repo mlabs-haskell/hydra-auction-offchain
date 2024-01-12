@@ -24,14 +24,11 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Contract.Address (PubKeyHash)
-import Contract.Hashing (blake2b224Hash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
-import Contract.Prim.ByteArray (ByteArray)
 import Contract.Time (POSIXTime)
 import Contract.Value (Value)
 import Contract.Value (gt) as Value
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
@@ -45,11 +42,16 @@ import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V, invalid)
 import HydraAuctionOffchain.Codec
   ( bigIntCodec
-  , byteArrayCodec
   , posixTimeCodec
   , pubKeyHashCodec
   , valueCodec
   )
+import HydraAuctionOffchain.Contract.Types.VerificationKey
+  ( VerificationKey
+  , vkeyBytes
+  , vkeyCodec
+  )
+import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import Ply.Typename (class PlyTypeName)
 import Type.Proxy (Proxy(Proxy))
 
@@ -87,7 +89,7 @@ auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
   , minDepositAmount: bigIntCodec
   }
 
-mkAuctionTerms :: AuctionTermsInput -> PubKeyHash -> ByteArray -> AuctionTerms
+mkAuctionTerms :: AuctionTermsInput -> PubKeyHash -> VerificationKey -> AuctionTerms
 mkAuctionTerms rec sellerPkh sellerVk = wrap
   { auctionLot: rec.auctionLot
   , sellerPkh
@@ -109,7 +111,7 @@ mkAuctionTerms rec sellerPkh sellerVk = wrap
 
 type AuctionTermsRec = AuctionTermsInputRec
   ( sellerPkh :: PubKeyHash
-  , sellerVk :: ByteArray
+  , sellerVk :: VerificationKey
   )
 
 newtype AuctionTerms = AuctionTerms (Record AuctionTermsRec)
@@ -124,7 +126,7 @@ instance Show AuctionTerms where
 type AuctionTermsSchema =
   ("auctionLot" :~: Value)
     :$: ("sellerPkh" :~: PubKeyHash)
-    :$: ("sellerVk" :~: ByteArray)
+    :$: ("sellerVk" :~: VerificationKey)
     :$: ("delegates" :~: Array PubKeyHash)
     :$: ("biddingStart" :~: POSIXTime)
     :$: ("biddingEnd" :~: POSIXTime)
@@ -156,7 +158,7 @@ auctionTermsCodec =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
     { auctionLot: valueCodec
     , sellerPkh: pubKeyHashCodec
-    , sellerVk: byteArrayCodec
+    , sellerVk: vkeyCodec
     , delegates: CA.array pubKeyHashCodec
     , biddingStart: posixTimeCodec
     , biddingEnd: posixTimeCodec
@@ -197,7 +199,7 @@ validateAuctionTerms :: AuctionTerms -> V (Array AuctionTermsValidationError) Un
 validateAuctionTerms (AuctionTerms rec) = fold
   [ (rec.auctionLot `Value.gt` mempty)
       `err` NonPositiveAuctionLotValueError
-  , (Just rec.sellerPkh == map wrap (ed25519KeyHashFromBytes $ blake2b224Hash rec.sellerVk))
+  , (Just rec.sellerPkh == hashVk (vkeyBytes rec.sellerVk))
       `err` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
       `err` BiddingStartNotBeforeBiddingEndError

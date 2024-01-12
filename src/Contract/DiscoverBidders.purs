@@ -6,10 +6,13 @@ import Contract.Prelude
 
 import Contract.Monad (Contract)
 import HydraAuctionOffchain.Contract.Types (AuctionInfo, BidderInfo)
-import Undefined (undefined)
+import Test.QuickCheck (arbitrary)
+import Test.QuickCheck.Gen (chooseInt, randomSampleOne, vectorOf)
 
 discoverBidders :: AuctionInfo -> Contract (Array BidderInfo)
 discoverBidders = const discoverBiddersStub
 
 discoverBiddersStub :: Contract (Array BidderInfo)
-discoverBiddersStub = undefined
+discoverBiddersStub =
+  liftEffect $ randomSampleOne
+    (chooseInt 2 10 >>= flip vectorOf arbitrary)
