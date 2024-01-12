@@ -2,6 +2,7 @@ module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
   , module ExportAuthorizeBidders
   , module ExportDiscoverBidders
+  , module ExportDiscoverSellerSignature
   , module ExportEnterAuction
   , module ExportMintTokens
   , module ExportStartBidding
@@ -33,8 +34,13 @@ import HydraAuctionOffchain.Contract.AuthorizeBidders
   ) as ExportAuthorizeBidders
 
 import HydraAuctionOffchain.Contract.DiscoverBidders
-  ( discoverBidders
+  ( discoverBiddersContract
   ) as ExportDiscoverBidders
+
+import HydraAuctionOffchain.Contract.DiscoverSellerSignature
+  ( DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
+  , discoverSellerSigContract
+  ) as ExportDiscoverSellerSignature
 
 import HydraAuctionOffchain.Contract.EnterAuction
   ( EnterAuctionContractParams(EnterAuctionContractParams)

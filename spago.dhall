@@ -18,6 +18,7 @@
   , "errors"
   , "exceptions"
   , "foldable-traversable"
+  , "gen"
   , "http-methods"
   , "httpure"
   , "maybe"

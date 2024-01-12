@@ -12,7 +12,6 @@ import type {
   ContractOutput,
   CurrencySymbol,
   DiscoverSellerSigContractParams,
-  DiscoverSellerSigContractOutput,
   EnterAuctionContractParams,
   PubKeyHash,
   StartBiddingContractParams,
@@ -34,7 +33,11 @@ import type {
 // seller: bidders <- discoverBidders(auctionInfo)
 // seller: biddersToAuthorize <- SELECT_BIDDERS(bidders)
 // seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
-// TODO: bidder: sellerSig <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
+// bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
+// seller: startBidding(auctionInfo)
+// TODO: bidder: currentBid <- getCurrentBid(auctionInfo)
+// bidder: bidAmound <- SELECT_BID_AMOUNT(auctionInfo, currentBid)
+// bidder: placeBid(auctionInfo, sellerSignature, bidAmount)
 // TODO: ...
 //
 
@@ -116,7 +119,7 @@ export const enterAuction = async (
 ): Promise<ContractOutput<TransactionHash>> => Purs.enterAuction(walletApp)(params)();
 
 /**
- * Discover bidder-auction authorization signature required for
+ * Discover own bidder-auction authorization signature required for
  * placing bids on a particular auction.
  *
  * NOTE: not implemented, returns stubbed data
@@ -124,8 +127,7 @@ export const enterAuction = async (
 export const discoverSellerSignature = async (
   walletApp: WalletApp,
   params: DiscoverSellerSigContractParams
-): Promise<ContractOutput<DiscoverSellerSigContractOutput>> =>
-  Purs.discoverSellerSignature(walletApp)(params)();
+): Promise<ByteArray | null> => Purs.discoverSellerSignature(walletApp)(params)();
 
 export const placeBid = async (
   auctionCs: CurrencySymbol,

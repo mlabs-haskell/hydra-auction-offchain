@@ -32,11 +32,6 @@ export type DiscoverSellerSigContractParams = {
   sellerPkh: PubKeyHash;
 };
 
-export type DiscoverSellerSigContractOutput = {
-  txHash: TransactionHash;
-  signature: ByteArray;
-};
-
 // StartBidding ------------------------------------------------------
 
 export type StartBiddingContractParams = {

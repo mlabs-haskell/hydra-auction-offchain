@@ -22,7 +22,7 @@ import HydraAuctionOffchain.Config (mkContractParams)
 import HydraAuctionOffchain.Contract
   ( announceAuctionContract
   , authorizeBiddersContract
-  , discoverBidders
+  , discoverBiddersContract
   , enterAuctionContract
   , mintTokenUsingAlwaysMints
   , startBiddingContract
@@ -45,7 +45,7 @@ enterAuction walletApp params = fromAff do
 discoverBidders :: Json -> Json -> Effect (Promise Json)
 discoverBidders walletApp auctionInfo = fromAff do
   contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.discoverBidders $ fromJs auctionInfo)
+  toJs <$> runContract contractParams (Contract.discoverBiddersContract $ fromJs auctionInfo)
 
 authorizeBidders :: Json -> Json -> Effect (Promise Json)
 authorizeBidders walletApp params = fromAff do
