@@ -11,8 +11,10 @@ import Prelude
 import Contract.Address (PubKeyHash, toPubKeyHash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr), serializeData)
-import Contract.Prim.ByteArray (ByteArray)
+import Contract.Prim.ByteArray (ByteArray, byteLength, hexToByteArrayUnsafe)
 import Contract.Value (CurrencySymbol)
+import Data.Array (fold)
+import Data.Array (replicate) as Array
 import Data.BigInt (BigInt)
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
@@ -84,10 +86,22 @@ validateBidTerms auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
     sigStruct <- mkSigStructure auctionTerms.sellerAddress payload
     verifySignature auctionTerms.sellerVk sigStruct bidTerms.sellerSignature
 
+bidderSignatureMessageSize :: Int
+bidderSignatureMessageSize = 69
+
 bidderSignatureMessage :: CurrencySymbol -> PubKeyHash -> BigInt -> ByteArray
 bidderSignatureMessage auctionCs bidderPkh bidPrice =
-  unwrap $ serializeData auctionCs <> serializeData bidderPkh <> serializeData bidPrice
+  padMessage bidderSignatureMessageSize $ unwrap
+    (serializeData auctionCs <> serializeData bidderPkh <> serializeData bidPrice)
 
 sellerSignatureMessage :: CurrencySymbol -> ByteArray -> ByteArray
 sellerSignatureMessage auctionCs bidderVk =
   unwrap $ serializeData auctionCs <> serializeData bidderVk
+
+padMessage :: Int -> ByteArray -> ByteArray
+padMessage targetSize message =
+  if padSize <= zero then message
+  else hexToByteArrayUnsafe (fold $ Array.replicate padSize "00") <> message
+  where
+  padSize :: Int
+  padSize = targetSize - byteLength message

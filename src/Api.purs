@@ -2,8 +2,9 @@ module HydraAuctionOffchain.Api
   ( announceAuction
   , awaitTxConfirmed
   , mintTokenUsingAlwaysMints
-  , startBidding
+  , placeBid
   , queryAuctions
+  , startBidding
   ) where
 
 import Prelude
@@ -19,8 +20,9 @@ import HydraAuctionOffchain.Config (mkContractParams)
 import HydraAuctionOffchain.Contract
   ( announceAuctionContract
   , mintTokenUsingAlwaysMints
-  , startBiddingContract
+  , placeBidContract
   , queryAuctions
+  , startBiddingContract
   ) as Contract
 
 --------------------------------------------------------------------------------
@@ -31,6 +33,11 @@ announceAuction :: Json -> Json -> Effect (Promise Json)
 announceAuction walletApp params = fromAff do
   contractParams <- mkContractParams $ Just $ fromJs walletApp
   toJs <$> runContract contractParams (Contract.announceAuctionContract $ fromJs params)
+
+placeBid :: Json -> Json -> Effect (Promise Json)
+placeBid walletApp params = fromAff do
+  contractParams <- mkContractParams $ Just $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.placeBidContract $ fromJs params)
 
 queryAuctions :: Json -> Effect (Promise Json)
 queryAuctions walletApp = fromAff do

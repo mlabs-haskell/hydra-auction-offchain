@@ -1,8 +1,9 @@
 module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
   , module ExportMintTokens
-  , module ExportStartBidding
+  , module ExportPlaceBid
   , module ExportQueryAuctions
+  , module ExportStartBidding
   ) where
 
 import HydraAuctionOffchain.Contract.AnnounceAuction
@@ -26,6 +27,26 @@ import HydraAuctionOffchain.Contract.MintTokens
   ( mintTokenUsingAlwaysMints
   ) as ExportMintTokens
 
+import HydraAuctionOffchain.Contract.PlaceBid
+  ( PlaceBidContractError
+      ( PlaceBid_Error_InvalidAuctionTerms
+      , PlaceBid_Error_CurrentTimeBeforeBiddingStart
+      , PlaceBid_Error_CurrentTimeAfterBiddingEnd
+      , PlaceBid_Error_CouldNotBuildAuctionValidators
+      , PlaceBid_Error_InvalidAuctionInfo
+      , PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo
+      , PlaceBid_Error_CouldNotGetOwnPubKeyHash
+      , PlaceBid_Error_CouldNotSignBidderMessage
+      , PlaceBid_Error_InvalidBidStateTransition
+      )
+  , PlaceBidContractParams(PlaceBidContractParams)
+  , placeBidContract
+  ) as ExportPlaceBid
+
+import HydraAuctionOffchain.Contract.QueryAuctions
+  ( queryAuctions
+  ) as ExportQueryAuctions
+
 import HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError
       ( StartBidding_Error_InvalidAuctionTerms
@@ -41,7 +62,3 @@ import HydraAuctionOffchain.Contract.StartBidding
   , mkStartBiddingContractWithErrors
   , startBiddingContract
   ) as ExportStartBidding
-
-import HydraAuctionOffchain.Contract.QueryAuctions
-  ( queryAuctions
-  ) as ExportQueryAuctions

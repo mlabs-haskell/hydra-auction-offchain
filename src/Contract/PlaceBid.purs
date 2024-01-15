@@ -1,4 +1,18 @@
-module HydraAuctionOffchain.Contract.PlaceBid where
+module HydraAuctionOffchain.Contract.PlaceBid
+  ( PlaceBidContractError
+      ( PlaceBid_Error_InvalidAuctionTerms
+      , PlaceBid_Error_CurrentTimeBeforeBiddingStart
+      , PlaceBid_Error_CurrentTimeAfterBiddingEnd
+      , PlaceBid_Error_CouldNotBuildAuctionValidators
+      , PlaceBid_Error_InvalidAuctionInfo
+      , PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo
+      , PlaceBid_Error_CouldNotGetOwnPubKeyHash
+      , PlaceBid_Error_CouldNotSignBidderMessage
+      , PlaceBid_Error_InvalidBidStateTransition
+      )
+  , PlaceBidContractParams(PlaceBidContractParams)
+  , placeBidContract
+  ) where
 
 import Contract.Prelude
 
@@ -10,7 +24,11 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction (TransactionInput, TransactionOutput(TransactionOutput))
+import Contract.Transaction
+  ( TransactionHash
+  , TransactionInput
+  , TransactionOutput(TransactionOutput)
+  )
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
@@ -28,8 +46,12 @@ import Control.Monad.Trans.Class (lift)
 import Data.Array (findMap) as Array
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
+import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (singleton, toUnfoldable) as Map
+import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
+import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -39,12 +61,15 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTermsValidationError
   , BidTerms(BidTerms)
   , BidderInfo(BidderInfo)
+  , ContractOutput
   , ContractResult
   , StandingBidRedeemer(NewBidRedeemer)
   , StandingBidState
   , Utxo
+  , auctionInfoCodec
   , bidderSignatureMessage
   , emptySubmitTxData
+  , mkContractOutput
   , submitTxReturningContractResult
   , validateAuctionInfo
   , validateAuctionTerms
@@ -58,6 +83,29 @@ newtype PlaceBidContractParams = PlaceBidContractParams
   , sellerSignature :: ByteArray
   , bidAmount :: BigInt
   }
+
+derive instance Generic PlaceBidContractParams _
+derive instance Newtype PlaceBidContractParams _
+derive instance Eq PlaceBidContractParams
+
+instance Show PlaceBidContractParams where
+  show = genericShow
+
+instance HasJson PlaceBidContractParams where
+  jsonCodec = const placeBidContractParamsCodec
+
+placeBidContractParamsCodec :: CA.JsonCodec PlaceBidContractParams
+placeBidContractParamsCodec =
+  wrapIso PlaceBidContractParams $ CA.object "PlaceBidContractParams" $
+    CAR.record
+      { auctionInfo: auctionInfoCodec
+      , sellerSignature: byteArrayCodec
+      , bidAmount: bigIntCodec
+      }
+
+placeBidContract :: PlaceBidContractParams -> Contract (ContractOutput TransactionHash)
+placeBidContract =
+  mkContractOutput _.txHash <<< mkPlaceBidContractWithErrors
 
 mkPlaceBidContractWithErrors
   :: PlaceBidContractParams

@@ -18,6 +18,12 @@ export type AuctionInfo = {
   standingBidAddr: Address;
 };
 
+export type PlaceBidContractParams = {
+  auctionInfo: AuctionInfo;
+  sellerSignature: ByteArray;
+  bidAmount: BigInt;
+};
+
 export interface AuctionTermsInput {
   auctionLot: Value;
   delegates: Array<PubKeyHash>;
