@@ -17,6 +17,14 @@ export type EnterAuctionContractParams = {
   depositAmount: BigInt;
 };
 
+// DiscoverBidders ---------------------------------------------------
+
+export type BidderInfoCandidate = {
+  bidderInfo: BidderInfo;
+  depositAmount: BigInt;
+  isValid: boolean; // complies with given auction terms
+};
+
 // AuthorizeBidders --------------------------------------------------
 
 export type AuthorizeBiddersContractParams = {

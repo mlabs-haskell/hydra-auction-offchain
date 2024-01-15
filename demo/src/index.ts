@@ -57,7 +57,7 @@ function delay(ms: number) {
   const biddersToAuthorize = bidders.map((bidder) => bidder.bidderVk);
   const authBiddersParams = { auctionCs, biddersToAuthorize };
   const authBiddersResult = await authorizeBidders(walletApp, authBiddersParams);
-  console.log("Authorized bidders:", authBiddersResult);
+  console.log("AuthorizeBidders:", authBiddersResult);
 
   // bidder: discoverSellerSignature (stub)
   const sellerPkh = auctionInfo.auctionTerms.sellerPkh;

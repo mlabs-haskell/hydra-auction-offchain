@@ -35,7 +35,9 @@ import HydraAuctionOffchain.Contract.AuthorizeBidders
   ) as ExportAuthorizeBidders
 
 import HydraAuctionOffchain.Contract.DiscoverBidders
-  ( discoverBidders
+  ( BidderInfoCandidate(BidderInfoCandidate)
+  , bidderInfoCandidateCodec
+  , discoverBidders
   ) as ExportDiscoverBidders
 
 import HydraAuctionOffchain.Contract.DiscoverSellerSignature

@@ -6,7 +6,7 @@ import type {
   AnnounceAuctionContractOutput,
   AuthorizeBiddersContractParams,
   AuctionInfo,
-  BidderInfo,
+  BidderInfoCandidate,
   BigInt,
   ByteArray,
   ContractOutput,
@@ -81,7 +81,7 @@ export const announceAuction = async (
 export const discoverBidders = async (
   walletApp: WalletApp | null,
   auctionInfo: AuctionInfo
-): Promise<Array<BidderInfo>> => Purs.discoverBidders(walletApp)(auctionInfo)();
+): Promise<Array<BidderInfoCandidate>> => Purs.discoverBidders(walletApp)(auctionInfo)();
 
 /**
  * Authorize bidders to participate in the auction by posting a list of
