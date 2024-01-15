@@ -6,13 +6,7 @@ module HydraAuctionOffchain.Contract.Validators
   ) where
 
 import HydraAuctionOffchain.Contract.Validators.AuctionEscrow
-  ( MkAuctionEscrowValidatorError
-      ( StandingBidScriptHashError
-      , FeeEscrowScriptHashError
-      , AuctionEscrowValidatorReificationError
-      )
-  , mkAuctionEscrowValidator
-  , mkAuctionEscrowValidatorFromAuctionInfo
+  ( mkAuctionEscrowValidator
   ) as ExportAuctionEscrow
 
 import HydraAuctionOffchain.Contract.Validators.AuctionMetadata

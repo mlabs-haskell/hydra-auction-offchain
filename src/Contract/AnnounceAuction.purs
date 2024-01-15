@@ -23,6 +23,7 @@ import Contract.Address (getNetworkId, scriptHashAddress)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
+import Contract.Prim.ByteArray (byteArrayFromAscii)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
@@ -86,7 +87,7 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionMetadataValidator
   , mkAuctionValidators
   )
-import HydraAuctionOffchain.Wallet (GetWalletPubKeyBytesError, getWalletPubKeyBytes)
+import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 import Partial.Unsafe (unsafePartial)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
@@ -158,14 +159,15 @@ mkAnnounceAuctionContractWithErrors
        (ContractResult' (auctionInfo :: AuctionInfo))
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
-  pkh /\ vkey <-
+  let signAsciiMessage = signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
+  { vkey, address } <-
     withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey $
-      getWalletPubKeyBytes
+      signAsciiMessage
         "By signing this message, you authorize hydra-auction to read \
         \your public key."
-  let auctionTerms = mkAuctionTerms params.auctionTerms pkh vkey
 
   -- Check auction terms:
+  let auctionTerms = mkAuctionTerms params.auctionTerms address vkey
   validateAuctionTerms auctionTerms #
     validation (throwError <<< AnnounceAuction_Error_InvalidAuctionTerms) pure
 
@@ -312,7 +314,7 @@ data AnnounceAuctionContractError
   | AnnounceAuction_Error_CurrentTimeAfterBiddingStart
   | AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
   | AnnounceAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
-  | AnnounceAuction_Error_CouldNotGetOwnPubKey GetWalletPubKeyBytesError
+  | AnnounceAuction_Error_CouldNotGetOwnPubKey SignMessageError
 
 derive instance Generic AnnounceAuctionContractError _
 derive instance Eq AnnounceAuctionContractError

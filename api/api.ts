@@ -13,6 +13,7 @@ import type {
   CurrencySymbol,
   DiscoverSellerSigContractParams,
   EnterAuctionContractParams,
+  PlaceBidContractParams,
   PubKeyHash,
   StartBiddingContractParams,
   StandingBidState,
@@ -139,10 +140,9 @@ export const discoverSellerSignature = async (
 ): Promise<ByteArray | null> => Purs.discoverSellerSignature(walletApp)(params)();
 
 export const placeBid = async (
-  auctionCs: CurrencySymbol,
-  bidAmount: BigInt,
-  sellerSignature: ByteArray
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  walletApp: WalletApp,
+  params: PlaceBidContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.placeBid(walletApp)(params)();
 
 /**
  * Claim the auction lot if the bid placed by the bidder wins, distribute the

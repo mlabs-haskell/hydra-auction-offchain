@@ -5,6 +5,11 @@ module HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
       , SellerReclaimsRedeemer
       , CleanupAuctionRedeemer
       )
+  , StandingBidRedeemer
+      ( NewBidRedeemer
+      , MoveToHydraRedeemer
+      , ConcludeAuctionRedeemer
+      )
   ) where
 
 import Contract.PlutusData
@@ -51,4 +56,40 @@ instance ToData AuctionEscrowRedeemer where
   toData = genericToData
 
 instance FromData AuctionEscrowRedeemer where
+  fromData = genericFromData
+
+----------------------------------------------------------------------
+-- StandingBid
+----------------------------------------------------------------------
+
+data StandingBidRedeemer
+  = NewBidRedeemer
+  | MoveToHydraRedeemer
+  | ConcludeAuctionRedeemer
+
+derive instance Generic StandingBidRedeemer _
+derive instance Eq StandingBidRedeemer
+
+instance Show StandingBidRedeemer where
+  show = genericShow
+
+instance
+  HasPlutusSchema
+    StandingBidRedeemer
+    ( "NewBidRedeemer"
+        := PNil
+        @@ Z
+        :+ "MoveToHydraRedeemer"
+        := PNil
+        @@ (S Z)
+        :+ "ConcludeAuctionRedeemer"
+        := PNil
+        @@ (S (S Z))
+        :+ PNil
+    )
+
+instance ToData StandingBidRedeemer where
+  toData = genericToData
+
+instance FromData StandingBidRedeemer where
   fromData = genericFromData

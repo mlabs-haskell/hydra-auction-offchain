@@ -32,6 +32,14 @@ export type AuthorizeBiddersContractParams = {
   biddersToAuthorize: Array<VerificationKey>;
 };
 
+// PlaceBid ----------------------------------------------------------
+
+export type PlaceBidContractParams = {
+  auctionInfo: AuctionInfo;
+  sellerSignature: ByteArray;
+  bidAmount: BigInt;
+};
+
 // DiscoverSellerSignature -------------------------------------------
 
 export type DiscoverSellerSigContractParams = {
@@ -71,14 +79,12 @@ export interface AuctionTermsInput {
 }
 
 export interface AuctionTerms extends AuctionTermsInput {
-  // NOTE: sellerPkh will be replaced with sellerAddress: Address
-  sellerPkh: PubKeyHash;
+  sellerAddress: Address;
   sellerVk: VerificationKey;
 }
 
 export type BidderInfo = {
-  // NOTE: bidderPkh will be replaced with bidderAddress: Address
-  bidderPkh: PubKeyHash;
+  bidderAddress: Address;
   bidderVk: VerificationKey;
 };
 
