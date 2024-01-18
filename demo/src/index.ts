@@ -24,6 +24,18 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function logConfirmContract<T extends { txHash: TransactionHash }>(
+  label: string,
+  walletApp: WalletApp,
+  output: ContractOutput<T | TransactionHash>
+): Promise<void> {
+  console.log(label + ":", output);
+  if (output.tag !== "result") {
+    throw new Error(label + " contract failed.");
+  }
+  await awaitTxConfirmed(walletApp, output.value.txHash ?? output.value);
+}
+
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
   const walletApp: WalletApp = "Plutip";
@@ -35,9 +47,7 @@ function delay(ms: number) {
 
   // seller: announceAuction
   const announceAuctionResult = await runAnnounceAuction(walletApp, tokenName, biddingStart);
-  console.log("AnnounceAuction:", announceAuctionResult);
-  if (announceAuctionResult.tag !== "result") return;
-  await awaitTxConfirmed(walletApp, announceAuctionResult.value.txHash);
+  await logConfirmContract("AnnounceAuction", walletApp, announceAuctionResult);
   const auctionInfo = announceAuctionResult.value.auctionInfo;
 
   // bidder: queryAuctions
@@ -47,9 +57,9 @@ function delay(ms: number) {
   // bidder: enterAuction
   const depositAmount = "2800000";
   const enterAuctionResult = await enterAuction(walletApp, { auctionInfo, depositAmount });
-  console.log("EnterAuction:", enterAuctionResult);
+  await logConfirmContract("EnterAuction", walletApp, enterAuctionResult);
 
-  // seller: discoverBidders (stub)
+  // seller: discoverBidders
   const bidders = await discoverBidders(walletApp, auctionInfo);
   console.log("Candidate bidders:", bidders);
 
@@ -71,9 +81,7 @@ function delay(ms: number) {
   // seller: startBidding
   await delay(biddingStart + 2000);
   const startBiddingResult = await startBidding(walletApp, { auctionInfo });
-  console.log("StartBidding:", startBiddingResult);
-  if (startBiddingResult.tag !== "result") return;
-  await awaitTxConfirmed(walletApp, startBiddingResult.value);
+  await logConfirmContract("StartBidding", walletApp, startBiddingResult);
 
   // bidder: placeBid
   // const sellerSignature = "aed5a11594a575a6b6e659b650940d339e6e23dd671e047fb967f5f809b4fb61746a8921611b3b7deeecdee2e95ca0a0bb72bad1cef648a803158185cb540f06";

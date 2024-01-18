@@ -76,8 +76,6 @@ export const announceAuction = async (
 /**
  * Discover bidders who have indicated their interest in participating
  * in the auction by paying a bidder deposit.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const discoverBidders = async (
   walletApp: WalletApp | null,
