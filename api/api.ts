@@ -86,8 +86,6 @@ export const discoverBidders = async (
  * Authorize bidders to participate in the auction by posting a list of
  * signatures onchain at the personal oracle validator. Bidders can then
  * discover these signatures using `discoverSellerSignatures`.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const authorizeBidders = async (
   walletApp: WalletApp,

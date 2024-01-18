@@ -38,7 +38,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
 
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
-  const walletApp: WalletApp = "Plutip";
+  const walletApp: WalletApp = "Nami";
   const biddingStart = walletApp === "Plutip" ? 5000 : 90000;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
@@ -63,12 +63,12 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const bidders = await discoverBidders(walletApp, auctionInfo);
   console.log("Candidate bidders:", bidders);
 
-  // seller: authorizeBidders (stub)
+  // seller: authorizeBidders
   const auctionCs = auctionInfo.auctionId;
-  const biddersToAuthorize = bidders.map((bidder) => bidder.bidderVk);
+  const biddersToAuthorize = bidders.map((bidder) => bidder.bidderInfo.bidderVk);
   const authBiddersParams = { auctionCs, biddersToAuthorize };
   const authBiddersResult = await authorizeBidders(walletApp, authBiddersParams);
-  console.log("AuthorizeBidders:", authBiddersResult);
+  await logConfirmContract("AuthorizeBidders", walletApp, authBiddersResult);
 
   // bidder: discoverSellerSignature (stub)
   const sellerPkh = auctionInfo.auctionTerms.sellerPkh;

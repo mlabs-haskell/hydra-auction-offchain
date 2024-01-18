@@ -31,7 +31,12 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
   ) as ExportAnnounceAuction
 
 import HydraAuctionOffchain.Contract.AuthorizeBidders
-  ( AuthorizeBiddersContractParams(AuthorizeBiddersContractParams)
+  ( AuthBiddersContractError
+      ( AuthBidders_Error_NoBiddersToAuthorize
+      , AuthBidders_Error_CouldNotGetOwnPubKeyHash
+      , AuthBidders_Error_CouldNotSignSellerMessage
+      )
+  , AuthBiddersContractParams(AuthBiddersContractParams)
   , authorizeBiddersContract
   ) as ExportAuthorizeBidders
 
