@@ -120,8 +120,6 @@ export const claimAuctionLotSeller = async (
  * greater than the `minDepositAmount` specified in `AuctionTerms`.
  *
  * If `depositAmount` is set to `null`, the minimum deposit will be made.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const enterAuction = async (
   walletApp: WalletApp,

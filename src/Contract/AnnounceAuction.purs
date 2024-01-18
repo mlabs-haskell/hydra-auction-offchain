@@ -301,9 +301,8 @@ queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
     getUtxo oref <#>
       map (\output -> oref /\ wrap { output, scriptRef: Nothing })
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Errors
---------------------------------------------------------------------------------
 
 data AnnounceAuctionContractError
   = AnnounceAuction_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)

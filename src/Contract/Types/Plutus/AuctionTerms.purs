@@ -45,7 +45,6 @@ import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
   ( addressCodec
   , bigIntCodec
-  , byteArrayCodec
   , posixTimeCodec
   , pubKeyHashCodec
   , valueCodec

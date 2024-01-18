@@ -14,7 +14,7 @@ export type AnnounceAuctionContractOutput = {
 
 export type EnterAuctionContractParams = {
   auctionInfo: AuctionInfo;
-  depositAmount: BigInt;
+  depositAmount: BigInt | null;
 };
 
 // DiscoverBidders ---------------------------------------------------

@@ -47,7 +47,14 @@ import HydraAuctionOffchain.Contract.DiscoverSellerSignature
   ) as ExportDiscoverSellerSignature
 
 import HydraAuctionOffchain.Contract.EnterAuction
-  ( EnterAuctionContractParams(EnterAuctionContractParams)
+  ( EnterAuctionContractError
+      ( EnterAuction_Error_InvalidAuctionTerms
+      , EnterAuction_Error_CurrentTimeAfterBiddingEnd
+      , EnterAuction_Error_CouldNotBuildAuctionValidators
+      , EnterAuction_Error_InvalidAuctionInfo
+      , EnterAuction_Error_CouldNotGetOwnPubKey
+      )
+  , EnterAuctionContractParams(EnterAuctionContractParams)
   , enterAuctionContract
   ) as ExportEnterAuction
 

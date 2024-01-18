@@ -6,6 +6,7 @@ import {
   discoverSellerSignature,
   enterAuction,
   mintTokenUsingAlwaysMints,
+  placeBid,
   queryAuctions,
   queryStandingBidState,
   startBidding
@@ -43,8 +44,8 @@ function delay(ms: number) {
   const auctions = await queryAuctions(walletApp);
   console.log("Auctions:", auctions);
 
-  // bidder: enterAuction (stub)
-  const depositAmount = "3000000";
+  // bidder: enterAuction
+  const depositAmount = "2800000";
   const enterAuctionResult = await enterAuction(walletApp, { auctionInfo, depositAmount });
   console.log("EnterAuction:", enterAuctionResult);
 
@@ -61,11 +62,11 @@ function delay(ms: number) {
 
   // bidder: discoverSellerSignature (stub)
   const sellerPkh = auctionInfo.auctionTerms.sellerPkh;
-  let sellerSignature: ByteArray | null = null;
-  while (sellerSignature === null) {
-    sellerSignature = await discoverSellerSignature(walletApp, { auctionCs, sellerPkh });
+  let sellerSignature_: ByteArray | null = null;
+  while (sellerSignature_ === null) {
+    sellerSignature_ = await discoverSellerSignature(walletApp, { auctionCs, sellerPkh });
   }
-  console.log("Seller signature:", sellerSignature);
+  console.log("Seller signature:", sellerSignature_);
 
   // seller: startBidding
   await delay(biddingStart + 2000);
@@ -73,6 +74,14 @@ function delay(ms: number) {
   console.log("StartBidding:", startBiddingResult);
   if (startBiddingResult.tag !== "result") return;
   await awaitTxConfirmed(walletApp, startBiddingResult.value);
+
+  // bidder: placeBid
+  // const sellerSignature = "aed5a11594a575a6b6e659b650940d339e6e23dd671e047fb967f5f809b4fb61746a8921611b3b7deeecdee2e95ca0a0bb72bad1cef648a803158185cb540f06";
+  // const placeBidParams = { auctionInfo, sellerSignature, bidAmount: "10000000" };
+  // const placeBidResult = await placeBid(walletApp, params);
+  // console.log("PlaceBid:", placeBidResult);
+  // if (placeBidResult.tag !== "result") return;
+  // await awaitTxConfirmed(walletApp, placeBidResult.value);
 
   // bidder: queryStandingBidState (stub)
   const bidState = await queryStandingBidState(walletApp, auctionInfo);
