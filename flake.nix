@@ -9,7 +9,7 @@
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     liqwid-nix.url = "github:Liqwid-Labs/liqwid-nix";
-    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5a560eb9ac1bef94d718b90f5ac2a541515127dd";
+    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/develop";
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
   };
@@ -25,6 +25,7 @@
           filter = path: ftype: !(lib.hasSuffix ".md" path) && (builtins.baseNameOf path != "flake.nix");
         };
 
+        nodejsPackage = pkgs.nodejs-18_x;
         packageLock = ./package-lock.json;
         packageJson = ./package.json;
 
@@ -34,16 +35,8 @@
           "UserDefinedWarning"
         ];
 
-        shell = {
-          shellHook = ''
-            ln -sfn $NODE_PATH node_modules
-          '';
-        };
-
         enableFormatCheck = true;
         enableJsLintCheck = false;
-
-        # plutip.testMain = "Test.Contract.Spec";
       };
 
       pre-commit.settings.hooks.nixpkgs-fmt = {

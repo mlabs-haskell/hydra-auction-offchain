@@ -13,10 +13,8 @@ import Prelude
 import Contract.AuxiliaryData (setGeneralTxMetadata)
 import Contract.BalanceTxConstraints (BalanceTxConstraintsBuilder)
 import Contract.Metadata (GeneralTransactionMetadata)
-import Contract.Monad (Contract, liftedE)
-import Contract.PlutusData (class IsData)
+import Contract.Monad (Contract)
 import Contract.ScriptLookups (ScriptLookups)
-import Contract.Scripts (class ValidatorTypes)
 import Contract.Transaction
   ( ExUnits
   , Redeemer
@@ -31,12 +29,12 @@ import Contract.Transaction
 import Contract.TxConstraints (TxConstraints)
 import Contract.UnbalancedTx (mkUnbalancedTx)
 import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
-import Data.BigInt (BigInt)
 import Data.Foldable (foldl)
 import Data.Lens ((^.))
 import Data.Maybe (Maybe(Nothing), fromMaybe, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
+import JS.BigInt (BigInt)
 import Prim.Row (class Nub, class Union) as Row
 import Record (merge) as Record
 
@@ -52,14 +50,14 @@ type ContractResultRow (extra :: Row Type) =
   | extra
   )
 
-type SubmitTxData (validator :: Type) (redeemer :: Type) (datum :: Type) =
-  { lookups :: ScriptLookups validator
-  , constraints :: TxConstraints redeemer datum
+type SubmitTxData =
+  { lookups :: ScriptLookups
+  , constraints :: TxConstraints
   , balancerConstraints :: BalanceTxConstraintsBuilder
   , metadata :: Maybe GeneralTransactionMetadata
   }
 
-emptySubmitTxData :: SubmitTxData Void Void Void
+emptySubmitTxData :: SubmitTxData
 emptySubmitTxData =
   { lookups: mempty
   , constraints: mempty
@@ -68,20 +66,17 @@ emptySubmitTxData =
   }
 
 submitTxReturningContractResult
-  :: forall (validator :: Type) (datum :: Type) (redeemer :: Type) (extra :: Row Type)
-   . ValidatorTypes validator datum redeemer
-  => IsData datum
-  => IsData redeemer
-  => Row.Union extra (ContractResultRow ()) (ContractResultRow extra)
+  :: forall (extra :: Row Type)
+   . Row.Union extra (ContractResultRow ()) (ContractResultRow extra)
   => Row.Nub (ContractResultRow extra) (ContractResultRow extra)
   => Record extra
-  -> SubmitTxData validator redeemer datum
+  -> SubmitTxData
   -> Contract (ContractResult' extra)
 submitTxReturningContractResult extra rec = do
-  unbalancedTx' <- liftedE $ mkUnbalancedTx rec.lookups rec.constraints
+  unbalancedTx' <- mkUnbalancedTx rec.lookups rec.constraints
   unbalancedTxWithMetadata <- traverse (setGeneralTxMetadata unbalancedTx') rec.metadata
   let unbalancedTx = fromMaybe unbalancedTx' unbalancedTxWithMetadata
-  balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx rec.balancerConstraints
+  balancedTx <- balanceTxWithConstraints unbalancedTx rec.balancerConstraints
   balancedSignedTx <- signTransaction balancedTx
   txHash <- submit balancedSignedTx
   pure $ Record.merge extra $

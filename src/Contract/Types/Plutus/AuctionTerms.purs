@@ -31,8 +31,6 @@ import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Time (POSIXTime)
 import Contract.Value (Value, valueToCoin)
 import Contract.Value (gt) as Value
-import Data.BigInt (BigInt)
-import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
@@ -57,6 +55,8 @@ import HydraAuctionOffchain.Contract.Types.VerificationKey
   )
 import HydraAuctionOffchain.Helpers (errV)
 import HydraAuctionOffchain.Lib.Crypto (hashVk)
+import JS.BigInt (BigInt)
+import JS.BigInt (fromInt) as BigInt
 import Ply.Typename (class PlyTypeName)
 import Type.Proxy (Proxy(Proxy))
 

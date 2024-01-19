@@ -7,8 +7,8 @@ import Contract.Prelude
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray, byteArrayFromIntArrayUnsafe)
 import Control.Monad.Gen.Common (genMaybe)
-import Data.BigInt (BigInt, fromInt)
 import HydraAuctionOffchain.Contract.Types (AuctionInfo, BidTerms, StandingBidState)
+import JS.BigInt (BigInt, fromInt)
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne, vectorOf)
 

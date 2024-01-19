@@ -19,7 +19,6 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CouldNotCoverAuctionLot
       , AnnounceAuction_Error_EmptyAuctionLotUtxoMap
       , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
-      , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )

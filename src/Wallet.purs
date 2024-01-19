@@ -92,7 +92,7 @@ signMessage payload = do
   let addr = fromPlutusAddress config.network addrPlutus
 
   -- Sign data, extract vkey and signature:
-  { key, signature: coseSign1 } <- signData addr (wrap payload) !? SignDataFailedError
+  { key, signature: coseSign1 } <- signData addr (wrap payload) !* SignDataFailedError
   signature <- liftEffect (getCoseSign1Signature $ unwrap coseSign1)
     !* CouldNotGetSigFromCoseSign1Error
   coseKey <- liftEffect (fromBytesCoseKey key) !* CouldNotDecodeCoseKeyError

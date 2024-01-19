@@ -25,8 +25,6 @@ import Contract.Value (lovelaceValueOf) as Value
 import Control.Error.Util (bool)
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.BigInt (BigInt)
-import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
@@ -51,6 +49,8 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk')
+import JS.BigInt (BigInt)
+import JS.BigInt (fromInt) as BigInt
 
 newtype EnterAuctionContractParams = EnterAuctionContractParams
   { auctionInfo :: AuctionInfo
@@ -142,7 +142,7 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
       mkFiniteInterval nowTime
         (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ -- Lock deposit with BidderInfo datum under the auction's
         -- bidder deposit validator:

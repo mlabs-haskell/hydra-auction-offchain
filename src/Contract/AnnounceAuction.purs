@@ -6,7 +6,6 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CouldNotCoverAuctionLot
       , AnnounceAuction_Error_EmptyAuctionLotUtxoMap
       , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
-      , AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
@@ -39,7 +38,7 @@ import Contract.Utxos (UtxoMap, getUtxo)
 import Contract.Value (TokenName, Value, scriptCurrencySymbol)
 import Contract.Value (singleton) as Value
 import Contract.Wallet (getWalletUtxos)
-import Control.Error.Util ((!?), (??))
+import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, runExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Parallel (parTraverse)
@@ -50,7 +49,6 @@ import Ctl.Internal.BalanceTx.CoinSelection
 import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
 import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
 import Data.Array (head) as Array
-import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
@@ -87,6 +85,7 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionValidators
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
+import JS.BigInt (fromInt) as BigInt
 import Partial.Unsafe (unsafePartial)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
@@ -187,8 +186,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
 
   -- Get auction minting policy:
   auctionMintingPolicy <- lift $ mkAuctionMintingPolicy nonceOref
-  auctionCs <- scriptCurrencySymbol auctionMintingPolicy ??
-    AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
+  let auctionCs = scriptCurrencySymbol auctionMintingPolicy
 
   -- Get auction validators:
   validators <-
@@ -242,7 +240,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     txValidRange :: POSIXTimeRange
     txValidRange = to $ biddingStart - wrap (BigInt.fromInt 1000)
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ -- Spend auction lot utxos, including nonce utxo:
         foldMap Constraints.mustSpendPubKeyOutput $ Map.keys auctionLotUtxos
@@ -264,7 +262,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , Constraints.mustValidateIn txValidRange
       ]
 
-    lookups :: ScriptLookups Void
+    lookups :: ScriptLookups
     lookups = mconcat
       [ Lookups.unspentOutputs auctionLotUtxos
       , Lookups.mintingPolicy auctionMintingPolicy
@@ -305,7 +303,6 @@ data AnnounceAuctionContractError
   | AnnounceAuction_Error_CouldNotCoverAuctionLot
   | AnnounceAuction_Error_EmptyAuctionLotUtxoMap
   | AnnounceAuction_Error_CurrentTimeAfterBiddingStart
-  | AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
   | AnnounceAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
   | AnnounceAuction_Error_CouldNotGetOwnPubKey SignMessageError
 
@@ -341,16 +338,12 @@ instance ToContractError AnnounceAuctionContractError where
       { errorCode: "AnnounceAuction06"
       , message: "Tx cannot be submitted after bidding start time."
       }
-    AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol ->
-      { errorCode: "AnnounceAuction07"
-      , message: "Could not get Auction currency symbol from minting policy."
-      }
     AnnounceAuction_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "AnnounceAuction08"
+      { errorCode: "AnnounceAuction07"
       , message: "Could not build auction validators, error: " <> show err <> "."
       }
     AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
-      { errorCode: "AnnounceAuction09"
+      { errorCode: "AnnounceAuction08"
       , message: "Could not get own public key, error: " <> show err <> "."
       }
 
