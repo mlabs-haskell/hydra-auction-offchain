@@ -84,9 +84,15 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   await logConfirmContract("StartBidding", walletApp, startBiddingResult);
 
   // bidder: placeBid
-  const placeBidParams = { auctionInfo, sellerSignature, bidAmount: "10000000" };
-  const placeBidResult = await placeBid(walletApp, placeBidParams);
-  await logConfirmContract("PlaceBid", walletApp, placeBidResult);
+  if (sellerSignature.tag === "result") {
+    const placeBidParams = {
+      auctionInfo,
+      sellerSignature: sellerSignature.value,
+      bidAmount: "10000000"
+    };
+    const placeBidResult = await placeBid(walletApp, placeBidParams);
+    await logConfirmContract("PlaceBid", walletApp, placeBidResult);
+  }
 
   // bidder: queryStandingBidState (stub)
   const bidState = await queryStandingBidState(walletApp, auctionInfo);
