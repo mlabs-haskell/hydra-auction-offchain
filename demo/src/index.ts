@@ -42,8 +42,8 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const biddingStart = walletApp === "Plutip" ? 5000 : 90000;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
-  // const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
-  // await awaitTxConfirmed(walletApp, mintTxHash);
+  const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
+  await awaitTxConfirmed(walletApp, mintTxHash);
 
   // seller: announceAuction
   const announceAuctionResult = await runAnnounceAuction(walletApp, tokenName, biddingStart);

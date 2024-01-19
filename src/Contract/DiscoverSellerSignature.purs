@@ -11,8 +11,7 @@ import Contract.Prelude
 
 import Contract.Address (Address, PubKeyHash, scriptHashAddress, toPubKeyHash)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum(Datum), OutputDatum(OutputDatum), fromData)
-import Contract.Prim.ByteArray (ByteArray, byteArrayFromAscii)
+import Contract.Prim.ByteArray (ByteArray)
 import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
 import Contract.Value (CurrencySymbol)
@@ -24,7 +23,6 @@ import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Generic.Rep (class Generic)
 import Data.Map (toUnfoldable) as Map
-import Data.Maybe (fromJust)
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
@@ -38,8 +36,8 @@ import HydraAuctionOffchain.Contract.Types
   , VerificationKey
   , mkContractOutput
   )
-import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
-import Partial.Unsafe (unsafePartial)
+import HydraAuctionOffchain.Helpers (getInlineDatum)
+import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 
 newtype DiscoverSellerSigContractParams = DiscoverSellerSigContractParams
   { auctionCs :: CurrencySymbol
@@ -79,12 +77,9 @@ discoverSellerSignatureWithErrors (DiscoverSellerSigContractParams params) = do
     ?? DiscoverSellerSig_Error_CouldNotGetSellerPubKeyHash
 
   -- Get bidder vk:
-  let signAsciiMessage = signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
   { vkey: bidderVk } <-
-    withExceptT DiscoverSellerSig_Error_CouldNotGetBidderPubKey $
-      signAsciiMessage
-        "By signing this message, you authorize hydra-auction to read \
-        \your public key."
+    withExceptT DiscoverSellerSig_Error_CouldNotGetBidderPubKey
+      askWalletVk
 
   lift $ findSignature sellerPkh params.auctionCs bidderVk
 
@@ -102,16 +97,10 @@ findSignature sellerPkh auctionCs bidderVk = do
 
   worker :: TransactionOutput -> Maybe ByteArray
   worker txOut = do
-    AuctionAuth auctionAuth <- getAuctionAuth
+    AuctionAuth auctionAuth <- getInlineDatum txOut
     snd <$>
       bool Nothing (Array.find (eq bidderVk <<< fst) auctionAuth.signatures)
         (auctionAuth.auctionCs == auctionCs)
-    where
-    getAuctionAuth :: Maybe AuctionAuth
-    getAuctionAuth =
-      case (unwrap txOut).datum of
-        OutputDatum (Datum plutusData) -> fromData plutusData
-        _ -> Nothing
 
 ----------------------------------------------------------------------
 -- Errors

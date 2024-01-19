@@ -6,7 +6,6 @@ import Contract.Prelude
 
 import Contract.Address (scriptHashAddress)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum(Datum), OutputDatum(OutputDatum), fromData)
 import Contract.Scripts (validatorHash)
 import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
@@ -23,6 +22,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (mkAuctionMetadataValidator)
+import HydraAuctionOffchain.Helpers (getInlineDatum)
 
 -- | Queries all currently existing auctions at the auction metadata validator address,
 -- | filtering out invalid entries.
@@ -36,18 +36,14 @@ queryAuctions = do
 
 getValidAuctionMetadata :: TransactionOutput -> Maybe AuctionInfo
 getValidAuctionMetadata txOut = do
-  auctionInfo@(AuctionInfo { auctionId, auctionTerms }) <- getAuctionInfo
+  auctionInfo@(AuctionInfo { auctionId, auctionTerms }) <- getInlineDatum txOut
   bool Nothing (Just auctionInfo)
     (validAuctionTerms auctionTerms && validAuctionId auctionId)
   where
   validAuctionTerms :: AuctionTerms -> Boolean
-  validAuctionTerms auctionTerms = V.isValid $ validateAuctionTerms auctionTerms
+  validAuctionTerms auctionTerms =
+    V.isValid $ validateAuctionTerms auctionTerms
 
   validAuctionId :: CurrencySymbol -> Boolean
-  validAuctionId cs = Value.valueOf (unwrap txOut).amount cs auctionMetadataTokenName == one
-
-  getAuctionInfo :: Maybe AuctionInfo
-  getAuctionInfo =
-    case (unwrap txOut).datum of
-      OutputDatum (Datum plutusData) -> fromData plutusData
-      _ -> Nothing
+  validAuctionId cs =
+    Value.valueOf (unwrap txOut).amount cs auctionMetadataTokenName == one

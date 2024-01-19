@@ -12,6 +12,8 @@ module HydraAuctionOffchain.Wallet
       , InvalidSignatureError
       )
   , SignMessageResult
+  , askWalletVk
+  , askWalletVk'
   , signMessage
   ) where
 
@@ -19,7 +21,7 @@ import Prelude
 
 import Contract.Address (Address, PubKeyHash, toPubKeyHash)
 import Contract.Monad (Contract)
-import Contract.Prim.ByteArray (ByteArray, CborBytes)
+import Contract.Prim.ByteArray (ByteArray, CborBytes, byteArrayFromAscii)
 import Contract.Wallet (getWalletAddress, signData)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError)
@@ -27,7 +29,7 @@ import Ctl.Internal.FfiHelpers (MaybeFfiHelper, maybeFfiHelper)
 import Ctl.Internal.Plutus.Conversion (fromPlutusAddress)
 import Ctl.Internal.Plutus.Types.Address (getAddress)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Just))
+import Data.Maybe (Maybe(Just), fromJust)
 import Data.Newtype (unwrap, wrap)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
@@ -37,6 +39,7 @@ import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyBytes, vkeyFrom
 import HydraAuctionOffchain.Helpers ((!*))
 import HydraAuctionOffchain.Lib.Cose (getCoseSign1Signature, mkSigStructure)
 import HydraAuctionOffchain.Lib.Crypto (hashVk, verifySignature)
+import Partial.Unsafe (unsafePartial)
 
 foreign import data CoseKey :: Type
 foreign import fromBytesCoseKey :: CborBytes -> Effect CoseKey
@@ -66,6 +69,21 @@ derive instance Eq SignMessageError
 
 instance Show SignMessageError where
   show = genericShow
+
+askWalletVk :: ExceptT SignMessageError Contract SignMessageResult
+askWalletVk = askWalletVk' mempty
+
+askWalletVk' :: String -> ExceptT SignMessageError Contract SignMessageResult
+askWalletVk' extraMessage =
+  signMessageAscii $
+    consentMessage <> extraMessage
+  where
+  consentMessage =
+    "By signing this message, you authorize hydra-auction to read \
+    \your public key."
+
+  signMessageAscii =
+    signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
 
 signMessage :: ByteArray -> ExceptT SignMessageError Contract SignMessageResult
 signMessage payload = do
