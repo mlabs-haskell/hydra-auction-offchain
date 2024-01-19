@@ -42,8 +42,8 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const biddingStart = walletApp === "Plutip" ? 5000 : 90000;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
-  const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
-  await awaitTxConfirmed(walletApp, mintTxHash);
+  // const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
+  // await awaitTxConfirmed(walletApp, mintTxHash);
 
   // seller: announceAuction
   const announceAuctionResult = await runAnnounceAuction(walletApp, tokenName, biddingStart);
@@ -70,13 +70,13 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const authBiddersResult = await authorizeBidders(walletApp, authBiddersParams);
   await logConfirmContract("AuthorizeBidders", walletApp, authBiddersResult);
 
-  // bidder: discoverSellerSignature (stub)
-  const sellerPkh = auctionInfo.auctionTerms.sellerPkh;
-  let sellerSignature_: ByteArray | null = null;
-  while (sellerSignature_ === null) {
-    sellerSignature_ = await discoverSellerSignature(walletApp, { auctionCs, sellerPkh });
-  }
-  console.log("Seller signature:", sellerSignature_);
+  // bidder: discoverSellerSignature
+  const sellerAddress = auctionInfo.auctionTerms.sellerAddress;
+  const sellerSignature = await discoverSellerSignature(walletApp, {
+    auctionCs,
+    sellerAddress
+  });
+  console.log("Seller signature:", sellerSignature);
 
   // seller: startBidding
   await delay(biddingStart + 2000);
@@ -84,12 +84,9 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   await logConfirmContract("StartBidding", walletApp, startBiddingResult);
 
   // bidder: placeBid
-  // const sellerSignature = "aed5a11594a575a6b6e659b650940d339e6e23dd671e047fb967f5f809b4fb61746a8921611b3b7deeecdee2e95ca0a0bb72bad1cef648a803158185cb540f06";
-  // const placeBidParams = { auctionInfo, sellerSignature, bidAmount: "10000000" };
-  // const placeBidResult = await placeBid(walletApp, params);
-  // console.log("PlaceBid:", placeBidResult);
-  // if (placeBidResult.tag !== "result") return;
-  // await awaitTxConfirmed(walletApp, placeBidResult.value);
+  const placeBidParams = { auctionInfo, sellerSignature, bidAmount: "10000000" };
+  const placeBidResult = await placeBid(walletApp, placeBidParams);
+  await logConfirmContract("PlaceBid", walletApp, placeBidResult);
 
   // bidder: queryStandingBidState (stub)
   const bidState = await queryStandingBidState(walletApp, auctionInfo);
