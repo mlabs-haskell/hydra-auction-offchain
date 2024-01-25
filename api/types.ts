@@ -1,9 +1,59 @@
-// AnnounceAuction -------------------------------------------------------------
+// AnnounceAuction ---------------------------------------------------
 
 export type AnnounceAuctionContractParams = {
-  auctionTerms: AuctionTerms;
+  auctionTerms: AuctionTermsInput;
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
+
+export type AnnounceAuctionContractOutput = {
+  txHash: TransactionHash;
+  auctionInfo: AuctionInfo;
+};
+
+// EnterAuction ------------------------------------------------------
+
+export type EnterAuctionContractParams = {
+  auctionInfo: AuctionInfo;
+  depositAmount: BigInt | null;
+};
+
+// DiscoverBidders ---------------------------------------------------
+
+export type BidderInfoCandidate = {
+  bidderInfo: BidderInfo;
+  depositAmount: BigInt;
+  isValid: boolean; // complies with given auction terms
+};
+
+// AuthorizeBidders --------------------------------------------------
+
+export type AuthorizeBiddersContractParams = {
+  auctionCs: CurrencySymbol;
+  biddersToAuthorize: Array<VerificationKey>;
+};
+
+// PlaceBid ----------------------------------------------------------
+
+export type PlaceBidContractParams = {
+  auctionInfo: AuctionInfo;
+  sellerSignature: ByteArray;
+  bidAmount: BigInt;
+};
+
+// DiscoverSellerSignature -------------------------------------------
+
+export type DiscoverSellerSigContractParams = {
+  auctionCs: CurrencySymbol;
+  sellerAddress: Address;
+};
+
+// StartBidding ------------------------------------------------------
+
+export type StartBiddingContractParams = {
+  auctionInfo: AuctionInfo;
+};
+
+// Auction -----------------------------------------------------------
 
 export type AuctionInfo = {
   auctionId: CurrencySymbol;
@@ -14,10 +64,8 @@ export type AuctionInfo = {
   standingBidAddr: Address;
 };
 
-export type AuctionTerms = {
+export interface AuctionTermsInput {
   auctionLot: Value;
-  sellerPkh: PubKeyHash;
-  sellerVk: ByteArray;
   delegates: Array<PubKeyHash>;
   biddingStart: POSIXTime;
   biddingEnd: POSIXTime;
@@ -27,9 +75,28 @@ export type AuctionTerms = {
   startingBid: BigInt;
   minBidIncrement: BigInt;
   minDepositAmount: BigInt;
+}
+
+export interface AuctionTerms extends AuctionTermsInput {
+  sellerAddress: Address;
+  sellerVk: VerificationKey;
+}
+
+export type BidderInfo = {
+  bidderAddress: Address;
+  bidderVk: VerificationKey;
 };
 
-// Common ----------------------------------------------------------------------
+export type BidTerms = {
+  bidder: BidderInfo;
+  price: BigInt;
+  bidderSignature: ByteArray;
+  sellerSignature: ByteArray;
+};
+
+export type StandingBidState = BidTerms | null;
+
+// Common ------------------------------------------------------------
 
 export type WalletApp =
   | "Nami"
@@ -58,7 +125,7 @@ export type ContractError = {
   message: string;
 };
 
-// Cardano ---------------------------------------------------------------------
+// Cardano -----------------------------------------------------------
 
 export type Address = string;
 
@@ -81,6 +148,8 @@ export type TransactionInput = {
 
 export type TransactionHash = string;
 
+export type TxCbor = string;
+
 export type UInt = string;
 
 export type Value = Array<ValueEntry>;
@@ -90,3 +159,5 @@ export type ValueEntry = {
   tn: TokenName;
   quantity: BigInt;
 };
+
+export type VerificationKey = ByteArray;

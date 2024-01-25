@@ -1,8 +1,19 @@
 import {
   announceAuction,
+  authorizeBidders,
   awaitTxConfirmed,
+  claimAuctionLotBidder,
+  claimAuctionLotSeller,
+  claimDepositLoser,
+  cleanupAuction,
+  discoverBidders,
+  discoverSellerSignature,
+  enterAuction,
   mintTokenUsingAlwaysMints,
-  queryAuctions
+  placeBid,
+  queryAuctions,
+  queryStandingBidState,
+  startBidding
 } from "hydra-auction-offchain";
 import type {
   AnnounceAuctionContractParams,
@@ -17,28 +28,101 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function logConfirmContract<T extends { txHash: TransactionHash }>(
+  label: string,
+  walletApp: WalletApp,
+  output: ContractOutput<T | TransactionHash>
+): Promise<void> {
+  console.log(label + ":", output);
+  if (output.tag !== "result") {
+    throw new Error(label + " contract failed.");
+  }
+  await awaitTxConfirmed(walletApp, output.value.txHash ?? output.value);
+}
+
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
   const walletApp: WalletApp = "Nami";
+  const biddingStart = walletApp === "Plutip" ? 5000 : 90000;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
   const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
   await awaitTxConfirmed(walletApp, mintTxHash);
 
-  const announceAuctionResult = await runAnnounceAuction(walletApp, tokenName);
-  console.log("AnnounceAuction:", announceAuctionResult);
+  // seller: announceAuction
+  const announceAuctionResult = await runAnnounceAuction(walletApp, tokenName, biddingStart);
+  await logConfirmContract("AnnounceAuction", walletApp, announceAuctionResult);
+  const auctionInfo = announceAuctionResult.value.auctionInfo;
 
-  if (announceAuctionResult.tag === "result") {
-    await awaitTxConfirmed(walletApp, announceAuctionResult.value);
+  // bidder: queryAuctions
+  const auctions = await queryAuctions(walletApp);
+  console.log("Auctions:", auctions);
+
+  // bidder: enterAuction
+  const depositAmount = "2800000";
+  const enterAuctionResult = await enterAuction(walletApp, { auctionInfo, depositAmount });
+  await logConfirmContract("EnterAuction", walletApp, enterAuctionResult);
+
+  // seller: discoverBidders
+  const bidders = await discoverBidders(walletApp, auctionInfo);
+  console.log("Candidate bidders:", bidders);
+
+  // seller: authorizeBidders
+  const auctionCs = auctionInfo.auctionId;
+  const biddersToAuthorize = bidders.map((bidder) => bidder.bidderInfo.bidderVk);
+  const authBiddersParams = { auctionCs, biddersToAuthorize };
+  const authBiddersResult = await authorizeBidders(walletApp, authBiddersParams);
+  await logConfirmContract("AuthorizeBidders", walletApp, authBiddersResult);
+
+  // bidder: discoverSellerSignature
+  const sellerAddress = auctionInfo.auctionTerms.sellerAddress;
+  const sellerSignature = await discoverSellerSignature(walletApp, {
+    auctionCs,
+    sellerAddress
+  });
+  console.log("Seller signature:", sellerSignature);
+
+  // seller: startBidding
+  await delay(biddingStart + 2000);
+  const startBiddingResult = await startBidding(walletApp, { auctionInfo });
+  await logConfirmContract("StartBidding", walletApp, startBiddingResult);
+
+  // bidder: placeBid
+  if (sellerSignature.tag === "result") {
+    const placeBidParams = {
+      auctionInfo,
+      sellerSignature: sellerSignature.value,
+      bidAmount: "10000000"
+    };
+    const placeBidResult = await placeBid(walletApp, placeBidParams);
+    await logConfirmContract("PlaceBid", walletApp, placeBidResult);
   }
 
-  const auctions = await queryAuctions(walletApp);
-  console.log("QueryAuctions:", auctions);
+  // bidder: queryStandingBidState (stub)
+  const bidState = await queryStandingBidState(walletApp, auctionInfo);
+  console.log("Standing bid:", bidState);
+
+  // bidder: claimAuctionLotBidder (stub)
+  const claimAuctionLotBidderResult = await claimAuctionLotBidder(walletApp, auctionInfo);
+  console.log("ClaimAuctionLotBidder:", claimAuctionLotBidderResult);
+
+  // bidder: claimDepositLoser (stub)
+  const claimDepositLoserResult = await claimDepositLoser(walletApp, auctionInfo);
+  console.log("ClaimDepositLoser:", claimDepositLoserResult);
+
+  // seller: claimAuctionLotSeller (stub)
+  const claimAuctionLotSellerResult = await claimAuctionLotSeller(walletApp, auctionInfo);
+  console.log("ClaimAuctionLotSeller:", claimAuctionLotSellerResult);
+
+  // anyone: cleanupAuction (stub)
+  const cleanupAuctionResult = await cleanupAuction(walletApp, auctionInfo);
+  console.log("CleanupAuction:", cleanupAuctionResult);
 })();
 
 async function runAnnounceAuction(
   walletApp: WalletApp,
-  tokenName: TokenName
+  tokenName: TokenName,
+  biddingStart: number
 ): Promise<ContractOutput<TransactionHash>> {
   const nowTime = Date.now();
   const params: AnnounceAuctionContractParams = {
@@ -50,13 +134,11 @@ async function runAnnounceAuction(
           quantity: "1"
         }
       ],
-      sellerPkh: "2bcc4ca387f39d2e792d7d08484c96d0d59b26cbfafc1fa4ffad486c",
-      sellerVk: "400d8729d8be39372f3bc6241af2f0e44892a4e065848d39c1006d2329e64db9",
       delegates: ["2bcc4ca387f39d2e792d7d08484c96d0d59b26cbfafc1fa4ffad486c"],
-      biddingStart: (nowTime + 600000).toString(), // 10 min from now
-      biddingEnd: (nowTime + 600000 * 2).toString(),
-      purchaseDeadline: (nowTime + 600000 * 3).toString(),
-      cleanup: (nowTime + 600000 * 4).toString(),
+      biddingStart: (nowTime + biddingStart).toString(),
+      biddingEnd: (nowTime + 600000).toString(),
+      purchaseDeadline: (nowTime + 600000 * 2).toString(),
+      cleanup: (nowTime + 600000 * 3).toString(),
       auctionFeePerDelegate: "5000000",
       startingBid: "6000000",
       minBidIncrement: "1000000",

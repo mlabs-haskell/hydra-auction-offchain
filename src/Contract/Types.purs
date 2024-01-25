@@ -1,13 +1,24 @@
 module HydraAuctionOffchain.Contract.Types
-  ( module ExportContractError
+  ( module ExportCommon
+  , module ExportContractError
   , module ExportContractOutput
   , module ExportContractResult
+  , module ExportPlutusAuctionAuth
   , module ExportPlutusAuctionEscrowState
   , module ExportPlutusAuctionInfo
   , module ExportPlutusAuctionPolicyRedeemer
   , module ExportPlutusAuctionTerms
+  , module ExportPlutusBidderInfo
+  , module ExportPlutusBidTerms
   , module ExportPlutusExtraAssetClass
+  , module ExportPlutusRedeemers
+  , module ExportPlutusStandingBidState
+  , module ExportVerificationKey
   ) where
+
+import HydraAuctionOffchain.Contract.Types.Common
+  ( Utxo
+  ) as ExportCommon
 
 import HydraAuctionOffchain.Contract.Types.ContractError
   ( class ToContractError
@@ -32,12 +43,24 @@ import HydraAuctionOffchain.Contract.Types.ContractResult
   , submitTxReturningContractResult
   ) as ExportContractResult
 
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionAuth
+  ( AuctionAuth(AuctionAuth)
+  ) as ExportPlutusAuctionAuth
+
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionEscrowState
   ( AuctionEscrowState(AuctionAnnounced, BiddingStarted, AuctionConcluded)
   ) as ExportPlutusAuctionEscrowState
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
   ( AuctionInfo(AuctionInfo)
+  , AuctionInfoValidationError
+      ( AuctionEscrowAddressMismatchError
+      , BidderDepositAddressMismatchError
+      , FeeEscrowAddressMismatchError
+      , StandingBidAddressMismatchError
+      )
+  , auctionInfoCodec
+  , validateAuctionInfo
   ) as ExportPlutusAuctionInfo
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
@@ -46,8 +69,10 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionPolicyRedemeer
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
+  , AuctionTermsInput
   , AuctionTermsValidationError
-      ( NonPositiveAuctionLotValueError
+      ( AuctionLotNonZeroAdaError
+      , NonPositiveAuctionLotValueError
       , SellerVkPkhMismatchError
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
@@ -58,8 +83,22 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , NoDelegatesError
       )
   , auctionTermsCodec
+  , auctionTermsInputCodec
+  , mkAuctionTerms
   , validateAuctionTerms
   ) as ExportPlutusAuctionTerms
+
+import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo
+  ( BidderInfo(BidderInfo)
+  , bidderInfoCodec
+  ) as ExportPlutusBidderInfo
+
+import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
+  ( BidTerms(BidTerms)
+  , bidTermsCodec
+  , bidderSignatureMessage
+  , sellerSignatureMessage
+  ) as ExportPlutusBidTerms
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass
   ( AssetClass(AssetClass)
@@ -67,3 +106,31 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass
   , assetToValue
   , mkAssetClass
   ) as ExportPlutusExtraAssetClass
+
+import HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
+  ( AuctionEscrowRedeemer
+      ( StartBiddingRedeemer
+      , BidderBuysRedeemer
+      , SellerReclaimsRedeemer
+      , CleanupAuctionRedeemer
+      )
+  , StandingBidRedeemer
+      ( NewBidRedeemer
+      , MoveToHydraRedeemer
+      , ConcludeAuctionRedeemer
+      )
+  ) as ExportPlutusRedeemers
+
+import HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
+  ( StandingBidState(StandingBidState)
+  , standingBidStateCodec
+  , validateNewBid
+  ) as ExportPlutusStandingBidState
+
+import HydraAuctionOffchain.Contract.Types.VerificationKey
+  ( VerificationKey
+  , vkeyBytes
+  , vkeyCodec
+  , vkeyFromBytes
+  , vkeyLength
+  ) as ExportVerificationKey
