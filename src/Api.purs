@@ -1,9 +1,15 @@
 module HydraAuctionOffchain.Api
   ( announceAuction
+  , authorizeBidders
   , awaitTxConfirmed
+  , discoverBidders
+  , discoverSellerSignature
+  , enterAuction
   , mintTokenUsingAlwaysMints
-  , startBidding
+  , placeBid
   , queryAuctions
+  , queryStandingBidState
+  , startBidding
   ) where
 
 import Prelude
@@ -18,33 +24,67 @@ import HydraAuctionOffchain.Codec (fromJs, toJs)
 import HydraAuctionOffchain.Config (mkContractParams)
 import HydraAuctionOffchain.Contract
   ( announceAuctionContract
+  , authorizeBiddersContract
+  , discoverBidders
+  , discoverSellerSignature
+  , enterAuctionContract
   , mintTokenUsingAlwaysMints
-  , startBiddingContract
+  , placeBidContract
   , queryAuctions
+  , queryStandingBidState
+  , startBiddingContract
   ) as Contract
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Auctions
---------------------------------------------------------------------------------
 
 announceAuction :: Json -> Json -> Effect (Promise Json)
 announceAuction walletApp params = fromAff do
   contractParams <- mkContractParams $ Just $ fromJs walletApp
   toJs <$> runContract contractParams (Contract.announceAuctionContract $ fromJs params)
 
+authorizeBidders :: Json -> Json -> Effect (Promise Json)
+authorizeBidders walletApp params = fromAff do
+  contractParams <- mkContractParams $ Just $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.authorizeBiddersContract $ fromJs params)
+
+discoverBidders :: Json -> Json -> Effect (Promise Json)
+discoverBidders walletApp auctionInfo = fromAff do
+  contractParams <- mkContractParams $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.discoverBidders $ fromJs auctionInfo)
+
+discoverSellerSignature :: Json -> Json -> Effect (Promise Json)
+discoverSellerSignature walletApp params = fromAff do
+  contractParams <- mkContractParams $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.discoverSellerSignature $ fromJs params)
+
+enterAuction :: Json -> Json -> Effect (Promise Json)
+enterAuction walletApp params = fromAff do
+  contractParams <- mkContractParams $ Just $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.enterAuctionContract $ fromJs params)
+
+placeBid :: Json -> Json -> Effect (Promise Json)
+placeBid walletApp params = fromAff do
+  contractParams <- mkContractParams $ Just $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.placeBidContract $ fromJs params)
+
 queryAuctions :: Json -> Effect (Promise Json)
 queryAuctions walletApp = fromAff do
   contractParams <- mkContractParams $ fromJs walletApp
   toJs <$> runContract contractParams Contract.queryAuctions
+
+queryStandingBidState :: Json -> Json -> Effect (Promise Json)
+queryStandingBidState walletApp auctionInfo = fromAff do
+  contractParams <- mkContractParams $ fromJs walletApp
+  toJs <$> runContract contractParams (Contract.queryStandingBidState $ fromJs auctionInfo)
 
 startBidding :: Json -> Json -> Effect (Promise Json)
 startBidding walletApp params = fromAff do
   contractParams <- mkContractParams $ Just $ fromJs walletApp
   toJs <$> runContract contractParams (Contract.startBiddingContract $ fromJs params)
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Helpers
---------------------------------------------------------------------------------
 
 awaitTxConfirmed :: Json -> Json -> Effect (Promise Unit)
 awaitTxConfirmed walletApp txHash = fromAff do

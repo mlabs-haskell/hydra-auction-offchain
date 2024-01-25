@@ -4,7 +4,9 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   , AuctionTermsInputRec
   , AuctionTermsRec
   , AuctionTermsValidationError
-      ( NonPositiveAuctionLotValueError
+      ( AuctionLotNonZeroAdaError
+      , NonPositiveAuctionLotValueError
+      , SellerAddressLacksPubKeyCredentialError
       , SellerVkPkhMismatchError
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
@@ -23,33 +25,38 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (PubKeyHash)
-import Contract.Hashing (blake2b224Hash)
+import Contract.Address (Address, PubKeyHash, toPubKeyHash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
-import Contract.Prim.ByteArray (ByteArray)
 import Contract.Time (POSIXTime)
-import Contract.Value (Value)
+import Contract.Value (Value, valueToCoin)
 import Contract.Value (gt) as Value
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Just, Nothing))
+import Data.Maybe (Maybe(Nothing), isJust)
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import Data.Validation.Semigroup (V, invalid)
+import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
-  ( bigIntCodec
-  , byteArrayCodec
+  ( addressCodec
+  , bigIntCodec
   , posixTimeCodec
   , pubKeyHashCodec
   , valueCodec
   )
+import HydraAuctionOffchain.Config (config)
+import HydraAuctionOffchain.Contract.Types.VerificationKey
+  ( VerificationKey
+  , vkeyBytes
+  , vkeyCodec
+  )
+import HydraAuctionOffchain.Helpers (errV)
+import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import Ply.Typename (class PlyTypeName)
 import Type.Proxy (Proxy(Proxy))
 
@@ -87,10 +94,10 @@ auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
   , minDepositAmount: bigIntCodec
   }
 
-mkAuctionTerms :: AuctionTermsInput -> PubKeyHash -> ByteArray -> AuctionTerms
-mkAuctionTerms rec sellerPkh sellerVk = wrap
+mkAuctionTerms :: AuctionTermsInput -> Address -> VerificationKey -> AuctionTerms
+mkAuctionTerms rec sellerAddress sellerVk = wrap
   { auctionLot: rec.auctionLot
-  , sellerPkh
+  , sellerAddress
   , sellerVk
   , delegates: rec.delegates
   , biddingStart: rec.biddingStart
@@ -108,8 +115,8 @@ mkAuctionTerms rec sellerPkh sellerVk = wrap
 ----------------------------------------------------------------------
 
 type AuctionTermsRec = AuctionTermsInputRec
-  ( sellerPkh :: PubKeyHash
-  , sellerVk :: ByteArray
+  ( sellerAddress :: Address
+  , sellerVk :: VerificationKey
   )
 
 newtype AuctionTerms = AuctionTerms (Record AuctionTermsRec)
@@ -123,8 +130,8 @@ instance Show AuctionTerms where
 
 type AuctionTermsSchema =
   ("auctionLot" :~: Value)
-    :$: ("sellerPkh" :~: PubKeyHash)
-    :$: ("sellerVk" :~: ByteArray)
+    :$: ("sellerAddress" :~: Address)
+    :$: ("sellerVk" :~: VerificationKey)
     :$: ("delegates" :~: Array PubKeyHash)
     :$: ("biddingStart" :~: POSIXTime)
     :$: ("biddingEnd" :~: POSIXTime)
@@ -155,8 +162,8 @@ auctionTermsCodec :: CA.JsonCodec AuctionTerms
 auctionTermsCodec =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
     { auctionLot: valueCodec
-    , sellerPkh: pubKeyHashCodec
-    , sellerVk: byteArrayCodec
+    , sellerAddress: addressCodec config.network
+    , sellerVk: vkeyCodec
     , delegates: CA.array pubKeyHashCodec
     , biddingStart: posixTimeCodec
     , biddingEnd: posixTimeCodec
@@ -173,7 +180,9 @@ auctionTermsCodec =
 --------------------------------------------------------------------------------
 
 data AuctionTermsValidationError
-  = NonPositiveAuctionLotValueError
+  = AuctionLotNonZeroAdaError
+  | NonPositiveAuctionLotValueError
+  | SellerAddressLacksPubKeyCredentialError
   | SellerVkPkhMismatchError
   | BiddingStartNotBeforeBiddingEndError
   | BiddingEndNotBeforePurchaseDeadlineError
@@ -195,25 +204,26 @@ minAuctionFee = BigInt.fromInt 2_000_000
 
 validateAuctionTerms :: AuctionTerms -> V (Array AuctionTermsValidationError) Unit
 validateAuctionTerms (AuctionTerms rec) = fold
-  [ (rec.auctionLot `Value.gt` mempty)
-      `err` NonPositiveAuctionLotValueError
-  , (Just rec.sellerPkh == map wrap (ed25519KeyHashFromBytes $ blake2b224Hash rec.sellerVk))
-      `err` SellerVkPkhMismatchError
+  [ (valueToCoin rec.auctionLot == mempty)
+      `errV` AuctionLotNonZeroAdaError
+  , (rec.auctionLot `Value.gt` mempty)
+      `errV` NonPositiveAuctionLotValueError
+  , (isJust $ toPubKeyHash rec.sellerAddress)
+      `errV` SellerAddressLacksPubKeyCredentialError
+  , (toPubKeyHash rec.sellerAddress == hashVk (vkeyBytes rec.sellerVk))
+      `errV` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
-      `err` BiddingStartNotBeforeBiddingEndError
+      `errV` BiddingStartNotBeforeBiddingEndError
   , (rec.biddingEnd < rec.purchaseDeadline)
-      `err` BiddingEndNotBeforePurchaseDeadlineError
+      `errV` BiddingEndNotBeforePurchaseDeadlineError
   , (rec.purchaseDeadline < rec.cleanup)
-      `err` PurchaseDeadlineNotBeforeCleanupError
+      `errV` PurchaseDeadlineNotBeforeCleanupError
   , (rec.minBidIncrement > zero)
-      `err` NonPositiveMinBidIncrementError
+      `errV` NonPositiveMinBidIncrementError
   , (rec.startingBid > rec.auctionFeePerDelegate * length rec.delegates)
-      `err` InvalidStartingBidError
+      `errV` InvalidStartingBidError
   , (rec.auctionFeePerDelegate > minAuctionFee)
-      `err` InvalidAuctionFeePerDelegateError
+      `errV` InvalidAuctionFeePerDelegateError
   , (length rec.delegates > 0)
-      `err` NoDelegatesError
+      `errV` NoDelegatesError
   ]
-  where
-  err :: Boolean -> AuctionTermsValidationError -> V (Array AuctionTermsValidationError) Unit
-  err x error = if x then pure unit else invalid [ error ]

@@ -1,13 +1,59 @@
-// AnnounceAuction -------------------------------------------------------------
+// AnnounceAuction ---------------------------------------------------
 
 export type AnnounceAuctionContractParams = {
   auctionTerms: AuctionTermsInput;
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
 
+export type AnnounceAuctionContractOutput = {
+  txHash: TransactionHash;
+  auctionInfo: AuctionInfo;
+};
+
+// EnterAuction ------------------------------------------------------
+
+export type EnterAuctionContractParams = {
+  auctionInfo: AuctionInfo;
+  depositAmount: BigInt | null;
+};
+
+// DiscoverBidders ---------------------------------------------------
+
+export type BidderInfoCandidate = {
+  bidderInfo: BidderInfo;
+  depositAmount: BigInt;
+  isValid: boolean; // complies with given auction terms
+};
+
+// AuthorizeBidders --------------------------------------------------
+
+export type AuthorizeBiddersContractParams = {
+  auctionCs: CurrencySymbol;
+  biddersToAuthorize: Array<VerificationKey>;
+};
+
+// PlaceBid ----------------------------------------------------------
+
+export type PlaceBidContractParams = {
+  auctionInfo: AuctionInfo;
+  sellerSignature: ByteArray;
+  bidAmount: BigInt;
+};
+
+// DiscoverSellerSignature -------------------------------------------
+
+export type DiscoverSellerSigContractParams = {
+  auctionCs: CurrencySymbol;
+  sellerAddress: Address;
+};
+
+// StartBidding ------------------------------------------------------
+
 export type StartBiddingContractParams = {
   auctionInfo: AuctionInfo;
 };
+
+// Auction -----------------------------------------------------------
 
 export type AuctionInfo = {
   auctionId: CurrencySymbol;
@@ -32,11 +78,25 @@ export interface AuctionTermsInput {
 }
 
 export interface AuctionTerms extends AuctionTermsInput {
-  sellerPkh: PubKeyHash;
-  sellerVk: ByteArray;
+  sellerAddress: Address;
+  sellerVk: VerificationKey;
 }
 
-// Common ----------------------------------------------------------------------
+export type BidderInfo = {
+  bidderAddress: Address;
+  bidderVk: VerificationKey;
+};
+
+export type BidTerms = {
+  bidder: BidderInfo;
+  price: BigInt;
+  bidderSignature: ByteArray;
+  sellerSignature: ByteArray;
+};
+
+export type StandingBidState = BidTerms | null;
+
+// Common ------------------------------------------------------------
 
 export type WalletApp =
   | "Nami"
@@ -65,7 +125,7 @@ export type ContractError = {
   message: string;
 };
 
-// Cardano ---------------------------------------------------------------------
+// Cardano -----------------------------------------------------------
 
 export type Address = string;
 
@@ -100,4 +160,4 @@ export type ValueEntry = {
   quantity: BigInt;
 };
 
-export type VerificationKey = string;
+export type VerificationKey = ByteArray;

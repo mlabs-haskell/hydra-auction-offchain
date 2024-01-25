@@ -1,29 +1,40 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
   ( AuctionInfo(AuctionInfo)
+  , AuctionInfoValidationError
+      ( AuctionEscrowAddressMismatchError
+      , BidderDepositAddressMismatchError
+      , FeeEscrowAddressMismatchError
+      , StandingBidAddressMismatchError
+      )
   , auctionInfoCodec
+  , validateAuctionInfo
   ) where
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (Address)
+import Contract.Address (Address, scriptHashAddress)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
+import Contract.Scripts (Validator, validatorHash)
 import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Foldable (length)
+import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
-import Data.Newtype (class Newtype, wrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
+import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec (class HasJson, addressCodec, currencySymbolCodec)
 import HydraAuctionOffchain.Config (config)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms
   , auctionTermsCodec
   )
+import HydraAuctionOffchain.Contract.Validators (AuctionValidators)
+import HydraAuctionOffchain.Helpers (errV)
 import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionInfo = AuctionInfo
@@ -76,3 +87,37 @@ auctionInfoCodec =
     , feeEscrowAddr: addressCodec config.network
     , standingBidAddr: addressCodec config.network
     }
+
+--------------------------------------------------------------------------------
+-- Validation
+--------------------------------------------------------------------------------
+
+data AuctionInfoValidationError
+  = AuctionEscrowAddressMismatchError
+  | BidderDepositAddressMismatchError
+  | FeeEscrowAddressMismatchError
+  | StandingBidAddressMismatchError
+
+derive instance Generic AuctionInfoValidationError _
+derive instance Eq AuctionInfoValidationError
+
+instance Show AuctionInfoValidationError where
+  show = genericShow
+
+validateAuctionInfo
+  :: AuctionInfo
+  -> AuctionValidators Validator
+  -> V (Array AuctionInfoValidationError) Unit
+validateAuctionInfo (AuctionInfo rec) validators = fold
+  [ (rec.auctionEscrowAddr == validatorAddresses.auctionEscrow)
+      `errV` AuctionEscrowAddressMismatchError
+  , (rec.bidderDepositAddr == validatorAddresses.bidderDeposit)
+      `errV` BidderDepositAddressMismatchError
+  , (rec.feeEscrowAddr == validatorAddresses.feeEscrow)
+      `errV` FeeEscrowAddressMismatchError
+  , (rec.standingBidAddr == validatorAddresses.standingBid)
+      `errV` StandingBidAddressMismatchError
+  ]
+  where
+  validatorAddresses =
+    unwrap $ validators <#> flip scriptHashAddress Nothing <<< validatorHash

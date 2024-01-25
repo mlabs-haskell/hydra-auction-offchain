@@ -3,13 +3,20 @@ import unimplemented from "ts-unimplemented";
 
 import type {
   AnnounceAuctionContractParams,
+  AnnounceAuctionContractOutput,
+  AuthorizeBiddersContractParams,
   AuctionInfo,
+  BidderInfoCandidate,
   BigInt,
   ByteArray,
   ContractOutput,
   CurrencySymbol,
+  DiscoverSellerSigContractParams,
+  EnterAuctionContractParams,
+  PlaceBidContractParams,
   PubKeyHash,
   StartBiddingContractParams,
+  StandingBidState,
   TokenName,
   TransactionHash,
   TxCbor,
@@ -17,7 +24,44 @@ import type {
   WalletApp
 } from "./types";
 
-// Auctions (seller) -----------------------------------------------------------
+// High-level auction workflow pseudocode for L1:
+// NOTE: uppercase functions should be implemented on frontend
+//
+// 01. seller: auctionTerms <- BUILD_AUCTION_TERMS()
+// 02. seller: auctionInfo <- announceAuction(auctionTerms)
+// 03. bidder: auctionInfoArr <- queryAuctions()
+// 04. bidder: auctionInfo = SELECT_AUCTION(auctionInfoArr)
+// 05. bidder: depositAmount <- SELECT_DEPOSIT_AMOUNT(auctionInfo)
+// 06. bidder: enterAuction(auctionInfo, depositAmount)
+// 07. seller: bidders <- discoverBidders(auctionInfo)
+// 08. seller: biddersToAuthorize <- SELECT_BIDDERS(bidders)
+// 09. seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
+// 10. bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerAddress)
+// 11. seller: startBidding(auctionInfo)
+// 12. bidder: bidState <- queryStandingBidState(auctionInfo)
+// 13. bidder: bidAmount <- SELECT_BID_AMOUNT(auctionInfo, bidState.price)
+// 14. bidder: placeBid(auctionInfo, sellerSignature, bidAmount)
+// 15. bidder(winner): claimAuctionLotBidder(auctionInfo)
+// 16. bidder(loser): claimDepositLoser(auctionInfo)
+// 17. seller(winner didn't buy): claimAuctionLotSeller(auctionInfo)
+// 18. anyone: cleanupAuction(auctionInfo)
+
+// Auctions (anyone) -------------------------------------------------
+
+export const queryAuctions = async (
+  walletApp: WalletApp | null
+): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
+
+export const cleanupAuction = async (
+  auctionInfo: AuctionInfo
+): Promise<ContractOutput<TransactionHash>> => unimplemented();
+
+export const queryStandingBidState = async (
+  walletApp: WalletApp | null,
+  auctionInfo: AuctionInfo
+): Promise<StandingBidState> => Purs.queryStandingBidState(walletApp)(auctionInfo)();
+
+// Auctions (seller) -------------------------------------------------
 
 /**
  * Announce auction by declaring the auction metadata and placing the auction
@@ -26,21 +70,27 @@ import type {
 export const announceAuction = async (
   walletApp: WalletApp,
   params: AnnounceAuctionContractParams
-): Promise<ContractOutput<TransactionHash>> => Purs.announceAuction(walletApp)(params)();
+): Promise<ContractOutput<AnnounceAuctionContractOutput>> =>
+  Purs.announceAuction(walletApp)(params)();
 
+/**
+ * Discover bidders who have indicated their interest in participating
+ * in the auction by paying a bidder deposit.
+ */
 export const discoverBidders = async (
-  walletApp: WalletApp | null
-): Promise<Array<VerificationKey>> => unimplemented();
+  walletApp: WalletApp | null,
+  auctionInfo: AuctionInfo
+): Promise<Array<BidderInfoCandidate>> => Purs.discoverBidders(walletApp)(auctionInfo)();
 
 /**
  * Authorize bidders to participate in the auction by posting a list of
  * signatures onchain at the personal oracle validator. Bidders can then
- * discover these signatures using `discoverSellerSignature`.
+ * discover these signatures using `discoverSellerSignatures`.
  */
 export const authorizeBidders = async (
-  auctionCs: CurrencySymbol,
-  biddersToAuthorize: Array<VerificationKey>
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  walletApp: WalletApp,
+  params: AuthorizeBiddersContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.authorizeBidders(walletApp)(params)();
 
 /**
  * Initiate the auction, enabling bidders to place their bids.
@@ -56,10 +106,10 @@ export const startBidding = async (
  * to the delegates.
  */
 export const claimAuctionLotSeller = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
-// Auctions (bidder) -----------------------------------------------------------
+// Auctions (bidder) -------------------------------------------------
 
 /**
  * Apply for participation in the auction by sending a deposit equal to or
@@ -69,51 +119,40 @@ export const claimAuctionLotSeller = async (
  */
 export const enterAuction = async (
   walletApp: WalletApp,
-  auctionCs: CurrencySymbol,
-  bidderVk: VerificationKey,
-  depositAmount: BigInt | null
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  params: EnterAuctionContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.enterAuction(walletApp)(params)();
 
 /**
- * Discover the seller's signature required for placing bids.
+ * Discover own bidder-auction authorization signature required for
+ * placing bids on a particular auction.
  */
 export const discoverSellerSignature = async (
-  auctionCs: CurrencySymbol,
-  bidderVk: VerificationKey
-): Promise<ContractOutput<ByteArray>> => unimplemented();
+  walletApp: WalletApp,
+  params: DiscoverSellerSigContractParams
+): Promise<ContractOutput<ByteArray | null>> =>
+  Purs.discoverSellerSignature(walletApp)(params)();
 
 export const placeBid = async (
-  auctionCs: CurrencySymbol,
-  bidAmount: BigInt,
-  sellerSignature: ByteArray
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+  walletApp: WalletApp,
+  params: PlaceBidContractParams
+): Promise<ContractOutput<TransactionHash>> => Purs.placeBid(walletApp)(params)();
 
 /**
  * Claim the auction lot if the bid placed by the bidder wins, distribute the
  * auction fees to the delegates.
  */
 export const claimAuctionLotBidder = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
 /**
  * Reclaim the deposit if someone's else bid wins.
  */
 export const claimDepositLoser = async (
-  auctionCs: CurrencySymbol
+  auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> => unimplemented();
 
-// Auctions (anyone) -----------------------------------------------------------
-
-export const queryAuctions = async (
-  walletApp: WalletApp | null
-): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
-
-export const cleanupAuction = async (
-  auctionCs: CurrencySymbol
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
-
-// Auctions (delegate) ---------------------------------------------------------
+// Auctions (delegate) -----------------------------------------------
 
 export const announceDelegateGroup = async (
   groupName: string,
@@ -121,7 +160,7 @@ export const announceDelegateGroup = async (
   delegates: Array<PubKeyHash>
 ): Promise<ContractOutput<TxCbor>> => unimplemented();
 
-// Helpers ---------------------------------------------------------------------
+// Helpers -----------------------------------------------------------
 
 export const awaitTxConfirmed = async (
   walletApp: WalletApp | null,
