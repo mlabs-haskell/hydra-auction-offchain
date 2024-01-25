@@ -46,7 +46,11 @@ import HydraAuctionOffchain.Contract.DiscoverBidders
   ) as ExportDiscoverBidders
 
 import HydraAuctionOffchain.Contract.DiscoverSellerSignature
-  ( DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
+  ( DiscoverSellerSigContractError
+      ( DiscoverSellerSig_Error_CouldNotGetSellerPubKeyHash
+      , DiscoverSellerSig_Error_CouldNotGetBidderPubKey
+      )
+  , DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
   , discoverSellerSignature
   ) as ExportDiscoverSellerSignature
 

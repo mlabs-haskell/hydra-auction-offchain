@@ -15,7 +15,6 @@ import Contract.Prelude
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, toData)
-import Contract.Prim.ByteArray (byteArrayFromAscii)
 import Contract.Scripts (ValidatorHash, validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
 import Contract.Transaction (TransactionHash)
@@ -31,7 +30,6 @@ import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Maybe (fromJust)
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec)
@@ -52,8 +50,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
-import Partial.Unsafe (unsafePartial)
+import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk')
 
 newtype EnterAuctionContractParams = EnterAuctionContractParams
   { auctionInfo :: AuctionInfo
@@ -116,16 +113,12 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
   -- deposit amount does not satisfy minDepositAmount:
   let
     isLowDeposit = depositAmount < auctionTermsRec.minDepositAmount
-    signAsciiMessage = signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
-    consentMessage =
-      "By signing this message, you authorize hydra-auction to read \
-      \your public key."
     lowDepositMessage =
       " WARNING: The provided deposit amount does not meet the minimum deposit \
       \requirement for this auction."
   { vkey: bidderVk, address: bidderAddress, pkh: bidderPkh } <-
     withExceptT EnterAuction_Error_CouldNotGetOwnPubKey $
-      signAsciiMessage (consentMessage <> bool mempty lowDepositMessage isLowDeposit)
+      askWalletVk' (bool mempty lowDepositMessage isLowDeposit)
 
   let
     -- BidderDeposit -------------------------------------------------

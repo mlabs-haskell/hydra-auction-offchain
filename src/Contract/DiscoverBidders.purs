@@ -6,7 +6,6 @@ module HydraAuctionOffchain.Contract.DiscoverBidders
 import Contract.Prelude hiding (oneOf)
 
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum(Datum), OutputDatum(OutputDatum), fromData)
 import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
 import Contract.Value (valueToCoin') as Value
@@ -25,6 +24,7 @@ import HydraAuctionOffchain.Contract.Types
   , BidderInfo
   , bidderInfoCodec
   )
+import HydraAuctionOffchain.Helpers (getInlineDatum)
 
 newtype BidderInfoCandidate = BidderInfoCandidate
   { bidderInfo :: BidderInfo
@@ -59,7 +59,7 @@ discoverBidders (AuctionInfo auctionInfo) = do
   where
   getBidderInfoCandidate :: TransactionOutput -> Maybe BidderInfoCandidate
   getBidderInfoCandidate txOut =
-    getBidderInfo <#> \bidderInfo -> wrap
+    getInlineDatum txOut <#> \bidderInfo -> wrap
       { bidderInfo
       , depositAmount
       , isValid: depositAmount >= (unwrap auctionInfo.auctionTerms).minDepositAmount
@@ -67,9 +67,3 @@ discoverBidders (AuctionInfo auctionInfo) = do
     where
     depositAmount :: BigInt
     depositAmount = Value.valueToCoin' (unwrap txOut).amount
-
-    getBidderInfo :: Maybe BidderInfo
-    getBidderInfo =
-      case (unwrap txOut).datum of
-        OutputDatum (Datum plutusData) -> fromData plutusData
-        _ -> Nothing
