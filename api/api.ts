@@ -52,9 +52,11 @@ export const queryAuctions = async (
   walletApp: WalletApp | null
 ): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
 
+/* NOTE: not implemented, returns stubbed data */
 export const cleanupAuction = async (
+  walletApp: WalletApp,
   auctionInfo: AuctionInfo
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+): Promise<ContractOutput<TransactionHash>> => Purs.cleanupAuction(walletApp)(auctionInfo)();
 
 export const queryStandingBidState = async (
   walletApp: WalletApp | null,
@@ -104,10 +106,14 @@ export const startBidding = async (
  * Claim the auction lot and deposit if the auction lot has not been purchased
  * by the winning bidder before purchase deadline, distribute the auction fees
  * to the delegates.
+ *
+ * NOTE: not implemented, returns stubbed data
  */
 export const claimAuctionLotSeller = async (
+  walletApp: WalletApp,
   auctionInfo: AuctionInfo
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+): Promise<ContractOutput<TransactionHash>> =>
+  Purs.claimAuctionLotSeller(walletApp)(auctionInfo)();
 
 // Auctions (bidder) -------------------------------------------------
 
@@ -140,17 +146,25 @@ export const placeBid = async (
 /**
  * Claim the auction lot if the bid placed by the bidder wins, distribute the
  * auction fees to the delegates.
+ *
+ * NOTE: not implemented, returns stubbed data
  */
 export const claimAuctionLotBidder = async (
+  walletApp: WalletApp,
   auctionInfo: AuctionInfo
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+): Promise<ContractOutput<TransactionHash>> =>
+  Purs.claimAuctionLotBidder(walletApp)(auctionInfo)();
 
 /**
  * Reclaim the deposit if someone's else bid wins.
+ *
+ * NOTE: not implemented, returns stubbed data
  */
 export const claimDepositLoser = async (
+  walletApp: WalletApp,
   auctionInfo: AuctionInfo
-): Promise<ContractOutput<TransactionHash>> => unimplemented();
+): Promise<ContractOutput<TransactionHash>> =>
+  Purs.claimDepositLoser(walletApp)(auctionInfo)();
 
 // Auctions (delegate) -----------------------------------------------
 

@@ -2,6 +2,10 @@ import {
   announceAuction,
   authorizeBidders,
   awaitTxConfirmed,
+  claimAuctionLotBidder,
+  claimAuctionLotSeller,
+  claimDepositLoser,
+  cleanupAuction,
   discoverBidders,
   discoverSellerSignature,
   enterAuction,
@@ -97,6 +101,22 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   // bidder: queryStandingBidState (stub)
   const bidState = await queryStandingBidState(walletApp, auctionInfo);
   console.log("Standing bid:", bidState);
+
+  // bidder: claimAuctionLotBidder (stub)
+  const claimAuctionLotBidderResult = await claimAuctionLotBidder(walletApp, auctionInfo);
+  console.log("ClaimAuctionLotBidder:", claimAuctionLotBidderResult);
+
+  // bidder: claimDepositLoser (stub)
+  const claimDepositLoserResult = await claimDepositLoser(walletApp, auctionInfo);
+  console.log("ClaimDepositLoser:", claimDepositLoserResult);
+
+  // seller: claimAuctionLotSeller (stub)
+  const claimAuctionLotSellerResult = await claimAuctionLotSeller(walletApp, auctionInfo);
+  console.log("ClaimAuctionLotSeller:", claimAuctionLotSellerResult);
+
+  // anyone: cleanupAuction (stub)
+  const cleanupAuctionResult = await cleanupAuction(walletApp, auctionInfo);
+  console.log("CleanupAuction:", cleanupAuctionResult);
 })();
 
 async function runAnnounceAuction(

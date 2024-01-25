@@ -2,6 +2,10 @@ module HydraAuctionOffchain.Api
   ( announceAuction
   , authorizeBidders
   , awaitTxConfirmed
+  , claimAuctionLotBidder
+  , claimAuctionLotSeller
+  , claimDepositLoser
+  , cleanupAuction
   , discoverBidders
   , discoverSellerSignature
   , enterAuction
@@ -14,13 +18,15 @@ module HydraAuctionOffchain.Api
 
 import Prelude
 
-import Contract.Monad (runContract)
+import Contract.Monad (Contract, runContract)
+import Contract.Transaction (TransactionHash)
 import Contract.Transaction (awaitTxConfirmed) as Contract
 import Control.Promise (Promise, fromAff)
 import Data.Argonaut (Json)
 import Data.Maybe (Maybe(Just))
 import Effect (Effect)
-import HydraAuctionOffchain.Codec (fromJs, toJs)
+import Effect.Class (liftEffect)
+import HydraAuctionOffchain.Codec (class HasJson, fromJs, toJs)
 import HydraAuctionOffchain.Config (mkContractParams)
 import HydraAuctionOffchain.Contract
   ( announceAuctionContract
@@ -34,39 +40,42 @@ import HydraAuctionOffchain.Contract
   , queryStandingBidState
   , startBiddingContract
   ) as Contract
+import HydraAuctionOffchain.Contract.Types (AuctionInfo, ContractOutput(ContractOutputResult))
+import Test.QuickCheck (arbitrary)
+import Test.QuickCheck.Gen (randomSampleOne)
+
+contractGeneric
+  :: forall a b
+   . HasJson a
+  => HasJson b
+  => (a -> Contract b)
+  -> Json
+  -> Json
+  -> Effect (Promise Json)
+contractGeneric contract walletApp params = fromAff do
+  contractParams <- mkContractParams $ fromJs walletApp
+  toJs <$> runContract contractParams (contract $ fromJs params)
 
 ----------------------------------------------------------------------
 -- Auctions
 
 announceAuction :: Json -> Json -> Effect (Promise Json)
-announceAuction walletApp params = fromAff do
-  contractParams <- mkContractParams $ Just $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.announceAuctionContract $ fromJs params)
+announceAuction = contractGeneric Contract.announceAuctionContract
 
 authorizeBidders :: Json -> Json -> Effect (Promise Json)
-authorizeBidders walletApp params = fromAff do
-  contractParams <- mkContractParams $ Just $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.authorizeBiddersContract $ fromJs params)
+authorizeBidders = contractGeneric Contract.authorizeBiddersContract
 
 discoverBidders :: Json -> Json -> Effect (Promise Json)
-discoverBidders walletApp auctionInfo = fromAff do
-  contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.discoverBidders $ fromJs auctionInfo)
+discoverBidders = contractGeneric Contract.discoverBidders
 
 discoverSellerSignature :: Json -> Json -> Effect (Promise Json)
-discoverSellerSignature walletApp params = fromAff do
-  contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.discoverSellerSignature $ fromJs params)
+discoverSellerSignature = contractGeneric Contract.discoverSellerSignature
 
 enterAuction :: Json -> Json -> Effect (Promise Json)
-enterAuction walletApp params = fromAff do
-  contractParams <- mkContractParams $ Just $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.enterAuctionContract $ fromJs params)
+enterAuction = contractGeneric Contract.enterAuctionContract
 
 placeBid :: Json -> Json -> Effect (Promise Json)
-placeBid walletApp params = fromAff do
-  contractParams <- mkContractParams $ Just $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.placeBidContract $ fromJs params)
+placeBid = contractGeneric Contract.placeBidContract
 
 queryAuctions :: Json -> Effect (Promise Json)
 queryAuctions walletApp = fromAff do
@@ -74,14 +83,27 @@ queryAuctions walletApp = fromAff do
   toJs <$> runContract contractParams Contract.queryAuctions
 
 queryStandingBidState :: Json -> Json -> Effect (Promise Json)
-queryStandingBidState walletApp auctionInfo = fromAff do
-  contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.queryStandingBidState $ fromJs auctionInfo)
+queryStandingBidState = contractGeneric Contract.queryStandingBidState
 
 startBidding :: Json -> Json -> Effect (Promise Json)
-startBidding walletApp params = fromAff do
-  contractParams <- mkContractParams $ Just $ fromJs walletApp
-  toJs <$> runContract contractParams (Contract.startBiddingContract $ fromJs params)
+startBidding = contractGeneric Contract.startBiddingContract
+
+claimAuctionLotBidder :: Json -> Json -> Effect (Promise Json)
+claimAuctionLotBidder = contractGeneric contractStub
+
+claimDepositLoser :: Json -> Json -> Effect (Promise Json)
+claimDepositLoser = contractGeneric contractStub
+
+claimAuctionLotSeller :: Json -> Json -> Effect (Promise Json)
+claimAuctionLotSeller = contractGeneric contractStub
+
+cleanupAuction :: Json -> Json -> Effect (Promise Json)
+cleanupAuction = contractGeneric contractStub
+
+contractStub :: AuctionInfo -> Contract (ContractOutput TransactionHash)
+contractStub _ = do
+  txHash <- liftEffect $ randomSampleOne arbitrary
+  pure $ ContractOutputResult txHash
 
 ----------------------------------------------------------------------
 -- Helpers
