@@ -23,7 +23,6 @@ import Contract.Address (getNetworkId, scriptHashAddress)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
-import Contract.Prim.ByteArray (byteArrayFromAscii)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
@@ -87,7 +86,7 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionMetadataValidator
   , mkAuctionValidators
   )
-import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
+import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 import Partial.Unsafe (unsafePartial)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
@@ -159,12 +158,7 @@ mkAnnounceAuctionContractWithErrors
        (ContractResult' (auctionInfo :: AuctionInfo))
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
-  let signAsciiMessage = signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
-  { vkey, address } <-
-    withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey $
-      signAsciiMessage
-        "By signing this message, you authorize hydra-auction to read \
-        \your public key."
+  { vkey, address } <- withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey askWalletVk
 
   -- Check auction terms:
   let auctionTerms = mkAuctionTerms params.auctionTerms address vkey
@@ -301,9 +295,8 @@ queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
     getUtxo oref <#>
       map (\output -> oref /\ wrap { output, scriptRef: Nothing })
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Errors
---------------------------------------------------------------------------------
 
 data AnnounceAuctionContractError
   = AnnounceAuction_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)

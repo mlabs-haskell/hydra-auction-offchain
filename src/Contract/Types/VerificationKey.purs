@@ -24,6 +24,7 @@ import Test.QuickCheck.Gen (chooseInt, vectorOf)
 newtype VerificationKey = VerificationKey ByteArray
 
 derive instance Eq VerificationKey
+derive instance Ord VerificationKey
 derive newtype instance ToData VerificationKey
 derive newtype instance FromData VerificationKey
 

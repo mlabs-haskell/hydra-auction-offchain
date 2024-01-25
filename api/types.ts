@@ -14,7 +14,7 @@ export type AnnounceAuctionContractOutput = {
 
 export type EnterAuctionContractParams = {
   auctionInfo: AuctionInfo;
-  depositAmount: BigInt;
+  depositAmount: BigInt | null;
 };
 
 // DiscoverBidders ---------------------------------------------------
@@ -44,8 +44,7 @@ export type PlaceBidContractParams = {
 
 export type DiscoverSellerSigContractParams = {
   auctionCs: CurrencySymbol;
-  // NOTE: sellerPkh will be replaced with sellerAddress: Address
-  sellerPkh: PubKeyHash;
+  sellerAddress: Address;
 };
 
 // StartBidding ------------------------------------------------------
