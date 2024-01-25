@@ -28,7 +28,6 @@ import Prelude
 import Contract.Address (Address, PubKeyHash, toPubKeyHash)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
-import Contract.Prim.ByteArray (ByteArray)
 import Contract.Time (POSIXTime)
 import Contract.Value (Value, valueToCoin)
 import Contract.Value (gt) as Value
@@ -46,12 +45,16 @@ import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
   ( addressCodec
   , bigIntCodec
-  , byteArrayCodec
   , posixTimeCodec
   , pubKeyHashCodec
   , valueCodec
   )
 import HydraAuctionOffchain.Config (config)
+import HydraAuctionOffchain.Contract.Types.VerificationKey
+  ( VerificationKey
+  , vkeyBytes
+  , vkeyCodec
+  )
 import HydraAuctionOffchain.Helpers (errV)
 import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import Ply.Typename (class PlyTypeName)
@@ -91,7 +94,7 @@ auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
   , minDepositAmount: bigIntCodec
   }
 
-mkAuctionTerms :: AuctionTermsInput -> Address -> ByteArray -> AuctionTerms
+mkAuctionTerms :: AuctionTermsInput -> Address -> VerificationKey -> AuctionTerms
 mkAuctionTerms rec sellerAddress sellerVk = wrap
   { auctionLot: rec.auctionLot
   , sellerAddress
@@ -113,7 +116,7 @@ mkAuctionTerms rec sellerAddress sellerVk = wrap
 
 type AuctionTermsRec = AuctionTermsInputRec
   ( sellerAddress :: Address
-  , sellerVk :: ByteArray
+  , sellerVk :: VerificationKey
   )
 
 newtype AuctionTerms = AuctionTerms (Record AuctionTermsRec)
@@ -128,7 +131,7 @@ instance Show AuctionTerms where
 type AuctionTermsSchema =
   ("auctionLot" :~: Value)
     :$: ("sellerAddress" :~: Address)
-    :$: ("sellerVk" :~: ByteArray)
+    :$: ("sellerVk" :~: VerificationKey)
     :$: ("delegates" :~: Array PubKeyHash)
     :$: ("biddingStart" :~: POSIXTime)
     :$: ("biddingEnd" :~: POSIXTime)
@@ -160,7 +163,7 @@ auctionTermsCodec =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
     { auctionLot: valueCodec
     , sellerAddress: addressCodec config.network
-    , sellerVk: byteArrayCodec
+    , sellerVk: vkeyCodec
     , delegates: CA.array pubKeyHashCodec
     , biddingStart: posixTimeCodec
     , biddingEnd: posixTimeCodec
@@ -207,7 +210,7 @@ validateAuctionTerms (AuctionTerms rec) = fold
       `errV` NonPositiveAuctionLotValueError
   , (isJust $ toPubKeyHash rec.sellerAddress)
       `errV` SellerAddressLacksPubKeyCredentialError
-  , (toPubKeyHash rec.sellerAddress == hashVk rec.sellerVk)
+  , (toPubKeyHash rec.sellerAddress == hashVk (vkeyBytes rec.sellerVk))
       `errV` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
       `errV` BiddingStartNotBeforeBiddingEndError

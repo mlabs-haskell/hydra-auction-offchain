@@ -238,9 +238,8 @@ queryAuctionEscrowUtxo (AuctionInfo auctionInfo) =
   mkAuctionToken tokenName =
     Value.singleton auctionInfo.auctionId tokenName one
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Errors
---------------------------------------------------------------------------------
 
 data StartBiddingContractError
   = StartBidding_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)

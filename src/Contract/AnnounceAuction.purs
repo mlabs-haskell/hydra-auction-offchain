@@ -10,7 +10,9 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
+  , AnnounceAuctionContractOutput(AnnounceAuctionContractOutput)
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
+  , AnnounceAuctionContractResult
   , announceAuctionContract
   , mkAnnounceAuctionContractWithErrors
   ) where
@@ -21,7 +23,6 @@ import Contract.Address (getNetworkId, scriptHashAddress)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
-import Contract.Prim.ByteArray (byteArrayFromAscii)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
@@ -56,7 +57,7 @@ import Data.Either (hush)
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (class HasJson, orefCodec)
+import HydraAuctionOffchain.Codec (class HasJson, orefCodec, transactionHashCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
@@ -66,12 +67,13 @@ import HydraAuctionOffchain.Contract.MintingPolicies
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionEscrowState(AuctionAnnounced)
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfo
   , AuctionPolicyRedeemer(MintAuction)
   , AuctionTermsInput
   , AuctionTermsValidationError
   , ContractOutput
-  , ContractResult
+  , ContractResult'
+  , auctionInfoCodec
   , auctionTermsInputCodec
   , emptySubmitTxData
   , mkAuctionTerms
@@ -84,7 +86,7 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionMetadataValidator
   , mkAuctionValidators
   )
-import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
+import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 import Partial.Unsafe (unsafePartial)
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
@@ -112,23 +114,51 @@ announceAuctionContractParamsCodec =
       , additionalAuctionLotOrefs: CA.array orefCodec
       }
 
+newtype AnnounceAuctionContractOutput = AnnounceAuctionContractOutput
+  { txHash :: TransactionHash
+  , auctionInfo :: AuctionInfo
+  }
+
+derive instance Generic AnnounceAuctionContractOutput _
+
+derive instance Newtype AnnounceAuctionContractOutput _
+derive instance Eq AnnounceAuctionContractOutput
+
+instance Show AnnounceAuctionContractOutput where
+  show = genericShow
+
+instance HasJson AnnounceAuctionContractOutput where
+  jsonCodec = const announceAuctionContractOutputCodec
+
+type AnnounceAuctionContractResult = ContractResult' (auctionInfo :: AuctionInfo)
+
+announceAuctionContractOutputCodec :: CA.JsonCodec AnnounceAuctionContractOutput
+announceAuctionContractOutputCodec =
+  wrapIso AnnounceAuctionContractOutput $ CA.object "AnnounceAuctionContractOutput" $
+    CAR.record
+      { txHash: transactionHashCodec
+      , auctionInfo: auctionInfoCodec
+      }
+
 announceAuctionContract
   :: AnnounceAuctionContractParams
-  -> Contract (ContractOutput TransactionHash)
+  -> Contract (ContractOutput AnnounceAuctionContractOutput)
 announceAuctionContract =
-  mkContractOutput _.txHash <<< mkAnnounceAuctionContractWithErrors
+  mkContractOutput resultToOutput <<< mkAnnounceAuctionContractWithErrors
+  where
+  resultToOutput :: AnnounceAuctionContractResult -> AnnounceAuctionContractOutput
+  resultToOutput rec = wrap
+    { txHash: rec.txHash
+    , auctionInfo: rec.auctionInfo
+    }
 
 mkAnnounceAuctionContractWithErrors
   :: AnnounceAuctionContractParams
-  -> ExceptT AnnounceAuctionContractError Contract ContractResult
+  -> ExceptT AnnounceAuctionContractError Contract
+       (ContractResult' (auctionInfo :: AuctionInfo))
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
-  let signAsciiMessage = signMessage <<< unsafePartial fromJust <<< byteArrayFromAscii
-  { vkey, address } <-
-    withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey $
-      signAsciiMessage
-        "By signing this message, you authorize hydra-auction to read \
-        \your public key."
+  { vkey, address } <- withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey askWalletVk
 
   -- Check auction terms:
   let auctionTerms = mkAuctionTerms params.auctionTerms address vkey
@@ -196,8 +226,8 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     auctionInfoValue :: Value
     auctionInfoValue = mkAuctionToken auctionMetadataTokenName
 
-    auctionInfoDatum :: Datum
-    auctionInfoDatum = wrap $ toData $ AuctionInfo
+    auctionInfo :: AuctionInfo
+    auctionInfo = wrap
       { auctionId: auctionCs
       , auctionTerms
       , auctionEscrowAddr: validatorAddresses.auctionEscrow
@@ -205,6 +235,9 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , feeEscrowAddr: validatorAddresses.feeEscrow
       , standingBidAddr: validatorAddresses.standingBid
       }
+
+    auctionInfoDatum :: Datum
+    auctionInfoDatum = wrap $ toData auctionInfo
 
     txValidRange :: POSIXTimeRange
     txValidRange = to $ biddingStart - wrap (BigInt.fromInt 1000)
@@ -237,7 +270,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , Lookups.mintingPolicy auctionMintingPolicy
       ]
 
-  lift $ submitTxReturningContractResult {} $ emptySubmitTxData
+  lift $ submitTxReturningContractResult { auctionInfo } $ emptySubmitTxData
     { lookups = lookups
     , constraints = constraints
     }
@@ -262,9 +295,8 @@ queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
     getUtxo oref <#>
       map (\output -> oref /\ wrap { output, scriptRef: Nothing })
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Errors
---------------------------------------------------------------------------------
 
 data AnnounceAuctionContractError
   = AnnounceAuction_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)

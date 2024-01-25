@@ -227,9 +227,8 @@ queryStandingBidUtxo (AuctionInfo auctionInfo) =
           OutputDatum datum -> fromData $ unwrap datum
           _ -> Nothing
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- Errors
---------------------------------------------------------------------------------
 
 data PlaceBidContractError
   = PlaceBid_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)

@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
   ( StandingBidState(StandingBidState)
+  , standingBidStateCodec
   , validateNewBid
   ) where
 
@@ -7,13 +8,21 @@ import Prelude
 
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.Value (CurrencySymbol)
+import Data.Codec.Argonaut (JsonCodec) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap)
+import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
+import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
-import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms (BidTerms, validateBidTerms)
+import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
+  ( BidTerms
+  , bidTermsCodec
+  , validateBidTerms
+  )
 
 newtype StandingBidState = StandingBidState (Maybe BidTerms)
 
@@ -25,6 +34,12 @@ derive newtype instance FromData StandingBidState
 
 instance Show StandingBidState where
   show = genericShow
+
+instance HasJson StandingBidState where
+  jsonCodec = const standingBidStateCodec
+
+standingBidStateCodec :: CA.JsonCodec StandingBidState
+standingBidStateCodec = wrapIso StandingBidState $ CA.maybe bidTermsCodec
 
 --------------------------------------------------------------------------------
 -- Validation

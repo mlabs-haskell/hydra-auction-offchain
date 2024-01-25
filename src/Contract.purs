@@ -1,8 +1,13 @@
 module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
+  , module ExportAuthorizeBidders
+  , module ExportDiscoverBidders
+  , module ExportDiscoverSellerSignature
+  , module ExportEnterAuction
   , module ExportMintTokens
   , module ExportPlaceBid
   , module ExportQueryAuctions
+  , module ExportQueryStandingBidState
   , module ExportStartBidding
   ) where
 
@@ -18,10 +23,48 @@ import HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
       )
+  , AnnounceAuctionContractOutput(AnnounceAuctionContractOutput)
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
+  , AnnounceAuctionContractResult
   , announceAuctionContract
   , mkAnnounceAuctionContractWithErrors
   ) as ExportAnnounceAuction
+
+import HydraAuctionOffchain.Contract.AuthorizeBidders
+  ( AuthBiddersContractError
+      ( AuthBidders_Error_NoBiddersToAuthorize
+      , AuthBidders_Error_CouldNotGetOwnPubKeyHash
+      , AuthBidders_Error_CouldNotSignSellerMessage
+      )
+  , AuthBiddersContractParams(AuthBiddersContractParams)
+  , authorizeBiddersContract
+  ) as ExportAuthorizeBidders
+
+import HydraAuctionOffchain.Contract.DiscoverBidders
+  ( BidderInfoCandidate(BidderInfoCandidate)
+  , discoverBidders
+  ) as ExportDiscoverBidders
+
+import HydraAuctionOffchain.Contract.DiscoverSellerSignature
+  ( DiscoverSellerSigContractError
+      ( DiscoverSellerSig_Error_CouldNotGetSellerPubKeyHash
+      , DiscoverSellerSig_Error_CouldNotGetBidderPubKey
+      )
+  , DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
+  , discoverSellerSignature
+  ) as ExportDiscoverSellerSignature
+
+import HydraAuctionOffchain.Contract.EnterAuction
+  ( EnterAuctionContractError
+      ( EnterAuction_Error_InvalidAuctionTerms
+      , EnterAuction_Error_CurrentTimeAfterBiddingEnd
+      , EnterAuction_Error_CouldNotBuildAuctionValidators
+      , EnterAuction_Error_InvalidAuctionInfo
+      , EnterAuction_Error_CouldNotGetOwnPubKey
+      )
+  , EnterAuctionContractParams(EnterAuctionContractParams)
+  , enterAuctionContract
+  ) as ExportEnterAuction
 
 import HydraAuctionOffchain.Contract.MintTokens
   ( mintTokenUsingAlwaysMints
@@ -46,6 +89,10 @@ import HydraAuctionOffchain.Contract.PlaceBid
 import HydraAuctionOffchain.Contract.QueryAuctions
   ( queryAuctions
   ) as ExportQueryAuctions
+
+import HydraAuctionOffchain.Contract.QueryStandingBidState
+  ( queryStandingBidState
+  ) as ExportQueryStandingBidState
 
 import HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError
