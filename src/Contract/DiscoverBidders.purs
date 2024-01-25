@@ -1,26 +1,30 @@
 module HydraAuctionOffchain.Contract.DiscoverBidders
   ( BidderInfoCandidate(BidderInfoCandidate)
-  , bidderInfoCandidateCodec
   , discoverBidders
   ) where
 
 import Contract.Prelude hiding (oneOf)
 
 import Contract.Monad (Contract)
-import Data.Array.NonEmpty (fromArray)
-import Data.BigInt (BigInt, fromInt, toInt)
+import Contract.Transaction (TransactionOutput)
+import Contract.Utxos (utxosAt)
+import Contract.Value (valueToCoin') as Value
+import Data.Array (mapMaybe) as Array
+import Data.BigInt (BigInt)
 import Data.Codec.Argonaut (JsonCodec, boolean, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (fromJust)
+import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec)
-import HydraAuctionOffchain.Contract.Types (AuctionInfo, BidderInfo, bidderInfoCodec)
-import Partial.Unsafe (unsafePartial)
-import Test.QuickCheck (arbitrary)
-import Test.QuickCheck.Gen (Gen, chooseInt, oneOf, randomSampleOne, vectorOf)
+import HydraAuctionOffchain.Contract.Types
+  ( AuctionInfo(AuctionInfo)
+  , BidderInfo
+  , bidderInfoCodec
+  )
+import HydraAuctionOffchain.Helpers (getInlineDatum)
 
 newtype BidderInfoCandidate = BidderInfoCandidate
   { bidderInfo :: BidderInfo
@@ -47,31 +51,19 @@ bidderInfoCandidateCodec =
       , isValid: CA.boolean
       }
 
-genBidderInfoCandidate :: BigInt -> Gen BidderInfoCandidate
-genBidderInfoCandidate minDepositAmount = do
-  bidderInfo <- arbitrary
-  let
-    minAdaApprox = 1_500_000
-    minDepositAmount' = max minDepositAmount $ fromInt $ minAdaApprox + one
-  depositAmount <- oneOf $ unsafePartial fromJust $ fromArray
-    [ add minDepositAmount' <<< fromInt <$> chooseInt zero 5_000_000
-    , fromInt <$> chooseInt minAdaApprox (fromMaybe top $ toInt $ minDepositAmount' - one)
-    ]
-  pure $ wrap
-    { bidderInfo
-    , depositAmount
-    , isValid: depositAmount >= minDepositAmount
-    }
-
 discoverBidders :: AuctionInfo -> Contract (Array BidderInfoCandidate)
-discoverBidders = discoverBiddersStub
-
-discoverBiddersStub :: AuctionInfo -> Contract (Array BidderInfoCandidate)
-discoverBiddersStub auctionInfo =
-  liftEffect $ randomSampleOne do
-    numBidders <- chooseInt 2 10
-    vectorOf numBidders $ genBidderInfoCandidate minDepositAmount
+discoverBidders (AuctionInfo auctionInfo) = do
+  utxos <- utxosAt auctionInfo.bidderDepositAddr
+  let txOuts = Map.toUnfoldable utxos <#> _.output <<< unwrap <<< snd
+  pure $ Array.mapMaybe getBidderInfoCandidate txOuts
   where
-  minDepositAmount :: BigInt
-  minDepositAmount =
-    (unwrap (unwrap auctionInfo).auctionTerms).minDepositAmount
+  getBidderInfoCandidate :: TransactionOutput -> Maybe BidderInfoCandidate
+  getBidderInfoCandidate txOut =
+    getInlineDatum txOut <#> \bidderInfo -> wrap
+      { bidderInfo
+      , depositAmount
+      , isValid: depositAmount >= (unwrap auctionInfo.auctionTerms).minDepositAmount
+      }
+    where
+    depositAmount :: BigInt
+    depositAmount = Value.valueToCoin' (unwrap txOut).amount

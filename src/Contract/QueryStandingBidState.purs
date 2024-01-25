@@ -5,12 +5,12 @@ module HydraAuctionOffchain.Contract.QueryStandingBidState
 import Contract.Prelude
 
 import Contract.Monad (Contract)
+import Contract.Prim.ByteArray (ByteArray, byteArrayFromIntArrayUnsafe)
 import Control.Monad.Gen.Common (genMaybe)
 import Data.BigInt (BigInt, fromInt)
-import HydraAuctionOffchain.Contract.DiscoverSellerSignature (genSignature)
 import HydraAuctionOffchain.Contract.Types (AuctionInfo, BidTerms, StandingBidState)
 import Test.QuickCheck (arbitrary)
-import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne)
+import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne, vectorOf)
 
 queryStandingBidState :: AuctionInfo -> Contract StandingBidState
 queryStandingBidState = queryStandingBidStateStub
@@ -30,3 +30,6 @@ genBidTerms startingBid = do
   bidderSignature <- genSignature
   sellerSignature <- genSignature
   pure $ wrap { bidder, price, bidderSignature, sellerSignature }
+
+genSignature :: Gen ByteArray
+genSignature = byteArrayFromIntArrayUnsafe <$> vectorOf 20 (chooseInt 0 255)

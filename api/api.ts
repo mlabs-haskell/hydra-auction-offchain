@@ -36,7 +36,7 @@ import type {
 // 07. seller: bidders <- discoverBidders(auctionInfo)
 // 08. seller: biddersToAuthorize <- SELECT_BIDDERS(bidders)
 // 09. seller: authorizeBidders(auctionInfo.auctionId, biddersToAuthorize)
-// 10. bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerPkh)
+// 10. bidder: sellerSignature <- discoverSellerSignature(auctionInfo.auctionId, auctionInfo.auctionTerms.sellerAddress)
 // 11. seller: startBidding(auctionInfo)
 // 12. bidder: bidState <- queryStandingBidState(auctionInfo)
 // 13. bidder: bidAmount <- SELECT_BID_AMOUNT(auctionInfo, bidState.price)
@@ -76,8 +76,6 @@ export const announceAuction = async (
 /**
  * Discover bidders who have indicated their interest in participating
  * in the auction by paying a bidder deposit.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const discoverBidders = async (
   walletApp: WalletApp | null,
@@ -88,8 +86,6 @@ export const discoverBidders = async (
  * Authorize bidders to participate in the auction by posting a list of
  * signatures onchain at the personal oracle validator. Bidders can then
  * discover these signatures using `discoverSellerSignatures`.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const authorizeBidders = async (
   walletApp: WalletApp,
@@ -129,13 +125,12 @@ export const enterAuction = async (
 /**
  * Discover own bidder-auction authorization signature required for
  * placing bids on a particular auction.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const discoverSellerSignature = async (
   walletApp: WalletApp,
   params: DiscoverSellerSigContractParams
-): Promise<ByteArray | null> => Purs.discoverSellerSignature(walletApp)(params)();
+): Promise<ContractOutput<ByteArray | null>> =>
+  Purs.discoverSellerSignature(walletApp)(params)();
 
 export const placeBid = async (
   walletApp: WalletApp,
