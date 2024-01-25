@@ -36,6 +36,8 @@ instance Arbitrary VerificationKey where
     vectorOf vkeyLength (chooseInt 0 255)
       <#> VerificationKey <<< byteArrayFromIntArrayUnsafe
 
+-- All ed25519 keys have a fixed size of 256 bits (32 bytes).
+-- https://eprint.iacr.org/2011/368.pdf
 vkeyLength :: Int
 vkeyLength = 32
 
