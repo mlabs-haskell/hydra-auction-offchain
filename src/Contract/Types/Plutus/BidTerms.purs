@@ -104,6 +104,12 @@ validateBidTerms auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
     sigStruct <- mkSigStructure auctionTerms.sellerAddress payload
     verifySignature (vkeyBytes auctionTerms.sellerVk) sigStruct bidTerms.sellerSignature
 
+-- Maximum (reasonable) size of the bidder signature message where
+-- bidPrice is set to the total supply of ADA (45 billion). 
+-- 
+-- Note, that the bid price is the only component of the message that 
+-- has variable size; and for lower bid prices the message is padded 
+-- with zero bytes at the beginning to reach this size.
 bidderSignatureMessageSize :: Int
 bidderSignatureMessageSize = 69
 
