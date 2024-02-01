@@ -1,7 +1,5 @@
-.PHONY: build, bundle, serve, repl, format, check-format, plutip-env
+.PHONY: build bundle serve repl format check plutip-env
 
-ps-sources := $(shell fd --no-ignore-parent -epurs)
-ts-js-sources := $(shell fd --no-ignore-parent -ets -ejs)
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
 build:
@@ -17,10 +15,10 @@ repl:
 	spago repl
 
 format:
-	@purs-tidy format-in-place ${ps-sources} && prettier -w ${ts-js-sources}
+	@nix run .#pursFormat && nix run .#jsFormat && nix run .#nixFormat
 
-check-format:
-	@purs-tidy check ${ps-sources} && prettier -c ${ts-js-sources}
+check:
+	@nix build .#checks.x86_64-linux.all
 
 plutip-env:
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
