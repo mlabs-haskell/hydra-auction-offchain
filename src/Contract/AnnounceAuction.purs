@@ -186,7 +186,8 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     throwError AnnounceAuction_Error_CurrentTimeAfterBiddingStart
 
   -- Get auction minting policy:
-  auctionMintingPolicy <- lift $ mkAuctionMintingPolicy nonceOref
+  auctionMetadataSh <- lift $ mkAuctionMetadataValidator <#> unwrap <<< validatorHash
+  auctionMintingPolicy <- lift $ mkAuctionMintingPolicy auctionMetadataSh nonceOref
   auctionCs <- scriptCurrencySymbol auctionMintingPolicy ??
     AnnounceAuction_Error_CouldNotGetAuctionCurrencySymbol
 

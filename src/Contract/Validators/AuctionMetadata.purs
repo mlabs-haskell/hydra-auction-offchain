@@ -4,7 +4,7 @@ module HydraAuctionOffchain.Contract.Validators.AuctionMetadata
 
 import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
-import HydraAuctionOffchain.Contract.Validators.Common (reifySimpleValidator)
+import HydraAuctionOffchain.Lib.Script (reifySimpleValidator)
 
 foreign import auctionMetadataValidator :: String
 

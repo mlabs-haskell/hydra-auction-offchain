@@ -8,8 +8,8 @@ import Contract.Monad (Contract)
 import Contract.Scripts (Validator)
 import Contract.Value (CurrencySymbol)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
-import HydraAuctionOffchain.Contract.Validators.Common (reifyValidator)
 import HydraAuctionOffchain.Helpers (liftEitherShow)
+import HydraAuctionOffchain.Lib.Script (reifyScript)
 import Ply.Apply ((#!), (##))
 import Ply.TypeList (Cons, Nil) as Ply
 import Ply.Types (AsData, TypedScript, ValidatorRole)
@@ -27,7 +27,7 @@ type StandingBidValidator =
 
 mkStandingBidValidator :: CurrencySymbol -> AuctionTerms -> Contract Validator
 mkStandingBidValidator auctionCs auctionTerms = do
-  (reifiedValidator :: StandingBidValidator) <- reifyValidator standingBidValidator
+  (reifiedValidator :: StandingBidValidator) <- reifyScript standingBidValidator
   liftEitherShow $ Ply.toValidator <$>
     reifiedValidator
       ## auctionCs
