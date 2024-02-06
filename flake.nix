@@ -12,12 +12,13 @@
     cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5a560eb9ac1bef94d718b90f5ac2a541515127dd";
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
+    hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/auction-mp";
   };
 
   outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; } ({ self, ... }: {
     imports = [ inputs.liqwid-nix.flakeModule ];
     systems = [ "x86_64-linux" "aarch64-darwin" "x86_64-darwin" "aarch64-linux" ];
-    perSystem = { lib, pkgs, ... }: {
+    perSystem = { system, lib, pkgs, ... }: {
       offchain.default = {
         src = builtins.path {
           path = self.outPath;
@@ -34,16 +35,20 @@
           "UserDefinedWarning"
         ];
 
-        shell = {
-          shellHook = ''
-            ln -sfn $NODE_PATH node_modules
-          '';
-        };
+        shell.shellHook =
+          let
+            symlinkNodeModules = ''
+              ln -sfn $NODE_PATH node_modules
+            '';
+
+            installOnchainScripts = ''
+              mkdir -p scripts
+              cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
+            '';
+          in
+          symlinkNodeModules + installOnchainScripts;
 
         enableFormatCheck = true;
-        enableJsLintCheck = false;
-
-        # plutip.testMain = "Test.Contract.Spec";
       };
 
       pre-commit.settings.hooks.nixpkgs-fmt = {

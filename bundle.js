@@ -12,6 +12,9 @@ esbuild.build({
     "process.env.PLUTIP_ENV_HOST_PORT": `"${process.env.PLUTIP_ENV_HOST_PORT}"`,
     "process.env.DEMO_HOST_PORT": `"${process.env.DEMO_HOST_PORT}"`
   },
+  loader: {
+    ".plutus": "text"
+  },
   plugins: [
     polyfillNode({
       polyfills: {
