@@ -85,6 +85,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   , auctionTermsCodec
   , auctionTermsInputCodec
   , mkAuctionTerms
+  , totalAuctionFees
   , validateAuctionTerms
   ) as ExportPlutusAuctionTerms
 
@@ -97,6 +98,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
   ( BidTerms(BidTerms)
   , bidTermsCodec
   , bidderSignatureMessage
+  , sellerPayout
   , sellerSignatureMessage
   ) as ExportPlutusBidTerms
 

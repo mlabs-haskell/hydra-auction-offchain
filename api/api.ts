@@ -147,8 +147,6 @@ export const placeBid = async (
 /**
  * Claim the auction lot if the bid placed by the bidder wins, distribute the
  * auction fees to the delegates.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const claimAuctionLotBidder = async (
   walletApp: WalletApp,

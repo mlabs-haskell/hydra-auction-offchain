@@ -43,14 +43,20 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
   const walletApp: WalletApp = "Nami";
-  const biddingStart = walletApp === "Plutip" ? 5000 : 90000;
+  const preBiddingPeriod = walletApp === "Plutip" ? 15000 : 90000;
+  const biddingPeriod = preBiddingPeriod;
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
   const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
   await awaitTxConfirmed(walletApp, mintTxHash);
 
   // seller: announceAuction
-  const announceAuctionResult = await runAnnounceAuction(walletApp, tokenName, biddingStart);
+  const announceAuctionResult = await runAnnounceAuction(
+    walletApp,
+    tokenName,
+    preBiddingPeriod,
+    biddingPeriod
+  );
   await logConfirmContract("AnnounceAuction", walletApp, announceAuctionResult);
   const auctionInfo = announceAuctionResult.value.auctionInfo;
 
@@ -83,7 +89,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   console.log("Seller signature:", sellerSignature);
 
   // seller: startBidding
-  await delay(biddingStart + 2000);
+  await delay(preBiddingPeriod + 2000);
   const startBiddingResult = await startBidding(walletApp, { auctionInfo });
   await logConfirmContract("StartBidding", walletApp, startBiddingResult);
 
@@ -102,9 +108,10 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const bidState = await queryStandingBidState(walletApp, auctionInfo);
   console.log("Standing bid:", bidState);
 
-  // bidder: claimAuctionLotBidder (stub)
+  // bidder: claimAuctionLotBidder
+  await delay(biddingPeriod + 2000);
   const claimAuctionLotBidderResult = await claimAuctionLotBidder(walletApp, auctionInfo);
-  console.log("ClaimAuctionLotBidder:", claimAuctionLotBidderResult);
+  await logConfirmContract("ClaimAuctionLotBidder", walletApp, claimAuctionLotBidderResult);
 
   // bidder: claimDepositLoser (stub)
   const claimDepositLoserResult = await claimDepositLoser(walletApp, auctionInfo);
@@ -122,9 +129,14 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
 async function runAnnounceAuction(
   walletApp: WalletApp,
   tokenName: TokenName,
-  biddingStart: number
+  preBiddingPeriod: number,
+  biddingPeriod: number
 ): Promise<ContractOutput<TransactionHash>> {
   const nowTime = Date.now();
+  const biddingStart = nowTime + preBiddingPeriod;
+  const biddingEnd = biddingStart + biddingPeriod;
+  const purchaseDeadline = biddingEnd + 60000;
+  const cleanup = purchaseDeadline + 60000;
   const params: AnnounceAuctionContractParams = {
     auctionTerms: {
       auctionLot: [
@@ -135,10 +147,10 @@ async function runAnnounceAuction(
         }
       ],
       delegates: ["2bcc4ca387f39d2e792d7d08484c96d0d59b26cbfafc1fa4ffad486c"],
-      biddingStart: (nowTime + biddingStart).toString(),
-      biddingEnd: (nowTime + 600000).toString(),
-      purchaseDeadline: (nowTime + 600000 * 2).toString(),
-      cleanup: (nowTime + 600000 * 3).toString(),
+      biddingStart: biddingStart.toString(),
+      biddingEnd: biddingEnd.toString(),
+      purchaseDeadline: purchaseDeadline.toString(),
+      cleanup: cleanup.toString(),
       auctionFeePerDelegate: "5000000",
       startingBid: "6000000",
       minBidIncrement: "1000000",

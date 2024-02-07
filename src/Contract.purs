@@ -1,6 +1,7 @@
 module HydraAuctionOffchain.Contract
   ( module ExportAnnounceAuction
   , module ExportAuthorizeBidders
+  , module ExportClaimAuctionLotBidder
   , module ExportDiscoverBidders
   , module ExportDiscoverSellerSignature
   , module ExportEnterAuction
@@ -39,6 +40,23 @@ import HydraAuctionOffchain.Contract.AuthorizeBidders
   , AuthBiddersContractParams(AuthBiddersContractParams)
   , authorizeBiddersContract
   ) as ExportAuthorizeBidders
+
+import HydraAuctionOffchain.Contract.ClaimAuctionLotBidder
+  ( ClaimAuctionLotBidderContractError
+      ( ClaimAuctionLotBidder_Error_InvalidAuctionTerms
+      , ClaimAuctionLotBidder_Error_CurrentTimeBeforeBiddingEnd
+      , ClaimAuctionLotBidder_Error_CurrentTimeAfterPurchaseDeadline
+      , ClaimAuctionLotBidder_Error_CouldNotBuildAuctionValidators
+      , ClaimAuctionLotBidder_Error_InvalidAuctionInfo
+      , ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo
+      , ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo
+      , ClaimAuctionLotBidder_Error_EmptyStandingBid
+      , ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh
+      , ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh
+      )
+  , claimAuctionLotBidderContract
+  , mkClaimAuctionLotBidderContractWithErrors
+  ) as ExportClaimAuctionLotBidder
 
 import HydraAuctionOffchain.Contract.DiscoverBidders
   ( BidderInfoCandidate(BidderInfoCandidate)

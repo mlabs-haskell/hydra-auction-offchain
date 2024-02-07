@@ -11,6 +11,7 @@ module HydraAuctionOffchain.Contract.StartBidding
       )
   , StartBiddingContractParams(StartBiddingContractParams)
   , mkStartBiddingContractWithErrors
+  , queryAuctionEscrowUtxo
   , startBiddingContract
   ) where
 
@@ -37,8 +38,8 @@ import Contract.TxConstraints
   , mustValidateIn
   ) as Constraints
 import Contract.Utxos (utxosAt)
-import Contract.Value (TokenName, Value)
-import Contract.Value (leq, singleton) as Value
+import Contract.Value (CurrencySymbol, TokenName, Value)
+import Contract.Value (singleton, valueOf) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
@@ -140,7 +141,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     validation (throwError <<< StartBidding_Error_InvalidAuctionInfo) pure
 
   -- Query current auction escrow utxo:
-  auctionEscrowUtxo <- queryAuctionEscrowUtxo auctionInfo
+  auctionEscrowUtxo <- queryAuctionEscrowUtxo AuctionAnnounced auctionInfo
     !? StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
 
   let
@@ -215,28 +216,18 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     , constraints = constraints
     }
 
-queryAuctionEscrowUtxo :: AuctionInfo -> Contract (Maybe Utxo)
-queryAuctionEscrowUtxo (AuctionInfo auctionInfo) =
-  utxosAt auctionInfo.auctionEscrowAddr
-    <#> Array.find (isCurrentAuctionEscrowUtxo <<< _.output <<< unwrap <<< snd)
-    <<< Map.toUnfoldable
+queryAuctionEscrowUtxo :: AuctionEscrowState -> AuctionInfo -> Contract (Maybe Utxo)
+queryAuctionEscrowUtxo escrowState (AuctionInfo auctionInfo) =
+  utxosAt auctionInfo.auctionEscrowAddr <#>
+    (Array.find (worker <<< _.output <<< unwrap <<< snd) <<< Map.toUnfoldable)
   where
-  AuctionTerms auctionTerms = auctionInfo.auctionTerms
+  auctionCs :: CurrencySymbol
+  auctionCs = auctionInfo.auctionId
 
-  isCurrentAuctionEscrowUtxo :: TransactionOutput -> Boolean
-  isCurrentAuctionEscrowUtxo (TransactionOutput txOut) =
-    auctionEscrowValue `Value.leq` txOut.amount
-      && (txOut.datum == OutputDatum (wrap $ toData AuctionAnnounced))
-      && isNothing txOut.referenceScript
-
-  auctionEscrowValue :: Value
-  auctionEscrowValue =
-    auctionTerms.auctionLot <> mkAuctionToken auctionEscrowTokenName
-      <> mkAuctionToken standingBidTokenName
-
-  mkAuctionToken :: TokenName -> Value
-  mkAuctionToken tokenName =
-    Value.singleton auctionInfo.auctionId tokenName one
+  worker :: TransactionOutput -> Boolean
+  worker (TransactionOutput txOut) =
+    Value.valueOf txOut.amount auctionCs auctionEscrowTokenName == one
+      && (txOut.datum == OutputDatum (wrap $ toData escrowState))
 
 ----------------------------------------------------------------------
 -- Errors
