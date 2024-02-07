@@ -91,7 +91,11 @@ import HydraAuctionOffchain.Contract.QueryAuctions
   ) as ExportQueryAuctions
 
 import HydraAuctionOffchain.Contract.QueryStandingBidState
-  ( queryStandingBidState
+  ( QueryStandingBidStateError
+      ( QueryBidState_Error_CurrentTimeBeforeBiddingStart
+      , QueryBidState_Error_CouldNotFindStandingBidUtxo
+      )
+  , queryStandingBidState
   ) as ExportQueryStandingBidState
 
 import HydraAuctionOffchain.Contract.StartBidding

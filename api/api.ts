@@ -61,7 +61,8 @@ export const cleanupAuction = async (
 export const queryStandingBidState = async (
   walletApp: WalletApp | null,
   auctionInfo: AuctionInfo
-): Promise<StandingBidState> => Purs.queryStandingBidState(walletApp)(auctionInfo)();
+): Promise<ContractOutput<StandingBidState>> =>
+  Purs.queryStandingBidState(walletApp)(auctionInfo)();
 
 // Auctions (seller) -------------------------------------------------
 
