@@ -13,6 +13,7 @@ module HydraAuctionOffchain.Contract.Types
   , module ExportPlutusExtraAssetClass
   , module ExportPlutusRedeemers
   , module ExportPlutusStandingBidState
+  , module ExportScript
   , module ExportVerificationKey
   ) where
 
@@ -116,6 +117,12 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
       , SellerReclaimsRedeemer
       , CleanupAuctionRedeemer
       )
+  , BidderDepositRedeemer
+      ( UseDepositWinnerRedeemer
+      , ReclaimDepositLoserRedeemer
+      , ReclaimDepositAuctionConcludedRedeemer
+      , ReclaimDepositCleanupRedeemer
+      )
   , StandingBidRedeemer
       ( NewBidRedeemer
       , MoveToHydraRedeemer
@@ -128,6 +135,12 @@ import HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
   , standingBidStateCodec
   , validateNewBid
   ) as ExportPlutusStandingBidState
+
+import HydraAuctionOffchain.Contract.Types.Scripts
+  ( AuctionEscrowScriptHash(AuctionEscrowScriptHash)
+  , FeeEscrowScriptHash(FeeEscrowScriptHash)
+  , StandingBidScriptHash(StandingBidScriptHash)
+  ) as ExportScript
 
 import HydraAuctionOffchain.Contract.Types.VerificationKey
   ( VerificationKey

@@ -19,6 +19,7 @@ import Contract.Prelude
 
 import Contract.Address (toPubKeyHash)
 import Contract.Chain (currentTime)
+import Contract.Log (logWarn')
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData, unitDatum)
 import Contract.ScriptLookups (ScriptLookups)
@@ -37,10 +38,10 @@ import Contract.TxConstraints
 import Contract.Utxos (utxosAt)
 import Contract.Value (CurrencySymbol, TokenName, Value)
 import Contract.Value (lovelaceValueOf, singleton, valueOf) as Value
-import Control.Error.Util ((!?), (??))
+import Control.Error.Util (bool, (!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find) as Array
+import Data.Array (find, singleton) as Array
 import Data.BigInt (fromInt) as BigInt
 import Data.Map (fromFoldable, toUnfoldable) as Map
 import Data.Validation.Semigroup (validation)
@@ -57,6 +58,8 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
+  , BidderDepositRedeemer(UseDepositWinnerRedeemer)
+  , BidderInfo
   , ContractOutput
   , ContractResult
   , StandingBidRedeemer(ConcludeAuctionRedeemer)
@@ -116,9 +119,15 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
 
   -- Get bid terms:
   bidTerms <- unwrap standingBid ?? ClaimAuctionLotBidder_Error_EmptyStandingBid
+  let bidderInfo = (unwrap bidTerms).bidder
+
+  -- Query bidder deposit utxo:
+  mBidderDepositUtxo <- lift $ queryBidderDepositUtxo auctionInfo bidderInfo
+  when (isNothing mBidderDepositUtxo) do
+    lift $ logWarn' "Could not find bidder deposit utxo."
 
   -- Get buyer pkh:
-  buyerPkh <- wrap <$> toPubKeyHash (unwrap (unwrap bidTerms).bidder).bidderAddress
+  buyerPkh <- wrap <$> toPubKeyHash (unwrap bidderInfo).bidderAddress
     ?? ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh
 
   -- Get seller pkh:
@@ -154,6 +163,14 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
     standingBidRedeemer :: Redeemer
     standingBidRedeemer = wrap $ toData ConcludeAuctionRedeemer
 
+    -- BidderDeposit -------------------------------------------------
+
+    mBidderDepositOref :: Maybe TransactionInput
+    mBidderDepositOref = fst <$> mBidderDepositUtxo
+
+    bidderDepositRedeemer :: Redeemer
+    bidderDepositRedeemer = wrap $ toData UseDepositWinnerRedeemer
+
     --
 
     totalAuctionFeesValue :: Value
@@ -174,6 +191,10 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
 
       , -- Spend standing bid utxo:
         Constraints.mustSpendScriptOutput standingBidOref standingBidRedeemer
+
+      , -- Spend bidder deposit utxo, if present:
+        mBidderDepositOref # maybe mempty
+          (flip Constraints.mustSpendScriptOutput bidderDepositRedeemer)
 
       , -- Lock auction escrow and standing bid tokens at auction
         -- escrow validator address:
@@ -200,9 +221,14 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
 
     lookups :: ScriptLookups Void
     lookups = mconcat
-      [ Lookups.unspentOutputs $ Map.fromFoldable [ auctionEscrowUtxo, standingBidUtxo ]
+      [ Lookups.unspentOutputs $ Map.fromFoldable
+          ( [ auctionEscrowUtxo, standingBidUtxo ]
+              <> maybe mempty Array.singleton mBidderDepositUtxo
+          )
       , Lookups.validator (unwrap validators).auctionEscrow
       , Lookups.validator (unwrap validators).standingBid
+      , isJust mBidderDepositUtxo # bool mempty
+          (Lookups.validator (unwrap validators).bidderDeposit)
       ]
 
   lift $ submitTxReturningContractResult {} $ emptySubmitTxData
@@ -223,6 +249,12 @@ queryStandingBidUtxo (AuctionInfo auctionInfo) =
   hasStandingBidToken :: TransactionOutput -> Boolean
   hasStandingBidToken txOut =
     Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one
+
+queryBidderDepositUtxo :: AuctionInfo -> BidderInfo -> Contract (Maybe Utxo)
+queryBidderDepositUtxo (AuctionInfo auctionInfo) bidderInfo =
+  utxosAt auctionInfo.bidderDepositAddr
+    <#> Array.find (eq (Just bidderInfo) <<< getInlineDatum <<< _.output <<< unwrap <<< snd)
+    <<< Map.toUnfoldable
 
 ----------------------------------------------------------------------
 -- Errors

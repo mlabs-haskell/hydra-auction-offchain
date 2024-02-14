@@ -12,7 +12,7 @@
     cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5a560eb9ac1bef94d718b90f5ac2a541515127dd";
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
-    hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/cose-verification";
+    hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/bidder-deposit-validator";
   };
 
   outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; } ({ self, ... }: {
