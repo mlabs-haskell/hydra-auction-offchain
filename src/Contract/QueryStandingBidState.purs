@@ -1,35 +1,85 @@
 module HydraAuctionOffchain.Contract.QueryStandingBidState
-  ( queryStandingBidState
+  ( QueryStandingBidStateError
+      ( QueryBidState_Error_CurrentTimeBeforeBiddingStart
+      , QueryBidState_Error_CouldNotFindStandingBidUtxo
+      )
+  , queryStandingBidState
   ) where
 
 import Contract.Prelude
 
+import Contract.Address (Address)
+import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.Prim.ByteArray (ByteArray, byteArrayFromIntArrayUnsafe)
-import Control.Monad.Gen.Common (genMaybe)
-import Data.BigInt (BigInt, fromInt)
-import HydraAuctionOffchain.Contract.Types (AuctionInfo, BidTerms, StandingBidState)
-import Test.QuickCheck (arbitrary)
-import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne, vectorOf)
+import Contract.Transaction (TransactionOutput)
+import Contract.Value (CurrencySymbol)
+import Contract.Value (valueOf) as Value
+import Control.Error.Util ((!?))
+import Control.Monad.Except (ExceptT, throwError)
+import Control.Monad.Trans.Class (lift)
+import Data.Array (find) as Array
+import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
+import HydraAuctionOffchain.Contract.Types
+  ( class ToContractError
+  , AuctionInfo(AuctionInfo)
+  , AuctionTerms(AuctionTerms)
+  , ContractOutput
+  , StandingBidState
+  , mkContractOutput
+  )
+import HydraAuctionOffchain.Helpers (getInlineDatum, getTxOutsAt)
 
-queryStandingBidState :: AuctionInfo -> Contract StandingBidState
-queryStandingBidState = queryStandingBidStateStub
+queryStandingBidState :: AuctionInfo -> Contract (ContractOutput StandingBidState)
+queryStandingBidState =
+  mkContractOutput identity <<< queryStandingBidStateWithErrors
 
-queryStandingBidStateStub :: AuctionInfo -> Contract StandingBidState
-queryStandingBidStateStub auctionInfo = do
-  liftEffect $ randomSampleOne $ wrap <$> genMaybe (genBidTerms startingBid)
+queryStandingBidStateWithErrors
+  :: AuctionInfo
+  -> ExceptT QueryStandingBidStateError Contract StandingBidState
+queryStandingBidStateWithErrors auctionInfo = do
+  let
+    AuctionInfo auctionInfoRec = auctionInfo
+    auctionCs = auctionInfoRec.auctionId
+    AuctionTerms auctionTermsRec = auctionInfoRec.auctionTerms
+
+  -- Check that the query is executed after the bidding start time:
+  nowTime <- lift currentTime
+  when (nowTime < auctionTermsRec.biddingStart) $
+    throwError QueryBidState_Error_CurrentTimeBeforeBiddingStart
+
+  -- Look up standing bid:
+  findStandingBid auctionInfoRec.standingBidAddr auctionCs
+    !? QueryBidState_Error_CouldNotFindStandingBidUtxo
+
+findStandingBid :: Address -> CurrencySymbol -> Contract (Maybe StandingBidState)
+findStandingBid standingBidAddr auctionCs =
+  getTxOutsAt standingBidAddr <#>
+    (getInlineDatum <=< Array.find hasStandingBidToken)
   where
-  startingBid :: BigInt
-  startingBid = (unwrap (unwrap auctionInfo).auctionTerms).startingBid
+  hasStandingBidToken :: TransactionOutput -> Boolean
+  hasStandingBidToken txOut =
+    Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one
 
-genBidTerms :: BigInt -> Gen BidTerms
-genBidTerms startingBid = do
-  bidder <- arbitrary
-  bidDelta <- chooseInt zero 5_000_000
-  let price = startingBid + fromInt bidDelta
-  bidderSignature <- genSignature
-  sellerSignature <- genSignature
-  pure $ wrap { bidder, price, bidderSignature, sellerSignature }
+----------------------------------------------------------------------
+-- Errors
 
-genSignature :: Gen ByteArray
-genSignature = byteArrayFromIntArrayUnsafe <$> vectorOf 20 (chooseInt 0 255)
+data QueryStandingBidStateError
+  = QueryBidState_Error_CurrentTimeBeforeBiddingStart
+  | QueryBidState_Error_CouldNotFindStandingBidUtxo
+
+derive instance Generic QueryStandingBidStateError _
+derive instance Eq QueryStandingBidStateError
+
+instance Show QueryStandingBidStateError where
+  show = genericShow
+
+instance ToContractError QueryStandingBidStateError where
+  toContractError = wrap <<< case _ of
+    QueryBidState_Error_CurrentTimeBeforeBiddingStart ->
+      { errorCode: "QueryStandingBidState01"
+      , message: "Standing bid cannot be queried before bidding start time."
+      }
+    QueryBidState_Error_CouldNotFindStandingBidUtxo ->
+      { errorCode: "QueryStandingBidState02"
+      , message: "Could not find standing bid utxo."
+      }

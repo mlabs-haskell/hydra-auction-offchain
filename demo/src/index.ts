@@ -98,7 +98,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
     await logConfirmContract("PlaceBid", walletApp, placeBidResult);
   }
 
-  // bidder: queryStandingBidState (stub)
+  // bidder: queryStandingBidState
   const bidState = await queryStandingBidState(walletApp, auctionInfo);
   console.log("Standing bid:", bidState);
 
