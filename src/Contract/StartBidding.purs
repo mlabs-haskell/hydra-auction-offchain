@@ -11,7 +11,6 @@ module HydraAuctionOffchain.Contract.StartBidding
       )
   , StartBiddingContractParams(StartBiddingContractParams)
   , mkStartBiddingContractWithErrors
-  , queryAuctionEscrowUtxo
   , startBiddingContract
   ) where
 
@@ -20,16 +19,12 @@ import Contract.Prelude
 import Contract.Address (PaymentPubKeyHash, toPubKeyHash)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, toData)
+import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( TransactionHash
-  , TransactionInput
-  , TransactionOutput(TransactionOutput)
-  )
+import Contract.Transaction (TransactionHash, TransactionInput)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
@@ -37,18 +32,16 @@ import Contract.TxConstraints
   , mustSpendScriptOutput
   , mustValidateIn
   ) as Constraints
-import Contract.Utxos (utxosAt)
-import Contract.Value (CurrencySymbol, TokenName, Value)
-import Contract.Value (singleton, valueOf) as Value
+import Contract.Value (TokenName, Value)
+import Contract.Value (singleton) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find) as Array
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Map (singleton, toUnfoldable) as Map
+import Data.Map (singleton) as Map
 import Data.Maybe (fromJust)
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
@@ -56,6 +49,9 @@ import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , standingBidTokenName
+  )
+import HydraAuctionOffchain.Contract.QueryUtxo
+  ( queryAuctionEscrowUtxo
   )
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -68,7 +64,6 @@ import HydraAuctionOffchain.Contract.Types
   , ContractOutput
   , ContractResult
   , StandingBidState(StandingBidState)
-  , Utxo
   , auctionInfoCodec
   , emptySubmitTxData
   , mkContractOutput
@@ -215,19 +210,6 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     { lookups = lookups
     , constraints = constraints
     }
-
-queryAuctionEscrowUtxo :: AuctionEscrowState -> AuctionInfo -> Contract (Maybe Utxo)
-queryAuctionEscrowUtxo escrowState (AuctionInfo auctionInfo) =
-  utxosAt auctionInfo.auctionEscrowAddr <#>
-    (Array.find (worker <<< _.output <<< unwrap <<< snd) <<< Map.toUnfoldable)
-  where
-  auctionCs :: CurrencySymbol
-  auctionCs = auctionInfo.auctionId
-
-  worker :: TransactionOutput -> Boolean
-  worker (TransactionOutput txOut) =
-    Value.valueOf txOut.amount auctionCs auctionEscrowTokenName == one
-      && (txOut.datum == OutputDatum (wrap $ toData escrowState))
 
 ----------------------------------------------------------------------
 -- Errors

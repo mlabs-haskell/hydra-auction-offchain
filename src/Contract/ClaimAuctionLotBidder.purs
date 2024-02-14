@@ -26,7 +26,7 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutput)
+import Contract.Transaction (TransactionHash, TransactionInput)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
@@ -35,21 +35,24 @@ import Contract.TxConstraints
   , mustSpendScriptOutput
   , mustValidateIn
   ) as Constraints
-import Contract.Utxos (utxosAt)
-import Contract.Value (CurrencySymbol, TokenName, Value)
-import Contract.Value (lovelaceValueOf, singleton, valueOf) as Value
+import Contract.Value (TokenName, Value)
+import Contract.Value (lovelaceValueOf, singleton) as Value
 import Control.Error.Util (bool, (!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find, singleton) as Array
+import Data.Array (singleton) as Array
 import Data.BigInt (fromInt) as BigInt
-import Data.Map (fromFoldable, toUnfoldable) as Map
+import Data.Map (fromFoldable) as Map
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , standingBidTokenName
   )
-import HydraAuctionOffchain.Contract.StartBidding (queryAuctionEscrowUtxo)
+import HydraAuctionOffchain.Contract.QueryUtxo
+  ( queryAuctionEscrowUtxo
+  , queryBidderDepositUtxo
+  , queryStandingBidUtxo
+  )
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionEscrowRedeemer(BidderBuysRedeemer)
@@ -59,12 +62,9 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
   , BidderDepositRedeemer(UseDepositWinnerRedeemer)
-  , BidderInfo
   , ContractOutput
   , ContractResult
   , StandingBidRedeemer(ConcludeAuctionRedeemer)
-  , StandingBidState
-  , Utxo
   , emptySubmitTxData
   , mkContractOutput
   , sellerPayout
@@ -74,7 +74,6 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (getInlineDatum)
 
 claimAuctionLotBidderContract :: AuctionInfo -> Contract (ContractOutput TransactionHash)
 claimAuctionLotBidderContract =
@@ -235,26 +234,6 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
     { lookups = lookups
     , constraints = constraints
     }
-
-queryStandingBidUtxo :: AuctionInfo -> Contract (Maybe (Utxo /\ StandingBidState))
-queryStandingBidUtxo (AuctionInfo auctionInfo) =
-  utxosAt auctionInfo.standingBidAddr <#> \utxos -> do
-    let getTxOut = _.output <<< unwrap <<< snd
-    standingBidUtxo <- Array.find (hasStandingBidToken <<< getTxOut) $ Map.toUnfoldable utxos
-    Tuple standingBidUtxo <$> getInlineDatum (getTxOut standingBidUtxo)
-  where
-  auctionCs :: CurrencySymbol
-  auctionCs = auctionInfo.auctionId
-
-  hasStandingBidToken :: TransactionOutput -> Boolean
-  hasStandingBidToken txOut =
-    Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one
-
-queryBidderDepositUtxo :: AuctionInfo -> BidderInfo -> Contract (Maybe Utxo)
-queryBidderDepositUtxo (AuctionInfo auctionInfo) bidderInfo =
-  utxosAt auctionInfo.bidderDepositAddr
-    <#> Array.find (eq (Just bidderInfo) <<< getInlineDatum <<< _.output <<< unwrap <<< snd)
-    <<< Map.toUnfoldable
 
 ----------------------------------------------------------------------
 -- Errors
