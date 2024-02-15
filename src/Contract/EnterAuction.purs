@@ -19,7 +19,12 @@ import Contract.Scripts (ValidatorHash, validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
 import Contract.Transaction (TransactionHash)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
-import Contract.TxConstraints (mustBeSignedBy, mustPayToScript, mustValidateIn) as Constraints
+import Contract.TxConstraints
+  ( mustBeSignedBy
+  , mustMintCurrencyUsingNativeScript
+  , mustPayToScript
+  , mustValidateIn
+  ) as Constraints
 import Contract.Value (Value)
 import Contract.Value (lovelaceValueOf) as Value
 import Control.Error.Util (bool)
@@ -33,8 +38,11 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec)
+import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
+  , ActorRole(ActorRoleBidder)
+  , AuctionActor(AuctionActor)
   , AuctionInfo(AuctionInfo)
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
@@ -42,6 +50,7 @@ import HydraAuctionOffchain.Contract.Types
   , BidderInfo(BidderInfo)
   , ContractOutput
   , ContractResult
+  , assetToValue
   , auctionInfoCodec
   , emptySubmitTxData
   , mkContractOutput
@@ -135,6 +144,20 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
       , bidderVk
       }
 
+    -- AuctionActor --------------------------------------------------
+
+    bidderOracle :: PersonalOracle
+    bidderOracle = mkPersonalOracle $ wrap bidderPkh
+
+    bidderOracleTokenValue :: Value
+    bidderOracleTokenValue = assetToValue bidderOracle.assetClass one
+
+    auctionActorDatum :: Datum
+    auctionActorDatum = wrap $ toData $ AuctionActor
+      { auctionCs
+      , role: ActorRoleBidder
+      }
+
     --
 
     txValidRange :: POSIXTimeRange
@@ -148,6 +171,17 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
         -- bidder deposit validator:
         Constraints.mustPayToScript bidderDepositValidatorHash bidderInfoDatum DatumInline
           bidderDepositValue
+
+      -- Mint bidder's personal oracle token:
+      , Constraints.mustMintCurrencyUsingNativeScript bidderOracle.nativeScript
+          (unwrap bidderOracle.assetClass).tokenName
+          one
+
+      -- Lock auction actor datum with personal oracle token at 
+      -- the bidder's personal oracle address:
+      , Constraints.mustPayToScript (wrap $ bidderOracle.nativeScriptHash) auctionActorDatum
+          DatumInline
+          bidderOracleTokenValue
 
       , -- Transaction must be signed by the bidder:
         Constraints.mustBeSignedBy $ wrap bidderPkh

@@ -3,6 +3,7 @@ module HydraAuctionOffchain.Contract.Types
   , module ExportContractError
   , module ExportContractOutput
   , module ExportContractResult
+  , module ExportPlutusAuctionActor
   , module ExportPlutusAuctionAuth
   , module ExportPlutusAuctionEscrowState
   , module ExportPlutusAuctionInfo
@@ -43,6 +44,11 @@ import HydraAuctionOffchain.Contract.Types.ContractResult
   , getTotalExUnits
   , submitTxReturningContractResult
   ) as ExportContractResult
+
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionActor
+  ( ActorRole(ActorRoleSeller, ActorRoleBidder)
+  , AuctionActor(AuctionActor)
+  ) as ExportPlutusAuctionActor
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionAuth
   ( AuctionAuth(AuctionAuth)
