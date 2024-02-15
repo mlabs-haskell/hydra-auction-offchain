@@ -154,7 +154,7 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
 
     auctionActorDatum :: Datum
     auctionActorDatum = wrap $ toData $ AuctionActor
-      { auctionCs
+      { auctionInfo
       , role: ActorRoleBidder
       }
 

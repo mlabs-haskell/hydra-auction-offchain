@@ -8,42 +8,70 @@ import Contract.Address (scriptHashAddress)
 import Contract.Monad (Contract)
 import Contract.Scripts (validatorHash)
 import Contract.Transaction (TransactionOutput)
-import Contract.Utxos (utxosAt)
 import Contract.Value (CurrencySymbol)
 import Contract.Value (valueOf) as Value
+import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util (bool)
+import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
+import Control.Monad.Trans.Class (lift)
 import Data.Array (mapMaybe) as Array
-import Data.Map (toUnfoldable) as Map
 import Data.Validation.Semigroup (isValid) as V
 import HydraAuctionOffchain.Contract.MintingPolicies (auctionMetadataTokenName)
+import HydraAuctionOffchain.Contract.PersonalOracle (mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
-  ( AuctionInfo(AuctionInfo)
+  ( ActorRole
+  , AssetClass(AssetClass)
+  , AuctionActor(AuctionActor)
+  , AuctionFilters
+  , AuctionInfo(AuctionInfo)
   , AuctionTerms
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (mkAuctionMetadataValidator)
-import HydraAuctionOffchain.Helpers (getInlineDatum)
+import HydraAuctionOffchain.Helpers (getInlineDatum, getTxOutsAt)
 
 -- | Queries all currently existing auctions at the auction metadata validator address,
 -- | filtering out invalid entries.
-queryAuctions :: Contract (Array AuctionInfo)
-queryAuctions = do
-  auctionMetadataAddr <- flip scriptHashAddress Nothing <<< validatorHash <$>
-    mkAuctionMetadataValidator
-  utxos <- utxosAt auctionMetadataAddr
-  let txOuts = Map.toUnfoldable utxos <#> _.output <<< unwrap <<< snd
-  pure $ Array.mapMaybe getValidAuctionMetadata txOuts
-
-getValidAuctionMetadata :: TransactionOutput -> Maybe AuctionInfo
-getValidAuctionMetadata txOut = do
-  auctionInfo@(AuctionInfo { auctionId, auctionTerms }) <- getInlineDatum txOut
-  bool Nothing (Just auctionInfo)
-    (validAuctionTerms auctionTerms && validAuctionId auctionId)
+queryAuctions :: AuctionFilters -> Contract (Array AuctionInfo)
+queryAuctions filters =
+  case (unwrap filters).myRole of
+    Just actorRole ->
+      fromMaybe mempty <$> queryOwnAuctions actorRole
+    Nothing -> do
+      auctionMetadataAddr <- flip scriptHashAddress Nothing <<< validatorHash <$>
+        mkAuctionMetadataValidator
+      getTxOutsAt auctionMetadataAddr
+        <#> Array.mapMaybe getValidAuctionInfo
   where
-  validAuctionTerms :: AuctionTerms -> Boolean
-  validAuctionTerms auctionTerms =
-    V.isValid $ validateAuctionTerms auctionTerms
+  getValidAuctionInfo :: TransactionOutput -> Maybe AuctionInfo
+  getValidAuctionInfo txOut = do
+    auctionInfo@(AuctionInfo { auctionId, auctionTerms }) <- getInlineDatum txOut
+    bool Nothing (Just auctionInfo)
+      (validAuctionTerms auctionTerms && validAuctionId auctionId)
+    where
+    validAuctionTerms :: AuctionTerms -> Boolean
+    validAuctionTerms auctionTerms =
+      V.isValid $ validateAuctionTerms auctionTerms
 
-  validAuctionId :: CurrencySymbol -> Boolean
-  validAuctionId cs =
-    Value.valueOf (unwrap txOut).amount cs auctionMetadataTokenName == one
+    validAuctionId :: CurrencySymbol -> Boolean
+    validAuctionId cs =
+      Value.valueOf (unwrap txOut).amount cs auctionMetadataTokenName == one
+
+queryOwnAuctions :: ActorRole -> Contract (Maybe (Array AuctionInfo))
+queryOwnAuctions actorRole =
+  runMaybeT do
+    pkh <- MaybeT ownPaymentPubKeyHash
+    let personalOracle = mkPersonalOracle pkh
+    let oracleAddr = scriptHashAddress (wrap personalOracle.nativeScriptHash) Nothing
+    (lift $ getTxOutsAt oracleAddr) <#>
+      Array.mapMaybe (getValidAuctionInfo personalOracle.assetClass)
+  where
+  getValidAuctionInfo :: AssetClass -> TransactionOutput -> Maybe AuctionInfo
+  getValidAuctionInfo (AssetClass asset) txOut
+    | Value.valueOf (unwrap txOut).amount asset.currencySymbol asset.tokenName == one =
+        case getInlineDatum txOut of
+          Just (AuctionActor { auctionInfo, role }) | role == actorRole ->
+            bool Nothing (Just auctionInfo)
+              (V.isValid $ validateAuctionTerms (unwrap auctionInfo).auctionTerms)
+          _ -> Nothing
+    | otherwise = Nothing

@@ -10,6 +10,14 @@ export type AnnounceAuctionContractOutput = {
   auctionInfo: AuctionInfo;
 };
 
+// QueryAuctions -----------------------------------------------------
+
+export type ActorRole = "ActorRoleSeller" | "ActorRoleBidder";
+
+export type AuctionFilters = {
+  myRole?: ActorRole;
+};
+
 // EnterAuction ------------------------------------------------------
 
 export type EnterAuctionContractParams = {

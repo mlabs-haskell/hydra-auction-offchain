@@ -1,6 +1,7 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.AuctionActor
   ( ActorRole(ActorRoleSeller, ActorRoleBidder)
   , AuctionActor(AuctionActor)
+  , actorRoleCodec
   ) where
 
 import Contract.PlutusData
@@ -8,19 +9,21 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Contract.Numeric.BigNum (zero) as BigNum
-import Contract.Value (CurrencySymbol)
+import Data.Codec.Argonaut (JsonCodec) as CA
+import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo (AuctionInfo)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------
 -- AuctionActor
 
 newtype AuctionActor = AuctionActor
-  { auctionCs :: CurrencySymbol
+  { auctionInfo :: AuctionInfo
   , role :: ActorRole
   }
 
@@ -32,7 +35,7 @@ instance Show AuctionActor where
   show = genericShow
 
 type AuctionActorSchema =
-  ("auctionCs" :~: CurrencySymbol)
+  ("auctionInfo" :~: AuctionInfo)
     :$: ("role" :~: ActorRole)
     :$: Nil
 
@@ -76,3 +79,6 @@ instance ToData ActorRole where
 
 instance FromData ActorRole where
   fromData = genericFromData
+
+actorRoleCodec :: CA.JsonCodec ActorRole
+actorRoleCodec = CAG.nullarySum "ActorRole"

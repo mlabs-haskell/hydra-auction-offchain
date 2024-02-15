@@ -5,6 +5,7 @@ import type {
   AnnounceAuctionContractParams,
   AnnounceAuctionContractOutput,
   AuthorizeBiddersContractParams,
+  AuctionFilters,
   AuctionInfo,
   BidderInfoCandidate,
   BigInt,
@@ -49,8 +50,9 @@ import type {
 // Auctions (anyone) -------------------------------------------------
 
 export const queryAuctions = async (
-  walletApp: WalletApp | null
-): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)();
+  walletApp: WalletApp,
+  filters: AuctionFilters = {}
+): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)(filters)();
 
 /* NOTE: not implemented, returns stubbed data */
 export const cleanupAuction = async (

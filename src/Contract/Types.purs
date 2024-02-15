@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.Types
-  ( module ExportCommon
+  ( module ExportAuctionFilters
+  , module ExportCommon
   , module ExportContractError
   , module ExportContractOutput
   , module ExportContractResult
@@ -17,6 +18,11 @@ module HydraAuctionOffchain.Contract.Types
   , module ExportScript
   , module ExportVerificationKey
   ) where
+
+import HydraAuctionOffchain.Contract.Types.AuctionFilters
+  ( AuctionFilters(AuctionFilters)
+  , auctionFiltersCodec
+  ) as ExportAuctionFilters
 
 import HydraAuctionOffchain.Contract.Types.Common
   ( Utxo
@@ -48,6 +54,7 @@ import HydraAuctionOffchain.Contract.Types.ContractResult
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionActor
   ( ActorRole(ActorRoleSeller, ActorRoleBidder)
   , AuctionActor(AuctionActor)
+  , actorRoleCodec
   ) as ExportPlutusAuctionActor
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionAuth
