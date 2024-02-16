@@ -5,8 +5,10 @@ module HydraAuctionOffchain.Contract.QueryAuctions
 import Contract.Prelude
 
 import Contract.Address (scriptHashAddress)
+import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.Scripts (validatorHash)
+import Contract.Time (POSIXTime)
 import Contract.Transaction (TransactionOutput)
 import Contract.Value (CurrencySymbol)
 import Contract.Value (valueOf) as Value
@@ -63,15 +65,26 @@ queryOwnAuctions actorRole =
     pkh <- MaybeT ownPaymentPubKeyHash
     let personalOracle = mkPersonalOracle pkh
     let oracleAddr = scriptHashAddress (wrap personalOracle.nativeScriptHash) Nothing
+    nowTime <- lift currentTime
     (lift $ getTxOutsAt oracleAddr) <#>
-      Array.mapMaybe (getValidAuctionInfo personalOracle.assetClass)
+      Array.mapMaybe (getValidAuctionInfoCached personalOracle.assetClass nowTime)
   where
-  getValidAuctionInfo :: AssetClass -> TransactionOutput -> Maybe AuctionInfo
-  getValidAuctionInfo (AssetClass asset) txOut
-    | Value.valueOf (unwrap txOut).amount asset.currencySymbol asset.tokenName == one =
-        case getInlineDatum txOut of
-          Just (AuctionActor { auctionInfo, role }) | role == actorRole ->
-            bool Nothing (Just auctionInfo)
-              (V.isValid $ validateAuctionTerms (unwrap auctionInfo).auctionTerms)
-          _ -> Nothing
-    | otherwise = Nothing
+  getValidAuctionInfoCached
+    :: AssetClass -> POSIXTime -> TransactionOutput -> Maybe AuctionInfo
+  getValidAuctionInfoCached (AssetClass asset) nowTime txOut =
+    bool Nothing (validAuctionActor =<< getInlineDatum txOut)
+      authTokenPresent
+    where
+    authTokenPresent :: Boolean
+    authTokenPresent =
+      Value.valueOf (unwrap txOut).amount asset.currencySymbol asset.tokenName
+        == one
+
+    validAuctionActor :: AuctionActor -> Maybe AuctionInfo
+    validAuctionActor (AuctionActor { auctionInfo, role })
+      | role == actorRole
+          && (nowTime < (unwrap (unwrap auctionInfo).auctionTerms).cleanup)
+          && V.isValid (validateAuctionTerms (unwrap auctionInfo).auctionTerms) =
+          Just auctionInfo
+      | otherwise =
+          Nothing
