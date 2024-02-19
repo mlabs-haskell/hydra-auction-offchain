@@ -18,17 +18,13 @@ import Contract.Prelude
 
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, fromData, toData)
+import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( TransactionHash
-  , TransactionInput
-  , TransactionOutput(TransactionOutput)
-  )
+import Contract.Transaction (TransactionHash, TransactionInput)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
@@ -36,23 +32,22 @@ import Contract.TxConstraints
   , mustSpendScriptOutput
   , mustValidateIn
   ) as Constraints
-import Contract.Utxos (utxosAt)
 import Contract.Value (Value)
-import Contract.Value (flattenNonAdaAssets, singleton) as Value
+import Contract.Value (singleton) as Value
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (findMap) as Array
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Map (singleton, toUnfoldable) as Map
+import Data.Map (singleton) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
+import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionInfo(AuctionInfo)
@@ -65,7 +60,6 @@ import HydraAuctionOffchain.Contract.Types
   , ContractResult
   , StandingBidRedeemer(NewBidRedeemer)
   , StandingBidState
-  , Utxo
   , auctionInfoCodec
   , bidderSignatureMessage
   , emptySubmitTxData
@@ -210,22 +204,6 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     { lookups = lookups
     , constraints = constraints
     }
-
-queryStandingBidUtxo :: AuctionInfo -> Contract (Maybe (Utxo /\ StandingBidState))
-queryStandingBidUtxo (AuctionInfo auctionInfo) =
-  utxosAt auctionInfo.standingBidAddr
-    <#> Array.findMap (\x -> Tuple x <$> currentStandingBidState (_.output $ unwrap $ snd x))
-    <<< Map.toUnfoldable
-  where
-  currentStandingBidState :: TransactionOutput -> Maybe StandingBidState
-  currentStandingBidState (TransactionOutput txOut)
-    | Value.flattenNonAdaAssets txOut.amount /=
-        [ auctionInfo.auctionId /\ standingBidTokenName /\ one ] = Nothing
-    | isJust txOut.referenceScript = Nothing
-    | otherwise =
-        case txOut.datum of
-          OutputDatum datum -> fromData $ unwrap datum
-          _ -> Nothing
 
 ----------------------------------------------------------------------
 -- Errors

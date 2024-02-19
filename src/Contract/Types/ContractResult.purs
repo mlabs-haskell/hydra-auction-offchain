@@ -12,6 +12,8 @@ import Prelude
 
 import Contract.AuxiliaryData (setGeneralTxMetadata)
 import Contract.BalanceTxConstraints (BalanceTxConstraintsBuilder)
+import Contract.CborBytes (cborByteLength)
+import Contract.Log (logWarn')
 import Contract.Metadata (GeneralTransactionMetadata)
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class IsData)
@@ -31,12 +33,15 @@ import Contract.Transaction
 import Contract.TxConstraints (TxConstraints)
 import Contract.UnbalancedTx (mkUnbalancedTx)
 import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
+import Ctl.Internal.Serialization (convertTransaction, toBytes)
 import Data.BigInt (BigInt)
 import Data.Foldable (foldl)
 import Data.Lens ((^.))
 import Data.Maybe (Maybe(Nothing), fromMaybe, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
+import Effect (Effect)
+import Effect.Class (liftEffect)
 import Prim.Row (class Nub, class Union) as Row
 import Record (merge) as Record
 
@@ -49,6 +54,7 @@ type ContractResultRow (extra :: Row Type) =
   , txHash :: TransactionHash
   , txFinalFee :: BigInt
   , txExUnits :: ExUnits
+  , txSize :: Int
   | extra
   )
 
@@ -83,15 +89,21 @@ submitTxReturningContractResult extra rec = do
   let unbalancedTx = fromMaybe unbalancedTx' unbalancedTxWithMetadata
   balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx rec.balancerConstraints
   balancedSignedTx <- signTransaction balancedTx
+  txSize <- liftEffect $ getTxSize $ unwrap balancedSignedTx
+  logWarn' $ "Tx size: " <> show txSize <> " bytes"
   txHash <- submit balancedSignedTx
   pure $ Record.merge extra $
     { balancedSignedTx: unwrap balancedSignedTx
     , txHash
     , txFinalFee: getTxFinalFee balancedSignedTx
     , txExUnits: getTotalExUnits $ unwrap balancedSignedTx
+    , txSize
     }
 
-getTotalExUnits :: forall (extra :: Row Type). Transaction -> ExUnits
+getTxSize :: Transaction -> Effect Int
+getTxSize = map (cborByteLength <<< toBytes) <<< convertTransaction
+
+getTotalExUnits :: Transaction -> ExUnits
 getTotalExUnits balancedSignedTx =
   mRedeemers # maybe emptyExUnits \redeemers ->
     foldl

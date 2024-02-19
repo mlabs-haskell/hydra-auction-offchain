@@ -5,6 +5,12 @@ module HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
       , SellerReclaimsRedeemer
       , CleanupAuctionRedeemer
       )
+  , BidderDepositRedeemer
+      ( UseDepositWinnerRedeemer
+      , ReclaimDepositLoserRedeemer
+      , ReclaimDepositAuctionConcludedRedeemer
+      , ReclaimDepositCleanupRedeemer
+      )
   , StandingBidRedeemer
       ( NewBidRedeemer
       , MoveToHydraRedeemer
@@ -18,9 +24,8 @@ import Prelude
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- AuctionEscrow
---------------------------------------------------------------------------------
 
 data AuctionEscrowRedeemer
   = StartBiddingRedeemer
@@ -60,7 +65,6 @@ instance FromData AuctionEscrowRedeemer where
 
 ----------------------------------------------------------------------
 -- StandingBid
-----------------------------------------------------------------------
 
 data StandingBidRedeemer
   = NewBidRedeemer
@@ -92,4 +96,43 @@ instance ToData StandingBidRedeemer where
   toData = genericToData
 
 instance FromData StandingBidRedeemer where
+  fromData = genericFromData
+
+----------------------------------------------------------------------
+-- BidderDeposit
+
+data BidderDepositRedeemer
+  = UseDepositWinnerRedeemer
+  | ReclaimDepositLoserRedeemer
+  | ReclaimDepositAuctionConcludedRedeemer
+  | ReclaimDepositCleanupRedeemer
+
+derive instance Generic BidderDepositRedeemer _
+derive instance Eq BidderDepositRedeemer
+
+instance Show BidderDepositRedeemer where
+  show = genericShow
+
+instance
+  HasPlutusSchema
+    BidderDepositRedeemer
+    ( "UseDepositWinnerRedeemer"
+        := PNil
+        @@ Z
+        :+ "ReclaimDepositLoserRedeemer"
+        := PNil
+        @@ (S Z)
+        :+ "ReclaimDepositAuctionConcludedRedeemer"
+        := PNil
+        @@ (S (S Z))
+        :+ "ReclaimDepositCleanupRedeemer"
+        := PNil
+        @@ (S (S (S Z)))
+        :+ PNil
+    )
+
+instance ToData BidderDepositRedeemer where
+  toData = genericToData
+
+instance FromData BidderDepositRedeemer where
   fromData = genericFromData

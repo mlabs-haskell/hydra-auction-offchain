@@ -19,16 +19,12 @@ import Contract.Prelude
 import Contract.Address (PaymentPubKeyHash, toPubKeyHash)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, OutputDatum(OutputDatum), Redeemer, toData)
+import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( TransactionHash
-  , TransactionInput
-  , TransactionOutput(TransactionOutput)
-  )
+import Contract.Transaction (TransactionHash, TransactionInput)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
@@ -36,18 +32,16 @@ import Contract.TxConstraints
   , mustSpendScriptOutput
   , mustValidateIn
   ) as Constraints
-import Contract.Utxos (utxosAt)
 import Contract.Value (TokenName, Value)
-import Contract.Value (leq, singleton) as Value
+import Contract.Value (singleton) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find) as Array
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Map (singleton, toUnfoldable) as Map
+import Data.Map (singleton) as Map
 import Data.Maybe (fromJust)
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
@@ -55,6 +49,9 @@ import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , standingBidTokenName
+  )
+import HydraAuctionOffchain.Contract.QueryUtxo
+  ( queryAuctionEscrowUtxo
   )
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -67,7 +64,6 @@ import HydraAuctionOffchain.Contract.Types
   , ContractOutput
   , ContractResult
   , StandingBidState(StandingBidState)
-  , Utxo
   , auctionInfoCodec
   , emptySubmitTxData
   , mkContractOutput
@@ -140,7 +136,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     validation (throwError <<< StartBidding_Error_InvalidAuctionInfo) pure
 
   -- Query current auction escrow utxo:
-  auctionEscrowUtxo <- queryAuctionEscrowUtxo auctionInfo
+  auctionEscrowUtxo <- queryAuctionEscrowUtxo AuctionAnnounced auctionInfo
     !? StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
 
   let
@@ -214,29 +210,6 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     { lookups = lookups
     , constraints = constraints
     }
-
-queryAuctionEscrowUtxo :: AuctionInfo -> Contract (Maybe Utxo)
-queryAuctionEscrowUtxo (AuctionInfo auctionInfo) =
-  utxosAt auctionInfo.auctionEscrowAddr
-    <#> Array.find (isCurrentAuctionEscrowUtxo <<< _.output <<< unwrap <<< snd)
-    <<< Map.toUnfoldable
-  where
-  AuctionTerms auctionTerms = auctionInfo.auctionTerms
-
-  isCurrentAuctionEscrowUtxo :: TransactionOutput -> Boolean
-  isCurrentAuctionEscrowUtxo (TransactionOutput txOut) =
-    auctionEscrowValue `Value.leq` txOut.amount
-      && (txOut.datum == OutputDatum (wrap $ toData AuctionAnnounced))
-      && isNothing txOut.referenceScript
-
-  auctionEscrowValue :: Value
-  auctionEscrowValue =
-    auctionTerms.auctionLot <> mkAuctionToken auctionEscrowTokenName
-      <> mkAuctionToken standingBidTokenName
-
-  mkAuctionToken :: TokenName -> Value
-  mkAuctionToken tokenName =
-    Value.singleton auctionInfo.auctionId tokenName one
 
 ----------------------------------------------------------------------
 -- Errors

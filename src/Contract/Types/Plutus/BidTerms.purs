@@ -2,6 +2,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
   ( BidTerms(BidTerms)
   , bidTermsCodec
   , bidderSignatureMessage
+  , sellerPayout
   , sellerSignatureMessage
   , validateBidTerms
   ) where
@@ -27,7 +28,10 @@ import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
-import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms(AuctionTerms))
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
+  ( AuctionTerms(AuctionTerms)
+  , totalAuctionFees
+  )
 import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidderInfoCodec)
 import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
 import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
@@ -78,6 +82,10 @@ bidTermsCodec =
     , bidderSignature: byteArrayCodec
     , sellerSignature: byteArrayCodec
     }
+
+sellerPayout :: AuctionTerms -> BidTerms -> BigInt
+sellerPayout auctionTerms bidTerms =
+  (unwrap bidTerms).price - totalAuctionFees auctionTerms
 
 --------------------------------------------------------------------------------
 -- Validation

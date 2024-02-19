@@ -19,6 +19,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   , auctionTermsCodec
   , auctionTermsInputCodec
   , mkAuctionTerms
+  , totalAuctionFees
   , validateAuctionTerms
   ) where
 
@@ -174,6 +175,10 @@ auctionTermsCodec =
     , minBidIncrement: bigIntCodec
     , minDepositAmount: bigIntCodec
     }
+
+totalAuctionFees :: AuctionTerms -> BigInt
+totalAuctionFees (AuctionTerms auctionTerms) =
+  length auctionTerms.delegates * auctionTerms.auctionFeePerDelegate
 
 --------------------------------------------------------------------------------
 -- Validation

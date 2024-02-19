@@ -1,6 +1,10 @@
 module HydraAuctionOffchain.Contract.Validators.AuctionValidators
   ( AuctionValidators(AuctionValidators)
-  , MkAuctionValidatorsError(MkStandingBidValidatorError, MkAuctionEscrowValidatorError)
+  , MkAuctionValidatorsError
+      ( MkStandingBidValidatorError
+      , MkAuctionEscrowValidatorError
+      , MkBidderDepositValidatorError
+      )
   , mkAuctionValidators
   ) where
 
@@ -15,8 +19,14 @@ import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
+import HydraAuctionOffchain.Contract.Types.Scripts
+  ( AuctionEscrowScriptHash(AuctionEscrowScriptHash)
+  , FeeEscrowScriptHash(FeeEscrowScriptHash)
+  , StandingBidScriptHash(StandingBidScriptHash)
+  )
 import HydraAuctionOffchain.Contract.Validators.AlwaysSucceeds (mkAlwaysSucceedsValidator)
 import HydraAuctionOffchain.Contract.Validators.AuctionEscrow (mkAuctionEscrowValidator)
+import HydraAuctionOffchain.Contract.Validators.BidderDeposit (mkBidderDepositValidator)
 import HydraAuctionOffchain.Contract.Validators.StandingBid (mkStandingBidValidator)
 import HydraAuctionOffchain.Helpers ((!*))
 
@@ -38,6 +48,7 @@ instance Show a => Show (AuctionValidators a) where
 data MkAuctionValidatorsError
   = MkStandingBidValidatorError
   | MkAuctionEscrowValidatorError
+  | MkBidderDepositValidatorError
 
 derive instance Generic MkAuctionValidatorsError _
 derive instance Eq MkAuctionValidatorsError
@@ -50,15 +61,23 @@ mkAuctionValidators
   -> AuctionTerms
   -> ExceptT MkAuctionValidatorsError Contract (AuctionValidators Validator)
 mkAuctionValidators auctionCs auctionTerms = do
-  bidderDeposit <- lift mkAlwaysSucceedsValidator
   feeEscrow <- lift mkAlwaysSucceedsValidator
   standingBid <- mkStandingBidValidator auctionCs auctionTerms !* MkStandingBidValidatorError
   let
-    mkAuctionEscrow = mkAuctionEscrowValidator (unwrap $ validatorHash standingBid)
-      (unwrap $ validatorHash feeEscrow)
+    standingBidSh = StandingBidScriptHash $ unwrap $ validatorHash standingBid
+    mkAuctionEscrow = mkAuctionEscrowValidator
+      standingBidSh
+      (FeeEscrowScriptHash $ unwrap $ validatorHash feeEscrow)
       auctionCs
       auctionTerms
   auctionEscrow <- mkAuctionEscrow !* MkAuctionEscrowValidatorError
+  let
+    mkBidderDeposit = mkBidderDepositValidator
+      standingBidSh
+      (AuctionEscrowScriptHash $ unwrap $ validatorHash auctionEscrow)
+      auctionCs
+      auctionTerms
+  bidderDeposit <- mkBidderDeposit !* MkBidderDepositValidatorError
   pure $ AuctionValidators
     { auctionEscrow
     , bidderDeposit
