@@ -42,7 +42,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
 
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
-  const walletApp: WalletApp = "Nami";
+  const walletApp: WalletApp = "Plutip";
   const preBiddingPeriod = walletApp === "Plutip" ? 15000 : 90000;
   const biddingPeriod = preBiddingPeriod;
 

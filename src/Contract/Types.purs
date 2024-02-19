@@ -132,6 +132,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
       )
   , BidderDepositRedeemer
       ( UseDepositWinnerRedeemer
+      , ClaimDepositSellerRedeemer
       , ReclaimDepositLoserRedeemer
       , ReclaimDepositAuctionConcludedRedeemer
       , ReclaimDepositCleanupRedeemer
