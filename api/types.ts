@@ -70,6 +70,7 @@ export type AuctionInfo = {
   bidderDepositAddr: Address;
   feeEscrowAddr: Address;
   standingBidAddr: Address;
+  metadataOref: TransactionInput | null;
 };
 
 export interface AuctionTermsInput {

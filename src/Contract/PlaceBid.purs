@@ -50,7 +50,7 @@ import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
@@ -60,7 +60,7 @@ import HydraAuctionOffchain.Contract.Types
   , ContractResult
   , StandingBidRedeemer(NewBidRedeemer)
   , StandingBidState
-  , auctionInfoCodec
+  , auctionInfoExtendedCodec
   , bidderSignatureMessage
   , emptySubmitTxData
   , mkContractOutput
@@ -73,7 +73,7 @@ import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuc
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype PlaceBidContractParams = PlaceBidContractParams
-  { auctionInfo :: AuctionInfo
+  { auctionInfo :: AuctionInfoExtended
   , sellerSignature :: ByteArray
   , bidAmount :: BigInt
   }
@@ -92,7 +92,7 @@ placeBidContractParamsCodec :: CA.JsonCodec PlaceBidContractParams
 placeBidContractParamsCodec =
   wrapIso PlaceBidContractParams $ CA.object "PlaceBidContractParams" $
     CAR.record
-      { auctionInfo: auctionInfoCodec
+      { auctionInfo: auctionInfoExtendedCodec
       , sellerSignature: byteArrayCodec
       , bidAmount: bigIntCodec
       }
@@ -106,7 +106,7 @@ mkPlaceBidContractWithErrors
   -> ExceptT PlaceBidContractError Contract ContractResult
 mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
   let
-    auctionInfo@(AuctionInfo auctionInfoRec) = params.auctionInfo
+    (AuctionInfoExtended auctionInfoRec) = params.auctionInfo
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 
@@ -127,11 +127,11 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
       mkAuctionValidators auctionCs auctionTerms
 
   -- Check auction info:
-  validateAuctionInfo auctionInfo validators #
+  validateAuctionInfo auctionInfoRec validators #
     validation (throwError <<< PlaceBid_Error_InvalidAuctionInfo) pure
 
   -- Query current standing bid utxo:
-  standingBidUtxo /\ oldBidState <- queryStandingBidUtxo auctionInfo
+  standingBidUtxo /\ oldBidState <- queryStandingBidUtxo auctionInfoRec
     !? PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo
 
   -- Get bidder signature:

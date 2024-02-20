@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Helpers
   , getTxOutsAt
   , liftEitherShow
   , tokenNameFromAsciiUnsafe
+  , withoutRefScript
   , (!*)
   ) where
 
@@ -13,7 +14,7 @@ import Prelude
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, Datum(Datum), OutputDatum(OutputDatum), fromData)
 import Contract.Prim.ByteArray (byteArrayFromAscii)
-import Contract.Transaction (TransactionOutput)
+import Contract.Transaction (TransactionOutput, TransactionOutputWithRefScript)
 import Contract.Utxos (utxosAt)
 import Contract.Value (TokenName, mkTokenName)
 import Control.Error.Util (hush, (!?))
@@ -24,7 +25,7 @@ import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Map (toUnfoldable) as Map
 import Data.Maybe (Maybe(Nothing), fromJust)
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Tuple (snd)
 import Data.Validation.Semigroup (V, invalid)
 import Effect.Exception (Error, error)
@@ -55,3 +56,6 @@ getTxOutsAt :: forall addr. PlutusAddress addr => addr -> Contract (Array Transa
 getTxOutsAt =
   map (map (_.output <<< unwrap <<< snd) <<< Map.toUnfoldable)
     <<< utxosAt
+
+withoutRefScript :: TransactionOutput -> TransactionOutputWithRefScript
+withoutRefScript utxo = wrap { output: utxo, scriptRef: Nothing }

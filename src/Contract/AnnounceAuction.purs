@@ -27,12 +27,18 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
 import Contract.Scripts (ValidatorHash, validatorHash)
 import Contract.Time (POSIXTimeRange, to)
-import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutputWithRefScript)
+import Contract.Transaction
+  ( ScriptRef(PlutusScriptRef)
+  , TransactionHash
+  , TransactionInput
+  , TransactionOutputWithRefScript
+  )
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustMintCurrencyUsingNativeScript
   , mustMintValueWithRedeemer
   , mustPayToScript
+  , mustPayToScriptWithScriptRef
   , mustSpendPubKeyOutput
   , mustValidateIn
   ) as Constraints
@@ -72,15 +78,17 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionActor(AuctionActor)
   , AuctionEscrowState(AuctionAnnounced)
   , AuctionInfo
+  , AuctionInfoExtended
   , AuctionPolicyRedeemer(MintAuction)
   , AuctionTermsInput
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult'
   , assetToValue
-  , auctionInfoCodec
+  , auctionInfoExtendedCodec
   , auctionTermsInputCodec
   , emptySubmitTxData
+  , mkAuctionInfoExtended
   , mkAuctionTerms
   , mkContractOutput
   , submitTxReturningContractResult
@@ -93,6 +101,7 @@ import HydraAuctionOffchain.Contract.Validators
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 import Partial.Unsafe (unsafePartial)
+import Record (merge) as Record
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
   { auctionTerms :: AuctionTermsInput
@@ -121,7 +130,7 @@ announceAuctionContractParamsCodec =
 
 newtype AnnounceAuctionContractOutput = AnnounceAuctionContractOutput
   { txHash :: TransactionHash
-  , auctionInfo :: AuctionInfo
+  , auctionInfo :: AuctionInfoExtended
   }
 
 derive instance Generic AnnounceAuctionContractOutput _
@@ -135,14 +144,14 @@ instance Show AnnounceAuctionContractOutput where
 instance HasJson AnnounceAuctionContractOutput where
   jsonCodec = const announceAuctionContractOutputCodec
 
-type AnnounceAuctionContractResult = ContractResult' (auctionInfo :: AuctionInfo)
+type AnnounceAuctionContractResult = ContractResult' (auctionInfo :: AuctionInfoExtended)
 
 announceAuctionContractOutputCodec :: CA.JsonCodec AnnounceAuctionContractOutput
 announceAuctionContractOutputCodec =
   wrapIso AnnounceAuctionContractOutput $ CA.object "AnnounceAuctionContractOutput" $
     CAR.record
       { txHash: transactionHashCodec
-      , auctionInfo: auctionInfoCodec
+      , auctionInfo: auctionInfoExtendedCodec
       }
 
 announceAuctionContract
@@ -159,8 +168,7 @@ announceAuctionContract =
 
 mkAnnounceAuctionContractWithErrors
   :: AnnounceAuctionContractParams
-  -> ExceptT AnnounceAuctionContractError Contract
-       (ContractResult' (auctionInfo :: AuctionInfo))
+  -> ExceptT AnnounceAuctionContractError Contract AnnounceAuctionContractResult
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
   { vkey, address, pkh: sellerPkh } <-
@@ -261,7 +269,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
 
     auctionActorDatum :: Datum
     auctionActorDatum = wrap $ toData $ AuctionActor
-      { auctionInfo
+      { auctionInfo: mkAuctionInfoExtended auctionInfo Nothing
       , role: ActorRoleSeller
       }
 
@@ -284,11 +292,6 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , Constraints.mustPayToScript auctionEscrowValidatorHash auctionEscrowDatum DatumInline
           auctionEscrowValue
 
-      -- Lock auction metadata datum and auction metadata token 
-      -- at the auction metadata validator address:
-      , Constraints.mustPayToScript metadataValidatorHash auctionInfoDatum DatumInline
-          auctionInfoValue
-
       -- Mint seller's personal oracle token:
       , Constraints.mustMintCurrencyUsingNativeScript sellerOracle.nativeScript
           (unwrap sellerOracle.assetClass).tokenName
@@ -300,6 +303,15 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
           DatumInline
           sellerOracleTokenValue
 
+      -- Lock auction metadata datum and auction metadata token 
+      -- at the auction metadata validator address:
+      , Constraints.mustPayToScriptWithScriptRef metadataValidatorHash auctionInfoDatum
+          DatumInline
+          -- Attach standing bid reference script to meet the max tx
+          -- size requirement for subsequent transactions.
+          (PlutusScriptRef $ unwrap (unwrap validators).standingBid)
+          auctionInfoValue
+
       -- Set transaction validity interval to registration period:
       , Constraints.mustValidateIn txValidRange
       ]
@@ -310,9 +322,16 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , Lookups.mintingPolicy auctionMintingPolicy
       ]
 
-  lift $ submitTxReturningContractResult { auctionInfo } $ emptySubmitTxData
+  result <- lift $ submitTxReturningContractResult {} $ emptySubmitTxData
     { lookups = lookups
     , constraints = constraints
+    }
+  pure $ Record.merge result
+    { auctionInfo:
+        mkAuctionInfoExtended auctionInfo $ Just $ wrap
+          { transactionId: result.txHash
+          , index: zero
+          }
     }
 
 selectUtxos :: UtxoMap -> Value -> Contract (Maybe UtxoMap)

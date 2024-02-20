@@ -43,7 +43,7 @@ import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , ActorRole(ActorRoleBidder)
   , AuctionActor(AuctionActor)
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
@@ -51,7 +51,7 @@ import HydraAuctionOffchain.Contract.Types
   , ContractOutput
   , ContractResult
   , assetToValue
-  , auctionInfoCodec
+  , auctionInfoExtendedCodec
   , emptySubmitTxData
   , mkContractOutput
   , submitTxReturningContractResult
@@ -62,7 +62,7 @@ import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuc
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk')
 
 newtype EnterAuctionContractParams = EnterAuctionContractParams
-  { auctionInfo :: AuctionInfo
+  { auctionInfo :: AuctionInfoExtended
   , depositAmount :: Maybe BigInt
   }
 
@@ -80,7 +80,7 @@ enterAuctionContractParamsCodec :: CA.JsonCodec EnterAuctionContractParams
 enterAuctionContractParamsCodec =
   wrapIso EnterAuctionContractParams $ CA.object "EnterAuctionContractParams" $
     CAR.record
-      { auctionInfo: auctionInfoCodec
+      { auctionInfo: auctionInfoExtendedCodec
       , depositAmount: CA.maybe bigIntCodec
       }
 
@@ -95,7 +95,7 @@ mkEnterAuctionContractWithErrors
   -> ExceptT EnterAuctionContractError Contract ContractResult
 mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
   let
-    auctionInfo@(AuctionInfo auctionInfoRec) = params.auctionInfo
+    auctionInfo@(AuctionInfoExtended auctionInfoRec) = params.auctionInfo
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
     depositAmount = fromMaybe auctionTermsRec.minDepositAmount params.depositAmount
@@ -115,7 +115,7 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
       mkAuctionValidators auctionCs auctionTerms
 
   -- Check auction info:
-  validateAuctionInfo auctionInfo validators #
+  validateAuctionInfo auctionInfoRec validators #
     validation (throwError <<< EnterAuction_Error_InvalidAuctionInfo) pure
 
   -- Get bidder vkey and address; display warning to the user if the provided

@@ -67,6 +67,9 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionEscrowState
 
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
   ( AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
+  , AuctionInfoExtendedRec
+  , AuctionInfoRec
   , AuctionInfoValidationError
       ( AuctionEscrowAddressMismatchError
       , BidderDepositAddressMismatchError
@@ -74,6 +77,8 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
       , StandingBidAddressMismatchError
       )
   , auctionInfoCodec
+  , auctionInfoExtendedCodec
+  , mkAuctionInfoExtended
   , validateAuctionInfo
   ) as ExportPlutusAuctionInfo
 

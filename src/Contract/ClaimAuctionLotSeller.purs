@@ -51,7 +51,7 @@ import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionEscrowRedeemer(SellerReclaimsRedeemer)
   , AuctionEscrowState(BiddingStarted, AuctionConcluded)
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
@@ -68,16 +68,17 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 
-claimAuctionLotSellerContract :: AuctionInfo -> Contract (ContractOutput TransactionHash)
+claimAuctionLotSellerContract
+  :: AuctionInfoExtended -> Contract (ContractOutput TransactionHash)
 claimAuctionLotSellerContract =
   mkContractOutput _.txHash <<< mkClaimAuctionLotSellerContractWithErrors
 
 mkClaimAuctionLotSellerContractWithErrors
-  :: AuctionInfo
+  :: AuctionInfoExtended
   -> ExceptT ClaimAuctionLotSellerContractError Contract ContractResult
 mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
   let
-    AuctionInfo auctionInfoRec = auctionInfo
+    AuctionInfoExtended auctionInfoRec = auctionInfo
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 
@@ -96,20 +97,20 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
       mkAuctionValidators auctionCs auctionTerms
 
   -- Check auction info:
-  validateAuctionInfo auctionInfo validators #
+  validateAuctionInfo auctionInfoRec validators #
     validation (throwError <<< ClaimAuctionLotSeller_Error_InvalidAuctionInfo) pure
 
   -- Query current auction escrow utxo:
-  auctionEscrowUtxo <- queryAuctionEscrowUtxo BiddingStarted auctionInfo
+  auctionEscrowUtxo <- queryAuctionEscrowUtxo BiddingStarted auctionInfoRec
     !? ClaimAuctionLotSeller_Error_CouldNotFindAuctionEscrowUtxo
 
   -- Query standing bid utxo:
-  standingBidUtxo /\ standingBid <- queryStandingBidUtxo auctionInfo
+  standingBidUtxo /\ standingBid <- queryStandingBidUtxo auctionInfoRec
     !? ClaimAuctionLotSeller_Error_CouldNotFindStandingBidUtxo
 
   -- Query bidder deposit utxo:
   let mBidderInfo = unwrap standingBid <#> _.bidder <<< unwrap
-  mBidderDepositUtxo <- lift $ maybe (pure Nothing) (queryBidderDepositUtxo auctionInfo)
+  mBidderDepositUtxo <- lift $ maybe (pure Nothing) (queryBidderDepositUtxo auctionInfoRec)
     mBidderInfo
   when (isJust mBidderInfo && isNothing mBidderDepositUtxo) $
     throwError ClaimAuctionLotSeller_Error_CouldNotFindBidderDepositUtxo
