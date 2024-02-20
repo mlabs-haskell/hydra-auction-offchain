@@ -60,14 +60,22 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   await logConfirmContract("AnnounceAuction", walletApp, announceAuctionResult);
   const auctionInfo = announceAuctionResult.value.auctionInfo;
 
+  // seller: queryAuctions
+  const sellerAuctions = await queryAuctions(walletApp, { myRole: "ActorRoleSeller" });
+  console.log("Seller auctions:", sellerAuctions);
+
   // bidder: queryAuctions
   const auctions = await queryAuctions(walletApp);
-  console.log("Auctions:", auctions);
+  console.log("All auctions:", auctions);
 
   // bidder: enterAuction
   const depositAmount = "2800000";
   const enterAuctionResult = await enterAuction(walletApp, { auctionInfo, depositAmount });
   await logConfirmContract("EnterAuction", walletApp, enterAuctionResult);
+
+  // bidder: queryAuctions
+  const bidderAuctions = await queryAuctions(walletApp, { myRole: "ActorRoleBidder" });
+  console.log("Bidder auctions:", bidderAuctions);
 
   // seller: discoverBidders
   const bidders = await discoverBidders(walletApp, auctionInfo);

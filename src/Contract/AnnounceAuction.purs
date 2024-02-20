@@ -30,7 +30,8 @@ import Contract.Time (POSIXTimeRange, to)
 import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutputWithRefScript)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
-  ( mustMintValueWithRedeemer
+  ( mustMintCurrencyUsingNativeScript
+  , mustMintValueWithRedeemer
   , mustPayToScript
   , mustSpendPubKeyOutput
   , mustValidateIn
@@ -64,8 +65,11 @@ import HydraAuctionOffchain.Contract.MintingPolicies
   , mkAuctionMintingPolicy
   , standingBidTokenName
   )
+import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
+  , ActorRole(ActorRoleSeller)
+  , AuctionActor(AuctionActor)
   , AuctionEscrowState(AuctionAnnounced)
   , AuctionInfo
   , AuctionPolicyRedeemer(MintAuction)
@@ -73,6 +77,7 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult'
+  , assetToValue
   , auctionInfoCodec
   , auctionTermsInputCodec
   , emptySubmitTxData
@@ -158,7 +163,9 @@ mkAnnounceAuctionContractWithErrors
        (ContractResult' (auctionInfo :: AuctionInfo))
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
   -- Get pkh and vkey, build AuctionTerms:
-  { vkey, address } <- withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey askWalletVk
+  { vkey, address, pkh: sellerPkh } <-
+    withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey
+      askWalletVk
 
   -- Check auction terms:
   let auctionTerms = mkAuctionTerms params.auctionTerms address vkey
@@ -214,6 +221,8 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     mintAuctionRedeemer :: Redeemer
     mintAuctionRedeemer = wrap $ toData MintAuction
 
+    -- AuctionEscrow -------------------------------------------------
+
     auctionEscrowValidatorHash :: ValidatorHash
     auctionEscrowValidatorHash = (unwrap validatorHashes).auctionEscrow
 
@@ -223,6 +232,8 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
 
     auctionEscrowDatum :: Datum
     auctionEscrowDatum = wrap $ toData AuctionAnnounced
+
+    -- AuctionInfo ---------------------------------------------------
 
     auctionInfoValue :: Value
     auctionInfoValue = mkAuctionToken auctionMetadataTokenName
@@ -240,6 +251,22 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     auctionInfoDatum :: Datum
     auctionInfoDatum = wrap $ toData auctionInfo
 
+    -- AuctionActor --------------------------------------------------
+
+    sellerOracle :: PersonalOracle
+    sellerOracle = mkPersonalOracle $ wrap sellerPkh
+
+    sellerOracleTokenValue :: Value
+    sellerOracleTokenValue = assetToValue sellerOracle.assetClass one
+
+    auctionActorDatum :: Datum
+    auctionActorDatum = wrap $ toData $ AuctionActor
+      { auctionInfo
+      , role: ActorRoleSeller
+      }
+
+    --
+
     txValidRange :: POSIXTimeRange
     txValidRange = to $ biddingStart - wrap (BigInt.fromInt 1000)
 
@@ -251,15 +278,27 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       -- Mint auction state, auction metadata, and standing bid tokens:
       , Constraints.mustMintValueWithRedeemer mintAuctionRedeemer auctionTokenBundle
 
-      -- Lock auction lot with auction state and standing bid tokens at the auction escrow
-      -- validator address, set state to AuctionAnnounced:
+      -- Lock auction lot with auction state and standing bid tokens
+      -- at the auction escrow validator address, set state to 
+      -- AuctionAnnounced:
       , Constraints.mustPayToScript auctionEscrowValidatorHash auctionEscrowDatum DatumInline
           auctionEscrowValue
 
-      -- Lock auction metadata datum and auction metadata token at the auction metadata
-      -- validator address:
+      -- Lock auction metadata datum and auction metadata token 
+      -- at the auction metadata validator address:
       , Constraints.mustPayToScript metadataValidatorHash auctionInfoDatum DatumInline
           auctionInfoValue
+
+      -- Mint seller's personal oracle token:
+      , Constraints.mustMintCurrencyUsingNativeScript sellerOracle.nativeScript
+          (unwrap sellerOracle.assetClass).tokenName
+          one
+
+      -- Lock auction actor datum with personal oracle token at 
+      -- the seller's personal oracle address:
+      , Constraints.mustPayToScript (wrap $ sellerOracle.nativeScriptHash) auctionActorDatum
+          DatumInline
+          sellerOracleTokenValue
 
       -- Set transaction validity interval to registration period:
       , Constraints.mustValidateIn txValidRange

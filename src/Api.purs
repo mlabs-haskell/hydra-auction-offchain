@@ -78,10 +78,8 @@ enterAuction = contractGeneric Contract.enterAuctionContract
 placeBid :: Json -> Json -> Effect (Promise Json)
 placeBid = contractGeneric Contract.placeBidContract
 
-queryAuctions :: Json -> Effect (Promise Json)
-queryAuctions walletApp = fromAff do
-  contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams Contract.queryAuctions
+queryAuctions :: Json -> Json -> Effect (Promise Json)
+queryAuctions = contractGeneric Contract.queryAuctions
 
 queryStandingBidState :: Json -> Json -> Effect (Promise Json)
 queryStandingBidState = contractGeneric Contract.queryStandingBidState
