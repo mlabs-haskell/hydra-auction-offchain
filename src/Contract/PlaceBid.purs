@@ -9,6 +9,8 @@ module HydraAuctionOffchain.Contract.PlaceBid
       , PlaceBid_Error_CouldNotGetOwnPubKeyHash
       , PlaceBid_Error_CouldNotSignBidderMessage
       , PlaceBid_Error_InvalidBidStateTransition
+      , PlaceBid_Error_MissingMetadataOref
+      , PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
       )
   , PlaceBidContractParams(PlaceBidContractParams)
   , placeBidContract
@@ -21,28 +23,38 @@ import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.ScriptLookups (ScriptLookups)
-import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
+import Contract.ScriptLookups (unspentOutputs) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction (TransactionHash, TransactionInput)
-import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
+import Contract.Transaction
+  ( TransactionHash
+  , TransactionInput
+  , TransactionUnspentOutput
+  , mkTxUnspentOut
+  )
+import Contract.TxConstraints
+  ( DatumPresence(DatumInline)
+  , InputWithScriptRef(RefInput)
+  , TxConstraints
+  )
 import Contract.TxConstraints
   ( mustBeSignedBy
   , mustPayToScript
-  , mustSpendScriptOutput
+  , mustSpendScriptOutputUsingScriptRef
   , mustValidateIn
   ) as Constraints
+import Contract.Utxos (getUtxo)
 import Contract.Value (Value)
 import Contract.Value (singleton) as Value
 import Contract.Wallet (ownPaymentPubKeyHash)
-import Control.Error.Util ((!?))
+import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.BigInt (BigInt)
 import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Map (singleton) as Map
+import Data.Map (fromFoldable) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
@@ -70,6 +82,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateNewBid
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import HydraAuctionOffchain.Helpers (withoutRefScript)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype PlaceBidContractParams = PlaceBidContractParams
@@ -130,6 +143,11 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
   validateAuctionInfo auctionInfoRec validators #
     validation (throwError <<< PlaceBid_Error_InvalidAuctionInfo) pure
 
+  -- Query auction metadata utxo:
+  auctionMetadataOref <- auctionInfoRec.metadataOref ?? PlaceBid_Error_MissingMetadataOref
+  auctionMetadataTxOut <- getUtxo auctionMetadataOref
+    !? PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
+
   -- Query current standing bid utxo:
   standingBidUtxo /\ oldBidState <- queryStandingBidUtxo auctionInfoRec
     !? PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo
@@ -170,6 +188,12 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     standingBidTokenValue :: Value
     standingBidTokenValue = Value.singleton auctionCs standingBidTokenName one
 
+    -- AuctionMetadata -----------------------------------------------
+
+    auctionMetadataUtxo :: TransactionUnspentOutput
+    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withoutRefScript
+      auctionMetadataTxOut
+
     --
 
     txValidRange :: POSIXTimeRange
@@ -180,7 +204,8 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     constraints :: TxConstraints Void Void
     constraints = mconcat
       [ -- Spend standing bid utxo with old standing bid datum: 
-        Constraints.mustSpendScriptOutput standingBidOref standingBidRedeemer
+        Constraints.mustSpendScriptOutputUsingScriptRef standingBidOref standingBidRedeemer
+          (RefInput auctionMetadataUtxo)
 
       , -- Lock standing bid token with new standing bid datum at
         -- standing bid validator address:
@@ -195,10 +220,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
       ]
 
     lookups :: ScriptLookups Void
-    lookups = mconcat
-      [ Lookups.unspentOutputs $ Map.singleton standingBidOref $ snd standingBidUtxo
-      , Lookups.validator (unwrap validators).standingBid
-      ]
+    lookups = Lookups.unspentOutputs $ Map.fromFoldable [ standingBidUtxo ]
 
   lift $ submitTxReturningContractResult {} $ emptySubmitTxData
     { lookups = lookups
@@ -218,6 +240,8 @@ data PlaceBidContractError
   | PlaceBid_Error_CouldNotGetOwnPubKeyHash
   | PlaceBid_Error_CouldNotSignBidderMessage SignMessageError
   | PlaceBid_Error_InvalidBidStateTransition
+  | PlaceBid_Error_MissingMetadataOref
+  | PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
 
 derive instance Generic PlaceBidContractError _
 derive instance Eq PlaceBidContractError
@@ -262,4 +286,12 @@ instance ToContractError PlaceBidContractError where
     PlaceBid_Error_InvalidBidStateTransition ->
       { errorCode: "PlaceBid09"
       , message: "Invalid bid state transition."
+      }
+    PlaceBid_Error_MissingMetadataOref ->
+      { errorCode: "PlaceBid10"
+      , message: "Auction metadata output reference not provided."
+      }
+    PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo ->
+      { errorCode: "PlaceBid11"
+      , message: "Could not query auction metadata utxo."
       }

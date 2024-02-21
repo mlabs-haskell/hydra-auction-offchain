@@ -119,6 +119,8 @@ import HydraAuctionOffchain.Contract.PlaceBid
       , PlaceBid_Error_CouldNotGetOwnPubKeyHash
       , PlaceBid_Error_CouldNotSignBidderMessage
       , PlaceBid_Error_InvalidBidStateTransition
+      , PlaceBid_Error_MissingMetadataOref
+      , PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
       )
   , PlaceBidContractParams(PlaceBidContractParams)
   , placeBidContract
