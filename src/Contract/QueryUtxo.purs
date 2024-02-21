@@ -20,18 +20,22 @@ import HydraAuctionOffchain.Contract.MintingPolicies
   )
 import HydraAuctionOffchain.Contract.Types
   ( AuctionEscrowState
-  , AuctionInfo(AuctionInfo)
   , BidderInfo
   , StandingBidState
   , Utxo
+  , AuctionInfoRec
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
 
 ----------------------------------------------------------------------
 -- AuctionEscrow
 
-queryAuctionEscrowUtxo :: AuctionEscrowState -> AuctionInfo -> Contract (Maybe Utxo)
-queryAuctionEscrowUtxo escrowState (AuctionInfo auctionInfo) =
+queryAuctionEscrowUtxo
+  :: forall (r :: Row Type)
+   . AuctionEscrowState
+  -> Record (AuctionInfoRec r)
+  -> Contract (Maybe Utxo)
+queryAuctionEscrowUtxo escrowState auctionInfo =
   utxosAt auctionInfo.auctionEscrowAddr
     <#> Array.find (isValidAuctionEscrowUtxo <<< _.output <<< unwrap <<< snd)
     <<< Map.toUnfoldable
@@ -47,8 +51,11 @@ queryAuctionEscrowUtxo escrowState (AuctionInfo auctionInfo) =
 ----------------------------------------------------------------------
 -- StandingBid
 
-queryStandingBidUtxo :: AuctionInfo -> Contract (Maybe (Utxo /\ StandingBidState))
-queryStandingBidUtxo (AuctionInfo auctionInfo) =
+queryStandingBidUtxo
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
+  -> Contract (Maybe (Utxo /\ StandingBidState))
+queryStandingBidUtxo auctionInfo =
   utxosAt auctionInfo.standingBidAddr <#> \utxos -> do
     let getTxOut = _.output <<< unwrap <<< snd
     standingBidUtxo <- Array.find (hasStandingBidToken <<< getTxOut) $ Map.toUnfoldable utxos
@@ -64,8 +71,12 @@ queryStandingBidUtxo (AuctionInfo auctionInfo) =
 ----------------------------------------------------------------------
 -- BidderDeposit
 
-queryBidderDepositUtxo :: AuctionInfo -> BidderInfo -> Contract (Maybe Utxo)
-queryBidderDepositUtxo (AuctionInfo auctionInfo) bidderInfo =
+queryBidderDepositUtxo
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
+  -> BidderInfo
+  -> Contract (Maybe Utxo)
+queryBidderDepositUtxo auctionInfo bidderInfo =
   utxosAt auctionInfo.bidderDepositAddr
     <#> Array.find (eq (Just bidderInfo) <<< getInlineDatum <<< _.output <<< unwrap <<< snd)
     <<< Map.toUnfoldable

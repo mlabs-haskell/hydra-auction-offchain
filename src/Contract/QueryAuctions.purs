@@ -10,31 +10,38 @@ import Contract.Monad (Contract)
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTime)
 import Contract.Transaction (TransactionOutput)
+import Contract.Utxos (utxosAt)
 import Contract.Value (CurrencySymbol)
 import Contract.Value (valueOf) as Value
 import Contract.Wallet (ownPaymentPubKeyHash)
-import Control.Error.Util (bool)
 import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
 import Control.Monad.Trans.Class (lift)
+import Ctl.Internal.Plutus.Types.Transaction (_output)
 import Data.Array (mapMaybe) as Array
+import Data.Lens ((^.))
+import Data.Map (toUnfoldable) as Map
+import Data.Newtype (modify)
 import Data.Validation.Semigroup (isValid) as V
 import HydraAuctionOffchain.Contract.MintingPolicies (auctionMetadataTokenName)
 import HydraAuctionOffchain.Contract.PersonalOracle (mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
-  ( ActorRole
+  ( ActorRole(ActorRoleBidder, ActorRoleSeller)
   , AssetClass(AssetClass)
   , AuctionActor(AuctionActor)
   , AuctionFilters
   , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended
   , AuctionTerms
+  , Utxo
+  , mkAuctionInfoExtended
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (mkAuctionMetadataValidator)
-import HydraAuctionOffchain.Helpers (getInlineDatum, getTxOutsAt)
+import HydraAuctionOffchain.Helpers (getInlineDatum)
 
--- | Queries all currently existing auctions at the auction metadata validator address,
--- | filtering out invalid entries.
-queryAuctions :: AuctionFilters -> Contract (Array AuctionInfo)
+-- | Queries all currently existing auctions at the auction metadata
+-- | validator address, filtering out invalid entries.
+queryAuctions :: AuctionFilters -> Contract (Array AuctionInfoExtended)
 queryAuctions filters =
   case (unwrap filters).myRole of
     Just actorRole ->
@@ -42,15 +49,22 @@ queryAuctions filters =
     Nothing -> do
       auctionMetadataAddr <- flip scriptHashAddress Nothing <<< validatorHash <$>
         mkAuctionMetadataValidator
-      getTxOutsAt auctionMetadataAddr
+      utxosAt auctionMetadataAddr
         <#> Array.mapMaybe getValidAuctionInfo
+        <<< Map.toUnfoldable
   where
-  getValidAuctionInfo :: TransactionOutput -> Maybe AuctionInfo
-  getValidAuctionInfo txOut = do
+  getValidAuctionInfo :: Utxo -> Maybe AuctionInfoExtended
+  getValidAuctionInfo (oref /\ txOutWithRefScript) = do
     auctionInfo@(AuctionInfo { auctionId, auctionTerms }) <- getInlineDatum txOut
-    bool Nothing (Just auctionInfo)
-      (validAuctionTerms auctionTerms && validAuctionId auctionId)
+    case validAuctionTerms auctionTerms && validAuctionId auctionId of
+      true ->
+        Just $ mkAuctionInfoExtended auctionInfo $ Just oref
+      false ->
+        Nothing
     where
+    txOut :: TransactionOutput
+    txOut = txOutWithRefScript ^. _output
+
     validAuctionTerms :: AuctionTerms -> Boolean
     validAuctionTerms auctionTerms =
       V.isValid $ validateAuctionTerms auctionTerms
@@ -59,28 +73,46 @@ queryAuctions filters =
     validAuctionId cs =
       Value.valueOf (unwrap txOut).amount cs auctionMetadataTokenName == one
 
-queryOwnAuctions :: ActorRole -> Contract (Maybe (Array AuctionInfo))
+queryOwnAuctions :: ActorRole -> Contract (Maybe (Array AuctionInfoExtended))
 queryOwnAuctions actorRole =
   runMaybeT do
     pkh <- MaybeT ownPaymentPubKeyHash
     let personalOracle = mkPersonalOracle pkh
     let oracleAddr = scriptHashAddress (wrap personalOracle.nativeScriptHash) Nothing
     nowTime <- lift currentTime
-    (lift $ getTxOutsAt oracleAddr) <#>
-      Array.mapMaybe (getValidAuctionInfoCached personalOracle.assetClass nowTime)
+    (lift $ utxosAt oracleAddr)
+      <#> Array.mapMaybe (getValidAuctionInfoCached personalOracle.assetClass nowTime)
+      <<< Map.toUnfoldable
   where
-  getValidAuctionInfoCached
-    :: AssetClass -> POSIXTime -> TransactionOutput -> Maybe AuctionInfo
-  getValidAuctionInfoCached (AssetClass asset) nowTime txOut =
-    bool Nothing (validAuctionActor =<< getInlineDatum txOut)
-      authTokenPresent
+  getValidAuctionInfoCached :: AssetClass -> POSIXTime -> Utxo -> Maybe AuctionInfoExtended
+  getValidAuctionInfoCached (AssetClass asset) nowTime (oref /\ txOutWithRefScript) =
+    case authTokenPresent of
+      false ->
+        Nothing
+      true ->
+        (validAuctionActor =<< getInlineDatum txOut) <#> \auctionInfo ->
+          case actorRole of
+            ActorRoleBidder ->
+              auctionInfo
+            ActorRoleSeller ->
+              auctionInfo # modify
+                ( _
+                    { metadataOref = Just $ wrap
+                        { transactionId: (unwrap oref).transactionId
+                        , index: zero
+                        }
+                    }
+                )
     where
+    txOut :: TransactionOutput
+    txOut = txOutWithRefScript ^. _output
+
     authTokenPresent :: Boolean
     authTokenPresent =
       Value.valueOf (unwrap txOut).amount asset.currencySymbol asset.tokenName
         == one
 
-    validAuctionActor :: AuctionActor -> Maybe AuctionInfo
+    validAuctionActor :: AuctionActor -> Maybe AuctionInfoExtended
     validAuctionActor (AuctionActor { auctionInfo, role })
       | role == actorRole
           && (nowTime < (unwrap (unwrap auctionInfo).auctionTerms).cleanup)

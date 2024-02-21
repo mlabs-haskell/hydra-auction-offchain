@@ -20,7 +20,7 @@ import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec)
 import HydraAuctionOffchain.Contract.Types
-  ( AuctionInfo(AuctionInfo)
+  ( AuctionInfoExtended(AuctionInfoExtended)
   , BidderInfo
   , bidderInfoCodec
   )
@@ -51,8 +51,8 @@ bidderInfoCandidateCodec =
       , isValid: CA.boolean
       }
 
-discoverBidders :: AuctionInfo -> Contract (Array BidderInfoCandidate)
-discoverBidders (AuctionInfo auctionInfo) = do
+discoverBidders :: AuctionInfoExtended -> Contract (Array BidderInfoCandidate)
+discoverBidders (AuctionInfoExtended auctionInfo) = do
   utxos <- utxosAt auctionInfo.bidderDepositAddr
   let txOuts = Map.toUnfoldable utxos <#> _.output <<< unwrap <<< snd
   pure $ Array.mapMaybe getBidderInfoCandidate txOuts

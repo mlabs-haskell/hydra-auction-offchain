@@ -5,6 +5,8 @@ module HydraAuctionOffchain.Contract.ClaimAuctionLotBidder
       , ClaimAuctionLotBidder_Error_CurrentTimeAfterPurchaseDeadline
       , ClaimAuctionLotBidder_Error_CouldNotBuildAuctionValidators
       , ClaimAuctionLotBidder_Error_InvalidAuctionInfo
+      , ClaimAuctionLotBidder_Error_MissingMetadataOref
+      , ClaimAuctionLotBidder_Error_CouldNotQueryAuctionMetadataUtxo
       , ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo
       , ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo
       , ClaimAuctionLotBidder_Error_EmptyStandingBid
@@ -26,15 +28,26 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction (TransactionHash, TransactionInput)
-import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
+import Contract.Transaction
+  ( TransactionHash
+  , TransactionInput
+  , TransactionUnspentOutput
+  , mkTxUnspentOut
+  )
+import Contract.TxConstraints
+  ( DatumPresence(DatumInline)
+  , InputWithScriptRef(RefInput)
+  , TxConstraints
+  )
 import Contract.TxConstraints
   ( mustBeSignedBy
   , mustPayToPubKey
   , mustPayToScript
   , mustSpendScriptOutput
+  , mustSpendScriptOutputUsingScriptRef
   , mustValidateIn
   ) as Constraints
+import Contract.Utxos (getUtxo)
 import Contract.Value (TokenName, Value)
 import Contract.Value (lovelaceValueOf, singleton) as Value
 import Control.Error.Util (bool, (!?), (??))
@@ -57,7 +70,7 @@ import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionEscrowRedeemer(BidderBuysRedeemer)
   , AuctionEscrowState(BiddingStarted, AuctionConcluded)
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
@@ -74,17 +87,19 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
 
-claimAuctionLotBidderContract :: AuctionInfo -> Contract (ContractOutput TransactionHash)
+claimAuctionLotBidderContract
+  :: AuctionInfoExtended -> Contract (ContractOutput TransactionHash)
 claimAuctionLotBidderContract =
   mkContractOutput _.txHash <<< mkClaimAuctionLotBidderContractWithErrors
 
 mkClaimAuctionLotBidderContractWithErrors
-  :: AuctionInfo
+  :: AuctionInfoExtended
   -> ExceptT ClaimAuctionLotBidderContractError Contract ContractResult
 mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
   let
-    AuctionInfo auctionInfoRec = auctionInfo
+    AuctionInfoExtended auctionInfoRec = auctionInfo
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 
@@ -105,15 +120,21 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
       mkAuctionValidators auctionCs auctionTerms
 
   -- Check auction info:
-  validateAuctionInfo auctionInfo validators #
+  validateAuctionInfo auctionInfoRec validators #
     validation (throwError <<< ClaimAuctionLotBidder_Error_InvalidAuctionInfo) pure
 
+  -- Query auction metadata utxo:
+  auctionMetadataOref <- auctionInfoRec.metadataOref
+    ?? ClaimAuctionLotBidder_Error_MissingMetadataOref
+  auctionMetadataTxOut <- getUtxo auctionMetadataOref
+    !? ClaimAuctionLotBidder_Error_CouldNotQueryAuctionMetadataUtxo
+
   -- Query current auction escrow utxo:
-  auctionEscrowUtxo <- queryAuctionEscrowUtxo BiddingStarted auctionInfo
+  auctionEscrowUtxo <- queryAuctionEscrowUtxo BiddingStarted auctionInfoRec
     !? ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo
 
   -- Query standing bid utxo:
-  standingBidUtxo /\ standingBid <- queryStandingBidUtxo auctionInfo
+  standingBidUtxo /\ standingBid <- queryStandingBidUtxo auctionInfoRec
     !? ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo
 
   -- Get bid terms:
@@ -121,7 +142,7 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
   let bidderInfo = (unwrap bidTerms).bidder
 
   -- Query bidder deposit utxo:
-  mBidderDepositUtxo <- lift $ queryBidderDepositUtxo auctionInfo bidderInfo
+  mBidderDepositUtxo <- lift $ queryBidderDepositUtxo auctionInfoRec bidderInfo
   when (isNothing mBidderDepositUtxo) do
     lift $ logWarn' "Could not find bidder deposit utxo."
 
@@ -170,6 +191,12 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
     bidderDepositRedeemer :: Redeemer
     bidderDepositRedeemer = wrap $ toData UseDepositWinnerRedeemer
 
+    -- AuctionMetadata -----------------------------------------------
+
+    auctionMetadataUtxo :: TransactionUnspentOutput
+    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withEmptyPlutusV2Script
+      auctionMetadataTxOut
+
     --
 
     totalAuctionFeesValue :: Value
@@ -189,7 +216,8 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
         Constraints.mustSpendScriptOutput auctionEscrowOref auctionEscrowRedeemer
 
       , -- Spend standing bid utxo:
-        Constraints.mustSpendScriptOutput standingBidOref standingBidRedeemer
+        Constraints.mustSpendScriptOutputUsingScriptRef standingBidOref standingBidRedeemer
+          (RefInput auctionMetadataUtxo)
 
       , -- Spend bidder deposit utxo, if present:
         mBidderDepositOref # maybe mempty
@@ -225,7 +253,6 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
               <> maybe mempty Array.singleton mBidderDepositUtxo
           )
       , Lookups.validator (unwrap validators).auctionEscrow
-      , Lookups.validator (unwrap validators).standingBid
       , isJust mBidderDepositUtxo # bool mempty
           (Lookups.validator (unwrap validators).bidderDeposit)
       ]
@@ -244,6 +271,8 @@ data ClaimAuctionLotBidderContractError
   | ClaimAuctionLotBidder_Error_CurrentTimeAfterPurchaseDeadline
   | ClaimAuctionLotBidder_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
   | ClaimAuctionLotBidder_Error_InvalidAuctionInfo (Array AuctionInfoValidationError)
+  | ClaimAuctionLotBidder_Error_MissingMetadataOref
+  | ClaimAuctionLotBidder_Error_CouldNotQueryAuctionMetadataUtxo
   | ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo
   | ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo
   | ClaimAuctionLotBidder_Error_EmptyStandingBid
@@ -278,23 +307,31 @@ instance ToContractError ClaimAuctionLotBidderContractError where
       { errorCode: "ClaimAuctionLotBidder05"
       , message: "Invalid auction info, errors: " <> show errors <> "."
       }
-    ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo ->
+    ClaimAuctionLotBidder_Error_MissingMetadataOref ->
       { errorCode: "ClaimAuctionLotBidder06"
+      , message: "Auction metadata output reference not provided."
+      }
+    ClaimAuctionLotBidder_Error_CouldNotQueryAuctionMetadataUtxo ->
+      { errorCode: "ClaimAuctionLotBidder07"
+      , message: "Could not query auction metadata utxo."
+      }
+    ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo ->
+      { errorCode: "ClaimAuctionLotBidder08"
       , message: "Could not find auction escrow utxo."
       }
     ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo ->
-      { errorCode: "ClaimAuctionLotBidder07"
+      { errorCode: "ClaimAuctionLotBidder09"
       , message: "Could not find standing bid utxo."
       }
     ClaimAuctionLotBidder_Error_EmptyStandingBid ->
-      { errorCode: "ClaimAuctionLotBidder08"
+      { errorCode: "ClaimAuctionLotBidder10"
       , message: "Standing bid is empty."
       }
     ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh ->
-      { errorCode: "ClaimAuctionLotBidder09"
+      { errorCode: "ClaimAuctionLotBidder11"
       , message: "Could not get buyer pkh."
       }
     ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh ->
-      { errorCode: "ClaimAuctionLotBidder10"
+      { errorCode: "ClaimAuctionLotBidder12"
       , message: "Could not get seller pkh."
       }
