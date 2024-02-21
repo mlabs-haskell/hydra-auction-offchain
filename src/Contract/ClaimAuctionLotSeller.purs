@@ -24,6 +24,7 @@ import Contract.PlutusData (Datum, Redeemer, toData, unitDatum)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
+import Contract.Time (from)
 import Contract.Transaction
   ( TransactionHash
   , TransactionInput
@@ -41,6 +42,7 @@ import Contract.TxConstraints
   , mustPayToScript
   , mustSpendScriptOutput
   , mustSpendScriptOutputUsingScriptRef
+  , mustValidateIn
   ) as Constraints
 import Contract.Utxos (getUtxo)
 import Contract.Value (TokenName, Value)
@@ -215,6 +217,9 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
 
       , -- This transaction must be signed by the seller:
         Constraints.mustBeSignedBy sellerPkh
+
+      , -- Set transaction validity interval (post-purchase period):
+        Constraints.mustValidateIn $ from nowTime
       ]
 
     lookups :: ScriptLookups Void
