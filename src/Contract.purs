@@ -67,6 +67,8 @@ import HydraAuctionOffchain.Contract.ClaimAuctionLotSeller
       , ClaimAuctionLotSeller_Error_CurrentTimeBeforePurchaseDeadline
       , ClaimAuctionLotSeller_Error_CouldNotBuildAuctionValidators
       , ClaimAuctionLotSeller_Error_InvalidAuctionInfo
+      , ClaimAuctionLotSeller_Error_MissingMetadataOref
+      , ClaimAuctionLotSeller_Error_CouldNotQueryAuctionMetadataUtxo
       , ClaimAuctionLotSeller_Error_CouldNotFindAuctionEscrowUtxo
       , ClaimAuctionLotSeller_Error_CouldNotFindStandingBidUtxo
       , ClaimAuctionLotSeller_Error_CouldNotFindBidderDepositUtxo
