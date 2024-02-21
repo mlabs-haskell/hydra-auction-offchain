@@ -10,7 +10,7 @@ The library can be used by importing a set of types and functions from `hydra-au
 as shown on a test page in the `/demo` folder.
 
 Operations are exposed as asynchronous functions (eponymous to names in this document) 
-that yield a value of type `ContractOutput` (see below).
+and most of them yield a value of type `ContractOutput` (see below).
 
 ### Wallet integration
 
@@ -199,7 +199,7 @@ Takes no parameters.
 
 Returns the list of `AuctionInfo` values, which consists of `AuctionTerms` 
 plus some on-chain auction parameters, 
-like auction the token currency symbol and addresses of auction validators.
+like auction currency symbol (auction ID) and addresses of auction validators.
 
 ### cleanupAuction
 
@@ -216,7 +216,7 @@ The one and only (but potentially absent) standing bid for an auction can be obt
 
 Takes `AuctionInfo` as an argument.
 
-Returns optionally missing `Maybe BidTerm` value.
+Returns optionally missing `Maybe BidTerms` value.
 
 ## Available to Sellers
 
@@ -230,9 +230,9 @@ Takes:
   1. Auction terms;
   2. Optional additional UTxOs that allow the seller to cover auction lot `Value` in some cases. This can be useful if some portion of the lot is, for example, locked at a multi-signature address.
 
-Returns `ActionInfo` along with the hash of an announcing transaction.
+Returns `AuctionInfo` along with the hash of an announcing transaction.
 
-This operation can error see type `AnnounceAuctionContractError`.
+This operation can error (see type `AnnounceAuctionContractError`).
 
 ### discoverBidders
 
