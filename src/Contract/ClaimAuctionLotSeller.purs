@@ -80,7 +80,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (withoutRefScript)
+import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
 
 claimAuctionLotSellerContract
   :: AuctionInfoExtended -> Contract (ContractOutput TransactionHash)
@@ -179,7 +179,7 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
     -- AuctionMetadata -----------------------------------------------
 
     auctionMetadataUtxo :: TransactionUnspentOutput
-    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withoutRefScript
+    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withEmptyPlutusV2Script
       auctionMetadataTxOut
 
     --

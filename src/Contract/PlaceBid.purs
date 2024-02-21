@@ -82,7 +82,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateNewBid
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (withoutRefScript)
+import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype PlaceBidContractParams = PlaceBidContractParams
@@ -191,7 +191,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     -- AuctionMetadata -----------------------------------------------
 
     auctionMetadataUtxo :: TransactionUnspentOutput
-    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withoutRefScript
+    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withEmptyPlutusV2Script
       auctionMetadataTxOut
 
     --
