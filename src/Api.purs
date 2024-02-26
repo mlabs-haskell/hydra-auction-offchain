@@ -32,6 +32,7 @@ import HydraAuctionOffchain.Contract
   ( announceAuctionContract
   , authorizeBiddersContract
   , claimAuctionLotBidderContract
+  , claimAuctionLotSellerContract
   , discoverBidders
   , discoverSellerSignature
   , enterAuctionContract
@@ -90,11 +91,11 @@ startBidding = contractGeneric Contract.startBiddingContract
 claimAuctionLotBidder :: Json -> Json -> Effect (Promise Json)
 claimAuctionLotBidder = contractGeneric Contract.claimAuctionLotBidderContract
 
+claimAuctionLotSeller :: Json -> Json -> Effect (Promise Json)
+claimAuctionLotSeller = contractGeneric Contract.claimAuctionLotSellerContract
+
 claimDepositLoser :: Json -> Json -> Effect (Promise Json)
 claimDepositLoser = contractGeneric contractStub
-
-claimAuctionLotSeller :: Json -> Json -> Effect (Promise Json)
-claimAuctionLotSeller = contractGeneric contractStub
 
 cleanupAuction :: Json -> Json -> Effect (Promise Json)
 cleanupAuction = contractGeneric contractStub

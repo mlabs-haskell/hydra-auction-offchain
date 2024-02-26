@@ -109,8 +109,6 @@ export const startBidding = async (
  * Claim the auction lot and deposit if the auction lot has not been purchased
  * by the winning bidder before purchase deadline, distribute the auction fees
  * to the delegates.
- *
- * NOTE: not implemented, returns stubbed data
  */
 export const claimAuctionLotSeller = async (
   walletApp: WalletApp,

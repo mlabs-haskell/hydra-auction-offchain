@@ -7,6 +7,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
       )
   , BidderDepositRedeemer
       ( UseDepositWinnerRedeemer
+      , ClaimDepositSellerRedeemer
       , ReclaimDepositLoserRedeemer
       , ReclaimDepositAuctionConcludedRedeemer
       , ReclaimDepositCleanupRedeemer
@@ -103,6 +104,7 @@ instance FromData StandingBidRedeemer where
 
 data BidderDepositRedeemer
   = UseDepositWinnerRedeemer
+  | ClaimDepositSellerRedeemer
   | ReclaimDepositLoserRedeemer
   | ReclaimDepositAuctionConcludedRedeemer
   | ReclaimDepositCleanupRedeemer
@@ -119,15 +121,18 @@ instance
     ( "UseDepositWinnerRedeemer"
         := PNil
         @@ Z
-        :+ "ReclaimDepositLoserRedeemer"
+        :+ "ClaimDepositSellerRedeemer"
         := PNil
         @@ (S Z)
-        :+ "ReclaimDepositAuctionConcludedRedeemer"
+        :+ "ReclaimDepositLoserRedeemer"
         := PNil
         @@ (S (S Z))
-        :+ "ReclaimDepositCleanupRedeemer"
+        :+ "ReclaimDepositAuctionConcludedRedeemer"
         := PNil
         @@ (S (S (S Z)))
+        :+ "ReclaimDepositCleanupRedeemer"
+        := PNil
+        @@ (S (S (S (S Z))))
         :+ PNil
     )
 
