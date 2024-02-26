@@ -1,4 +1,4 @@
-.PHONY: build bundle serve repl format check plutip-env
+.PHONY: build bundle serve repl format check plutip-env delegate-server
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
@@ -22,3 +22,11 @@ check:
 
 plutip-env:
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
+
+delegate-server:
+	spago run --main DelegateServer.Main --exec-args "\
+		--hydra-node 127.0.0.1:7000 \
+		--hydra-node-api 127.0.0.1:7001 \
+		--hydra-sk hydra.sk \
+		--cardano-sk cardano.sk \
+		--node-socket-preprod ~/state-node-preprod/node.socket"

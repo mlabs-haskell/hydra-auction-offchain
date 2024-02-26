@@ -1625,6 +1625,30 @@ let
         installPhase = "ln -s $src $out";
       };
 
+    "uri" = pkgs.stdenv.mkDerivation {
+        name = "uri";
+        version = "v9.0.0";
+        src = pkgs.fetchgit {
+          url = "https://github.com/purescript-contrib/purescript-uri.git";
+          rev = "6cb335da26c61dad7021281bdc7e4ac5136200fe";
+          sha256 = "05zf018s2zjd52dl5qyq9b6804yr0cw0dmqzd2klfwmdv6p4rnl3";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
+    "uuid" = pkgs.stdenv.mkDerivation {
+        name = "uuid";
+        version = "v9.0.0";
+        src = pkgs.fetchgit {
+          url = "https://github.com/megamaddu/purescript-uuid.git";
+          rev = "69128690b8686e3f819f1e107a960509664bca3f";
+          sha256 = "0msj229spkf5pg5yq0b3yxdjzb836c5nfng9h36vrgczd2n6gamn";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
     "validation" = pkgs.stdenv.mkDerivation {
         name = "validation";
         version = "v6.0.0";
