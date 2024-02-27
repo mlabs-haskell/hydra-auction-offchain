@@ -4,20 +4,27 @@ import Prelude
 
 import Ansi.Output (dim, withGraphics)
 import Data.Foldable (foldMap)
+import Data.Maybe (Maybe(Just, Nothing))
+import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
+import Data.Posix.Signal (toString) as Signal
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
 import Data.UInt (toString) as UInt
+import DelegateServer.ClientServer.Server (clientServer)
 import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
 import DelegateServer.State (AppState, initApp, runAppEff)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
+import Effect.Aff.AVar (AVar)
+import Effect.AVar (new, tryTake) as AVar
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Config (printHostPort)
 import Node.ChildProcess (defaultSpawnOptions, spawn, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
+import Node.Process (onSignal)
 import Node.Stream (onDataString)
 import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
@@ -26,20 +33,26 @@ main :: Effect Unit
 main = launchAff_ do
   appConfig <- liftEffect $ Optparse.execParser opts
   appState <- initApp appConfig
-  liftEffect $ startHydraNode appState
+  liftEffect $ startServices appState
 
 opts :: Optparse.ParserInfo AppConfig
 opts =
   Optparse.info (configParser <**> Optparse.helper) $ Optparse.fullDesc
     <> Optparse.header "delegate-server"
 
-startHydraNode :: AppState -> Effect Unit
-startHydraNode appState@{ config: appConfig } = do
+startServices :: AppState -> Effect Unit
+startServices appState@{ config: appConfig } = do
   hydraNodeProcess <- spawn "hydra-node" hydraNodeArgs defaultSpawnOptions
   onDataString (stdout hydraNodeProcess) Encoding.UTF8 \str -> do
     log $ withGraphics dim $ "[hydra-node] " <> str
     when (String.contains (Pattern "APIServerStarted") str) do
-      runAppEff appState $ mkHydraNodeApiWebSocket
+      runAppEff appState do
+        mkHydraNodeApiWebSocket do
+          liftEffect do
+            sem <- AVar.new unit
+            closeClientServer <- clientServer appState
+            let addCleanupHandler' sig = addCleanupHandler sig closeClientServer sem
+            addCleanupHandler' SIGINT *> addCleanupHandler' SIGTERM
   where
   peerArgs :: Array String
   peerArgs =
@@ -80,3 +93,15 @@ startHydraNode appState@{ config: appConfig } = do
       , "--hydra-scripts-tx-id"
       , appConst.hydraScriptsTxHash
       ]
+
+addCleanupHandler :: Signal -> (Effect Unit -> Effect Unit) -> AVar Unit -> Effect Unit
+addCleanupHandler sig closeClientServer sem =
+  onSignal sig $
+    AVar.tryTake sem >>= case _ of
+      Nothing ->
+        log $ "\nReceived " <> Signal.toString sig <>
+          ", not executing cleanup handlers twice, doing nothing."
+      Just _ -> do
+        log $ "\nReceived " <> Signal.toString sig <> ", executing cleanup handlers."
+        log "Stopping client server."
+        closeClientServer $ pure unit

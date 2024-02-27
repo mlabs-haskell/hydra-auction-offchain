@@ -25,8 +25,8 @@ type HydraNodeApiWebSocket =
   { initHead :: AppM Unit
   }
 
-mkHydraNodeApiWebSocket :: AppM HydraNodeApiWebSocket
-mkHydraNodeApiWebSocket = do
+mkHydraNodeApiWebSocket :: AppM Unit -> AppM HydraNodeApiWebSocket
+mkHydraNodeApiWebSocket onConnect = do
   appState <- ask
   ws /\ wsUrl <- mkWebSocket
     { hostPort: appState.config.hydraNodeApi
@@ -34,7 +34,7 @@ mkHydraNodeApiWebSocket = do
     , outMsgCodec: hydraNodeApiOutMsgCodec
     , runM: runAppEff appState
     }
-  ws.onConnect $ connectHandler wsUrl
+  ws.onConnect $ connectHandler wsUrl *> onConnect
   ws.onMessage messageHandler
   pure
     { initHead: ws.send HydraNodeApi_OutMsg_Init

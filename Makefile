@@ -25,6 +25,7 @@ plutip-env:
 
 delegate-server1:
 	spago run --main DelegateServer.Main --exec-args "\
+		--client-server-port :7010 \
 		--hydra-node-id A \
 		--hydra-node 127.0.0.1:7000 \
 		--hydra-node-api 127.0.0.1:7001 \
@@ -36,6 +37,7 @@ delegate-server1:
 
 delegate-server2:
 	spago run --main DelegateServer.Main --exec-args "\
+		--client-server-port :7011 \
 		--hydra-node-id B \
 		--hydra-node 127.0.0.1:7002 \
 		--hydra-node-api 127.0.0.1:7003 \

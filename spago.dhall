@@ -37,6 +37,7 @@
   , "parsing"
   , "partial"
   , "ply-ctl"
+  , "posix-types"
   , "prelude"
   , "profunctor"
   , "profunctor-lenses"

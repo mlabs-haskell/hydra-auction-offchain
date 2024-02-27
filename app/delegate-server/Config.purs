@@ -15,9 +15,13 @@ import HydraAuctionOffchain.Config (HostPort, readHostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import Node.Path (FilePath)
 import Options.Applicative as Optparse
+import Parsing (Parser, runParser)
+import URI.Port (Port)
+import URI.Port (parser) as Port
 
 type AppConfig =
-  { hydraNodeId :: String
+  { clientServerPort :: Port
+  , hydraNodeId :: String
   , hydraNode :: HostPort
   , hydraNodeApi :: HostPort
   , hydraPersistDir :: FilePath
@@ -29,6 +33,10 @@ type AppConfig =
 
 configParser :: Optparse.Parser AppConfig
 configParser = ado
+  clientServerPort <- Optparse.option parsePort $ fold
+    [ Optparse.long "client-server-port"
+    , Optparse.metavar "PORT"
+    ]
   hydraNodeId <- Optparse.strOption $ fold
     [ Optparse.long "hydra-node-id"
     , Optparse.metavar "STR"
@@ -53,17 +61,17 @@ configParser = ado
     [ Optparse.long "cardano-sk"
     , Optparse.metavar "FILE"
     ]
-  peers <- Optparse.many $ Optparse.option (parseJson "HydraHeadPeer" hydraHeadPeerCodec) $
-    fold
-      [ Optparse.long "peer"
-      , Optparse.metavar "JSON"
-      ]
+  peers <- Optparse.many $ Optparse.option parseHydraHeadPeer $ fold
+    [ Optparse.long "peer"
+    , Optparse.metavar "JSON"
+    ]
   nodeSocketPreprod <- Optparse.strOption $ fold
     [ Optparse.long "node-socket-preprod"
     , Optparse.metavar "FILE"
     ]
   in
-    { hydraNodeId
+    { clientServerPort
+    , hydraNodeId
     , hydraNode
     , hydraNodeApi
     , hydraPersistDir
@@ -78,8 +86,20 @@ parseHostPort =
   Optparse.eitherReader $ \str ->
     note ("Can't parse as HostPort: `" <> str <> "`") $ readHostPort str
 
+parseHydraHeadPeer :: Optparse.ReadM HydraHeadPeer
+parseHydraHeadPeer = parseJson "HydraHeadPeer" hydraHeadPeerCodec
+
 parseJson :: forall (a :: Type). String -> CA.JsonCodec a -> Optparse.ReadM a
 parseJson typeName codec =
   Optparse.eitherReader $ \str ->
     caDecodeString codec str # lmap \err ->
       "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> err
+
+parsePort :: Optparse.ReadM Port
+parsePort = parserReader "Port" Port.parser
+
+parserReader :: forall a. String -> Parser String a -> Optparse.ReadM a
+parserReader typeName parser =
+  Optparse.eitherReader $ \str ->
+    runParser str parser # lmap \err ->
+      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> show err
