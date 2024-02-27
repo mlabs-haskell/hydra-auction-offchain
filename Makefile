@@ -1,4 +1,4 @@
-.PHONY: build bundle serve repl format check plutip-env delegate-server
+.PHONY: build bundle serve repl format check plutip-env delegate-server1, delegate-server2
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
@@ -23,10 +23,24 @@ check:
 plutip-env:
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
 
-delegate-server:
+delegate-server1:
 	spago run --main DelegateServer.Main --exec-args "\
+		--hydra-node-id A \
 		--hydra-node 127.0.0.1:7000 \
 		--hydra-node-api 127.0.0.1:7001 \
+		--hydra-persist-dir ./hydra-persist \
 		--hydra-sk hydra.sk \
 		--cardano-sk cardano.sk \
-		--node-socket-preprod ~/state-node-preprod/node.socket"
+		--node-socket-preprod ~/state-node-preprod/node.socket \
+		--peer '{ \"hydraNode\": \"127.0.0.1:7002\", \"hydraVk\": \"hydra2.vk\", \"cardanoVk\": \"cardano2.vk\" }'"
+
+delegate-server2:
+	spago run --main DelegateServer.Main --exec-args "\
+		--hydra-node-id B \
+		--hydra-node 127.0.0.1:7002 \
+		--hydra-node-api 127.0.0.1:7003 \
+		--hydra-persist-dir ./hydra-persist \
+		--hydra-sk hydra2.sk \
+		--cardano-sk cardano2.sk \
+		--node-socket-preprod ~/state-node-preprod/node.socket \
+		--peer '{ \"hydraNode\": \"127.0.0.1:7000\", \"hydraVk\": \"hydra.vk\", \"cardanoVk\": \"cardano.vk\" }'"
