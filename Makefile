@@ -1,4 +1,4 @@
-.PHONY: build bundle serve repl format check plutip-env delegate-server1, delegate-server2
+.PHONY: build bundle serve repl format check plutip-env delegate-server1 delegate-server2
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
