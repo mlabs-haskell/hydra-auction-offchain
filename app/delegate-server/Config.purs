@@ -5,11 +5,18 @@ module DelegateServer.Config
 
 import Prelude
 
+import Contract.Prim.ByteArray (byteLength, hexToByteArray)
+import Contract.Transaction (TransactionInput)
 import Data.Array (fromFoldable) as Array
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (note)
 import Data.Foldable (fold)
+import Data.Maybe (Maybe(Just, Nothing))
+import Data.Newtype (wrap)
+import Data.String (Pattern(Pattern))
+import Data.String (split) as String
+import Data.UInt (fromString) as UInt
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
 import HydraAuctionOffchain.Config (HostPort, readHostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
@@ -20,7 +27,8 @@ import URI.Port (Port)
 import URI.Port (parser) as Port
 
 type AppConfig =
-  { clientServerPort :: Port
+  { auctionMetadataOref :: TransactionInput
+  , clientServerPort :: Port
   , hydraNodeId :: String
   , hydraNode :: HostPort
   , hydraNodeApi :: HostPort
@@ -29,10 +37,15 @@ type AppConfig =
   , cardanoSk :: FilePath
   , peers :: Array HydraHeadPeer
   , nodeSocketPreprod :: FilePath
+  , blockfrostApiKey :: String
   }
 
 configParser :: Optparse.Parser AppConfig
 configParser = ado
+  auctionMetadataOref <- Optparse.option parseOref $ fold
+    [ Optparse.long "auction-metadata-oref"
+    , Optparse.metavar "TXOUTREF"
+    ]
   clientServerPort <- Optparse.option parsePort $ fold
     [ Optparse.long "client-server-port"
     , Optparse.metavar "PORT"
@@ -69,8 +82,13 @@ configParser = ado
     [ Optparse.long "node-socket-preprod"
     , Optparse.metavar "FILE"
     ]
+  blockfrostApiKey <- Optparse.strOption $ fold
+    [ Optparse.long "blockfrost-api-key"
+    , Optparse.metavar "STR"
+    ]
   in
-    { clientServerPort
+    { auctionMetadataOref
+    , clientServerPort
     , hydraNodeId
     , hydraNode
     , hydraNodeApi
@@ -79,15 +97,25 @@ configParser = ado
     , cardanoSk
     , peers: Array.fromFoldable peers
     , nodeSocketPreprod
+    , blockfrostApiKey
     }
+
+----------------------------------------------------------------------
+-- Readers
 
 parseHostPort :: Optparse.ReadM HostPort
 parseHostPort =
   Optparse.eitherReader $ \str ->
     note ("Can't parse as HostPort: `" <> str <> "`") $ readHostPort str
 
-parseHydraHeadPeer :: Optparse.ReadM HydraHeadPeer
-parseHydraHeadPeer = parseJson "HydraHeadPeer" hydraHeadPeerCodec
+parserReader :: forall a. String -> Parser String a -> Optparse.ReadM a
+parserReader typeName parser =
+  Optparse.eitherReader $ \str ->
+    runParser str parser # lmap \err ->
+      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> show err
+
+parsePort :: Optparse.ReadM Port
+parsePort = parserReader "Port" Port.parser
 
 parseJson :: forall (a :: Type). String -> CA.JsonCodec a -> Optparse.ReadM a
 parseJson typeName codec =
@@ -95,11 +123,21 @@ parseJson typeName codec =
     caDecodeString codec str # lmap \err ->
       "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> err
 
-parsePort :: Optparse.ReadM Port
-parsePort = parserReader "Port" Port.parser
+parseHydraHeadPeer :: Optparse.ReadM HydraHeadPeer
+parseHydraHeadPeer = parseJson "HydraHeadPeer" hydraHeadPeerCodec
 
-parserReader :: forall a. String -> Parser String a -> Optparse.ReadM a
-parserReader typeName parser =
+parseOref :: Optparse.ReadM TransactionInput
+parseOref =
   Optparse.eitherReader $ \str ->
-    runParser str parser # lmap \err ->
-      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> show err
+    note ("Can't parse as TransactionInput: `" <> str <> "`") $ readOref str
+
+readOref :: String -> Maybe TransactionInput
+readOref str =
+  case String.split (Pattern "@") str of
+    [ txHashStr, idx ]
+      | Just txHash <- hexToByteArray txHashStr
+      , byteLength txHash == 32
+      , Just index <- UInt.fromString idx ->
+          Just $ wrap { transactionId: wrap txHash, index }
+    _ ->
+      Nothing

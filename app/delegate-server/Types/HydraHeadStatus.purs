@@ -1,0 +1,60 @@
+module DelegateServer.Types.HydraHeadStatus
+  ( HydraHeadStatus
+      ( HeadStatus_Unknown
+      , HeadStatus_Idle
+      , HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Closed
+      , HeadStatus_FanoutPossible
+      , HeadStatus_Final
+      )
+  , headStatusCodec
+  , printHeadStatus
+  , readHeadStatus
+  ) where
+
+import Prelude
+
+import Data.Codec.Argonaut (JsonCodec, prismaticCodec, string) as CA
+import Data.Generic.Rep (class Generic)
+import Data.Maybe (Maybe(Just))
+import Data.Show.Generic (genericShow)
+
+data HydraHeadStatus
+  = HeadStatus_Unknown
+  | HeadStatus_Idle
+  | HeadStatus_Initializing
+  | HeadStatus_Open
+  | HeadStatus_Closed
+  | HeadStatus_FanoutPossible
+  | HeadStatus_Final
+
+derive instance Generic HydraHeadStatus _
+
+instance Show HydraHeadStatus where
+  show = genericShow
+
+headStatusCodec :: CA.JsonCodec HydraHeadStatus
+headStatusCodec =
+  CA.prismaticCodec "HydraHeadStatus" (Just <<< readHeadStatus) printHeadStatus
+    CA.string
+
+readHeadStatus :: String -> HydraHeadStatus
+readHeadStatus = case _ of
+  "Idle" -> HeadStatus_Idle
+  "Initializing" -> HeadStatus_Initializing
+  "Open" -> HeadStatus_Open
+  "Closed" -> HeadStatus_Closed
+  "FanoutPossible" -> HeadStatus_FanoutPossible
+  "Final" -> HeadStatus_Final
+  _ -> HeadStatus_Unknown
+
+printHeadStatus :: HydraHeadStatus -> String
+printHeadStatus = case _ of
+  HeadStatus_Idle -> "Idle"
+  HeadStatus_Initializing -> "Initializing"
+  HeadStatus_Open -> "Open"
+  HeadStatus_Closed -> "Closed"
+  HeadStatus_FanoutPossible -> "FanoutPossible"
+  HeadStatus_Final -> "Final"
+  HeadStatus_Unknown -> "Unknown"

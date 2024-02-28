@@ -3,6 +3,8 @@ module DelegateServer.Main where
 import Prelude
 
 import Ansi.Output (dim, withGraphics)
+import Contract.Monad (ContractEnv, stopContractEnv)
+import Control.Monad.Reader (asks)
 import Data.Foldable (foldMap)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
@@ -13,15 +15,21 @@ import Data.UInt (toString) as UInt
 import DelegateServer.ClientServer.Server (clientServer)
 import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
+import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
-import DelegateServer.State (AppState, initApp, runAppEff)
+import DelegateServer.State (AppM, AppState, initApp, runAppEff, runContract, setAuctionInfo)
 import Effect (Effect)
-import Effect.Aff (launchAff_)
-import Effect.Aff.AVar (AVar)
 import Effect.AVar (new, tryTake) as AVar
+import Effect.Aff (launchAff_, runAff_)
+import Effect.Aff.AVar (AVar)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Config (printHostPort)
+import HydraAuctionOffchain.Contract.Types
+  ( ContractOutput(ContractOutputResult, ContractOutputError)
+  , contractErrorCodec
+  )
+import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import Node.ChildProcess (defaultSpawnOptions, spawn, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal)
@@ -40,6 +48,15 @@ opts =
   Optparse.info (configParser <**> Optparse.helper) $ Optparse.fullDesc
     <> Optparse.header "delegate-server"
 
+setAuction :: AppM Unit
+setAuction = do
+  auctionMetadataOref <- asks _.config.auctionMetadataOref
+  runContract (queryAuction auctionMetadataOref) >>= case _ of
+    ContractOutputResult auctionInfo ->
+      setAuctionInfo auctionInfo
+    ContractOutputError err -> do
+      liftEffect $ log $ caEncodeString contractErrorCodec err
+
 startServices :: AppState -> Effect Unit
 startServices appState@{ config: appConfig } = do
   hydraNodeProcess <- spawn "hydra-node" hydraNodeArgs defaultSpawnOptions
@@ -47,11 +64,15 @@ startServices appState@{ config: appConfig } = do
     log $ withGraphics dim $ "[hydra-node] " <> str
     when (String.contains (Pattern "APIServerStarted") str) do
       runAppEff appState do
-        mkHydraNodeApiWebSocket do
+        -- setAuction
+        mkHydraNodeApiWebSocket \ws ->
           liftEffect do
             sem <- AVar.new unit
-            closeClientServer <- clientServer appState
-            let addCleanupHandler' sig = addCleanupHandler sig closeClientServer sem
+            closeClientServer <- clientServer appState ws
+            let
+              closeWs = ws.baseWs.close
+              addCleanupHandler' sig =
+                addCleanupHandler sig closeClientServer closeWs appState.contractEnv sem
             addCleanupHandler' SIGINT *> addCleanupHandler' SIGTERM
   where
   peerArgs :: Array String
@@ -94,8 +115,14 @@ startServices appState@{ config: appConfig } = do
       , appConst.hydraScriptsTxHash
       ]
 
-addCleanupHandler :: Signal -> (Effect Unit -> Effect Unit) -> AVar Unit -> Effect Unit
-addCleanupHandler sig closeClientServer sem =
+addCleanupHandler
+  :: Signal
+  -> (Effect Unit -> Effect Unit)
+  -> Effect Unit
+  -> ContractEnv
+  -> AVar Unit
+  -> Effect Unit
+addCleanupHandler sig closeClientServer closeWs contractEnv sem =
   onSignal sig $
     AVar.tryTake sem >>= case _ of
       Nothing ->
@@ -105,3 +132,8 @@ addCleanupHandler sig closeClientServer sem =
         log $ "\nReceived " <> Signal.toString sig <> ", executing cleanup handlers."
         log "Stopping client server."
         closeClientServer $ pure unit
+        log "Closing hydra-node-api ws connection."
+        closeWs
+        log "Finalizing Contract environment."
+        flip runAff_ (stopContractEnv contractEnv) $
+          const (log "Successfully completed all cleanup actions -> exiting.")

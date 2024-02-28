@@ -7,7 +7,15 @@ module DelegateServer.WebSocket
 
 import Prelude
 
-import Ctl.Internal.JsWebSocket (_mkWebSocket, _onWsConnect, _onWsMessage, _wsSend)
+import Ctl.Internal.JsWebSocket
+  ( _mkWebSocket
+  , _onWsConnect
+  , _onWsError
+  , _onWsMessage
+  , _wsClose
+  , _wsFinalize
+  , _wsSend
+  )
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (either)
 import Data.Tuple (Tuple(Tuple))
@@ -15,13 +23,16 @@ import Data.Tuple.Nested (type (/\))
 import Data.UInt (toString) as UInt
 import Effect (Effect)
 import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Console (log)
 import HydraAuctionOffchain.Config (HostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString, caEncodeString)
 
 type WebSocket (m :: Type -> Type) (in_ :: Type) (out :: Type) =
   { onConnect :: m Unit -> m Unit
   , onMessage :: (in_ -> m Unit) -> m Unit
-  , send :: out -> m Unit
+  , onError :: (String -> m Unit) -> m Unit
+  , send :: out -> Effect Unit
+  , close :: Effect Unit
   }
 
 type WebSocketBuilder (m :: Type -> Type) (in_ :: Type) (out :: Type) =
@@ -47,15 +58,23 @@ mkWebSocket builder = do
     , onMessage:
         \callback ->
           liftEffect $
-            _onWsMessage ws wsLogger \msgRaw ->
+            _onWsMessage ws wsLogger \msgRaw -> do
+              log $ "_onWsMessage: " <> msgRaw
               either (\_ -> pure unit) (builder.runM <<< callback) $ caDecodeString
                 builder.inMsgCodec
                 msgRaw
 
+    , onError:
+        \callback ->
+          void $ liftEffect $
+            _onWsError ws (builder.runM <<< callback)
+
     , send:
         \msg ->
-          liftEffect $
-            _wsSend ws wsLogger (caEncodeString builder.outMsgCodec msg)
+          _wsSend ws wsLogger (caEncodeString builder.outMsgCodec msg)
+
+    , close:
+        _wsFinalize ws *> _wsClose ws
     }
   where
   wsUrl :: String

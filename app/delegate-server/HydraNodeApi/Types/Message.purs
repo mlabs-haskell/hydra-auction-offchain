@@ -1,11 +1,17 @@
 module DelegateServer.HydraNodeApi.Types.Message
-  ( HydraNodeApi_InMsg
-      ( HydraNodeApi_InMsg_PeerConnected
-      , HydraNodeApi_InMsg_PeerDisconnected
+  ( GreetingsMessage
+  , HydraNodeApi_InMessage
+      ( In_Greetings
+      , In_PeerConnected
+      , In_PeerDisconnected
+      , In_HeadIsInitializing
       )
-  , HydraNodeApi_OutMsg(HydraNodeApi_OutMsg_Init)
-  , hydraNodeApiInMsgCodec
-  , hydraNodeApiOutMsgCodec
+  , HydraNodeApi_OutMessage
+      ( Out_Init
+      )
+  , PeerConnMessage
+  , hydraNodeApiInMessageCodec
+  , hydraNodeApiOutMessageCodec
   ) where
 
 import Prelude
@@ -17,49 +23,74 @@ import Data.Either (Either(Left, Right))
 import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.Lib.Codec (fixTaggedSumCodec)
+import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------
 -- Incoming messages
 
-data HydraNodeApi_InMsg
-  = HydraNodeApi_InMsg_PeerConnected { peer :: String }
-  | HydraNodeApi_InMsg_PeerDisconnected { peer :: String }
+data HydraNodeApi_InMessage
+  = In_Greetings GreetingsMessage
+  | In_PeerConnected PeerConnMessage
+  | In_PeerDisconnected PeerConnMessage
+  | In_HeadIsInitializing
 
-hydraNodeApiInMsgCodec :: CA.JsonCodec HydraNodeApi_InMsg
-hydraNodeApiInMsgCodec =
+hydraNodeApiInMessageCodec :: CA.JsonCodec HydraNodeApi_InMessage
+hydraNodeApiInMessageCodec =
   fixTaggedSumCodec $
     dimap toVariant fromVariant
       ( CAV.variantMatch
-          { "PeerConnected":
-              Right $ CA.object "PeerConnected" $ CAR.record
-                { peer: CA.string
-                }
-          , "PeerDisconnected":
-              Right $ CA.object "PeerDisconnected" $ CAR.record
-                { peer: CA.string
-                }
+          { "Greetings": Right greetingsMessageCodec
+          , "PeerConnected": Right peerConnMessageCodec
+          , "PeerDisconnected": Right peerConnMessageCodec
+          , "HeadIsInitializing": Left unit
           }
       )
   where
   toVariant = case _ of
-    HydraNodeApi_InMsg_PeerConnected rec ->
+    In_Greetings rec ->
+      Variant.inj (Proxy :: Proxy "Greetings") rec
+    In_PeerConnected rec ->
       Variant.inj (Proxy :: Proxy "PeerConnected") rec
-    HydraNodeApi_InMsg_PeerDisconnected rec ->
+    In_PeerDisconnected rec ->
       Variant.inj (Proxy :: Proxy "PeerDisconnected") rec
+    In_HeadIsInitializing ->
+      Variant.inj (Proxy :: Proxy "HeadIsInitializing") unit
 
   fromVariant = Variant.match
-    { "PeerConnected": HydraNodeApi_InMsg_PeerConnected
-    , "PeerDisconnected": HydraNodeApi_InMsg_PeerDisconnected
+    { "Greetings": In_Greetings
+    , "PeerConnected": In_PeerConnected
+    , "PeerDisconnected": In_PeerDisconnected
+    , "HeadIsInitializing": const In_HeadIsInitializing
+    }
+
+type PeerConnMessage =
+  { peer :: String
+  }
+
+peerConnMessageCodec :: CA.JsonCodec PeerConnMessage
+peerConnMessageCodec =
+  CA.object "PeerConnMessage" $ CAR.record
+    { peer: CA.string
+    }
+
+type GreetingsMessage =
+  { headStatus :: HydraHeadStatus
+  }
+
+greetingsMessageCodec :: CA.JsonCodec GreetingsMessage
+greetingsMessageCodec =
+  CA.object "GreetingsMessage" $ CAR.record
+    { headStatus: headStatusCodec
     }
 
 ----------------------------------------------------------------------
 -- Outcoming messages
 
-data HydraNodeApi_OutMsg = HydraNodeApi_OutMsg_Init
+data HydraNodeApi_OutMessage = Out_Init
 
-hydraNodeApiOutMsgCodec :: CA.JsonCodec HydraNodeApi_OutMsg
-hydraNodeApiOutMsgCodec =
+hydraNodeApiOutMessageCodec :: CA.JsonCodec HydraNodeApi_OutMessage
+hydraNodeApiOutMessageCodec =
   fixTaggedSumCodec $
     dimap toVariant fromVariant
       ( CAV.variantMatch
@@ -68,9 +99,9 @@ hydraNodeApiOutMsgCodec =
       )
   where
   toVariant = case _ of
-    HydraNodeApi_OutMsg_Init ->
+    Out_Init ->
       Variant.inj (Proxy :: Proxy "Init") unit
 
   fromVariant = Variant.match
-    { "Init": const HydraNodeApi_OutMsg_Init
+    { "Init": const Out_Init
     }

@@ -1,5 +1,6 @@
 module DelegateServer.HydraNodeApi.WebSocket
-  ( mkHydraNodeApiWebSocket
+  ( HydraNodeApiWebSocket
+  , mkHydraNodeApiWebSocket
   ) where
 
 import Prelude
@@ -9,36 +10,50 @@ import Data.Array (length) as Array
 import Data.Set (delete, insert, member, size) as Set
 import Data.Tuple.Nested ((/\))
 import DelegateServer.HydraNodeApi.Types.Message
-  ( HydraNodeApi_InMsg(HydraNodeApi_InMsg_PeerConnected, HydraNodeApi_InMsg_PeerDisconnected)
-  , HydraNodeApi_OutMsg(HydraNodeApi_OutMsg_Init)
-  , hydraNodeApiInMsgCodec
-  , hydraNodeApiOutMsgCodec
+  ( GreetingsMessage
+  , HydraNodeApi_InMessage
+      ( In_Greetings
+      , In_PeerConnected
+      , In_PeerDisconnected
+      , In_HeadIsInitializing
+      )
+  , HydraNodeApi_OutMessage(Out_Init)
+  , PeerConnMessage
+  , hydraNodeApiInMessageCodec
+  , hydraNodeApiOutMessageCodec
   )
 import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.State (AppM, runAppEff)
-import DelegateServer.WebSocket (mkWebSocket)
+import DelegateServer.State (AppM, runAppEff, setHeadStatus)
+import DelegateServer.Types.HydraHeadStatus (printHeadStatus)
+import DelegateServer.WebSocket (WebSocket, mkWebSocket)
+import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 
 type HydraNodeApiWebSocket =
-  { initHead :: AppM Unit
+  { baseWs :: WebSocket AppM HydraNodeApi_InMessage HydraNodeApi_OutMessage
+  , initHead :: Effect Unit
   }
 
-mkHydraNodeApiWebSocket :: AppM Unit -> AppM HydraNodeApiWebSocket
+mkHydraNodeApiWebSocket :: (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
 mkHydraNodeApiWebSocket onConnect = do
   appState <- ask
   ws /\ wsUrl <- mkWebSocket
     { hostPort: appState.config.hydraNodeApi
-    , inMsgCodec: hydraNodeApiInMsgCodec
-    , outMsgCodec: hydraNodeApiOutMsgCodec
+    , inMsgCodec: hydraNodeApiInMessageCodec
+    , outMsgCodec: hydraNodeApiOutMessageCodec
     , runM: runAppEff appState
     }
-  ws.onConnect $ connectHandler wsUrl *> onConnect
+  let
+    hydraNodeApiWs :: HydraNodeApiWebSocket
+    hydraNodeApiWs =
+      { initHead: ws.send Out_Init
+      , baseWs: ws
+      }
+  ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
   ws.onMessage messageHandler
-  pure
-    { initHead: ws.send HydraNodeApi_OutMsg_Init
-    }
+  ws.onError errorHandler
 
 ----------------------------------------------------------------------
 -- Handlers
@@ -48,15 +63,29 @@ connectHandler wsUrl =
   liftEffect do
     log $ "Connected to hydra-node-api ws server (" <> wsUrl <> ")."
 
-messageHandler :: HydraNodeApi_InMsg -> AppM Unit
-messageHandler = case _ of
-  HydraNodeApi_InMsg_PeerConnected { peer } ->
-    msgPeerConnectedHandler peer
-  HydraNodeApi_InMsg_PeerDisconnected { peer } ->
-    msgPeerDisconnectedHandler peer
+errorHandler :: String -> AppM Unit
+errorHandler err =
+  liftEffect do
+    log $ "hydra-node-api ws error: " <> err
 
-msgPeerConnectedHandler :: String -> AppM Unit
-msgPeerConnectedHandler peer = do
+messageHandler :: HydraNodeApi_InMessage -> AppM Unit
+messageHandler = case _ of
+  In_Greetings msg ->
+    msgGreetingsHandler msg
+  In_PeerConnected msg ->
+    msgPeerConnectedHandler msg
+  In_PeerDisconnected msg ->
+    msgPeerDisconnectedHandler msg
+  In_HeadIsInitializing ->
+    msgHeadIsInitializingHandler
+
+msgGreetingsHandler :: GreetingsMessage -> AppM Unit
+msgGreetingsHandler { headStatus } = do
+  setHeadStatus headStatus
+  liftEffect $ log $ "New head status: " <> printHeadStatus headStatus <> "."
+
+msgPeerConnectedHandler :: PeerConnMessage -> AppM Unit
+msgPeerConnectedHandler { peer } = do
   appState <- ask
   liftAff $ modifyAVar_ appState.livePeersAVar \livePeers ->
     case Set.member peer livePeers, peer /= appState.config.hydraNodeId of
@@ -68,8 +97,8 @@ msgPeerConnectedHandler peer = do
         pure livePeers'
       _, _ -> pure livePeers
 
-msgPeerDisconnectedHandler :: String -> AppM Unit
-msgPeerDisconnectedHandler peer = do
+msgPeerDisconnectedHandler :: PeerConnMessage -> AppM Unit
+msgPeerDisconnectedHandler { peer } = do
   appState <- ask
   liftAff $ modifyAVar_ appState.livePeersAVar \livePeers ->
     case Set.member peer livePeers, peer /= appState.config.hydraNodeId of
@@ -81,3 +110,6 @@ msgPeerDisconnectedHandler peer = do
           <> ")."
         pure livePeers'
       _, _ -> pure livePeers
+
+msgHeadIsInitializingHandler :: AppM Unit
+msgHeadIsInitializingHandler = pure unit
