@@ -48,7 +48,6 @@
   , "transformers"
   , "tuples"
   , "uint"
-  , "undefined"
   , "uri"
   , "uuid"
   , "validation"

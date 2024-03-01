@@ -64,7 +64,7 @@ import Data.Codec.Argonaut
   ) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Either (fromRight)
+import Data.Either (hush)
 import Data.Foldable (foldMap)
 import Data.Maybe (Maybe)
 import Data.Newtype (unwrap, wrap)
@@ -73,8 +73,8 @@ import Data.Tuple.Nested ((/\))
 import Data.UInt (fromString, toString) as UInt
 import Effect (Effect)
 import Effect.Aff (Aff)
+import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import Type.Proxy (Proxy(Proxy))
-import Undefined (undefined)
 
 addressCodec :: NetworkId -> CA.JsonCodec Address
 addressCodec network =
@@ -153,7 +153,7 @@ toJs :: forall (a :: Type). HasJson a => a -> Json
 toJs = CA.encode (jsonCodec (Proxy :: Proxy a))
 
 fromJs :: forall (a :: Type). HasJson a => Json -> a
-fromJs = fromRight undefined <<< CA.decode (jsonCodec (Proxy :: Proxy a))
+fromJs = fromJustWithErr "fromJs" <<< hush <<< CA.decode (jsonCodec (Proxy :: Proxy a))
 
 liftAff1
   :: forall (a :: Type) (b :: Type)

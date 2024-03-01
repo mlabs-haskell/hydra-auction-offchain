@@ -17,7 +17,16 @@ import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
-import DelegateServer.State (AppM, AppState, initApp, runAppEff, runContract, setAuctionInfo)
+import DelegateServer.Lib.Json (printJson)
+import DelegateServer.State
+  ( AppM
+  , AppState
+  , initApp
+  , runApp
+  , runAppEff
+  , runContractExitOnErr
+  , setAuctionInfo
+  )
 import Effect (Effect)
 import Effect.AVar (new, tryTake) as AVar
 import Effect.Aff (launchAff_, runAff_)
@@ -25,11 +34,7 @@ import Effect.Aff.AVar (AVar)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Config (printHostPort)
-import HydraAuctionOffchain.Contract.Types
-  ( ContractOutput(ContractOutputResult, ContractOutputError)
-  , contractErrorCodec
-  )
-import HydraAuctionOffchain.Lib.Json (caEncodeString)
+import HydraAuctionOffchain.Contract.Types (auctionInfoExtendedCodec)
 import Node.ChildProcess (defaultSpawnOptions, spawn, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal)
@@ -41,6 +46,7 @@ main :: Effect Unit
 main = launchAff_ do
   appConfig <- liftEffect $ Optparse.execParser opts
   appState <- initApp appConfig
+  runApp appState setAuction
   liftEffect $ startServices appState
 
 opts :: Optparse.ParserInfo AppConfig
@@ -50,12 +56,11 @@ opts =
 
 setAuction :: AppM Unit
 setAuction = do
-  auctionMetadataOref <- asks _.config.auctionMetadataOref
-  runContract (queryAuction auctionMetadataOref) >>= case _ of
-    ContractOutputResult auctionInfo ->
-      setAuctionInfo auctionInfo
-    ContractOutputError err -> do
-      liftEffect $ log $ caEncodeString contractErrorCodec err
+  { auctionMetadataOref } <- asks _.config
+  auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
+  setAuctionInfo auctionInfo
+  liftEffect $ log $ "Set valid auction: " <> printJson auctionInfoExtendedCodec
+    auctionInfo
 
 startServices :: AppState -> Effect Unit
 startServices appState@{ config: appConfig } = do
@@ -64,7 +69,6 @@ startServices appState@{ config: appConfig } = do
     log $ withGraphics dim $ "[hydra-node] " <> str
     when (String.contains (Pattern "APIServerStarted") str) do
       runAppEff appState do
-        -- setAuction
         mkHydraNodeApiWebSocket \ws ->
           liftEffect do
             sem <- AVar.new unit

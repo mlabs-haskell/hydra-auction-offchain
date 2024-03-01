@@ -1,6 +1,7 @@
 module HydraAuctionOffchain.Helpers
   ( errV
   , exceptNoteE
+  , fromJustWithErr
   , getInlineDatum
   , getTxOutsAt
   , liftEitherShow
@@ -31,13 +32,13 @@ import Ctl.Internal.Plutus.Types.Address (class PlutusAddress)
 import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Map (toUnfoldable) as Map
-import Data.Maybe (Maybe(Just, Nothing), fromJust)
+import Data.Maybe (Maybe(Just, Nothing), fromJust, fromMaybe')
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Data.Validation.Semigroup (V, invalid)
 import Effect.Exception (Error, error)
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 
 tokenNameFromAsciiUnsafe :: String -> TokenName
 tokenNameFromAsciiUnsafe tokenName =
@@ -50,6 +51,9 @@ exceptNoteE :: forall a e e' m. MonadError e' m => m a -> e -> ExceptT e m a
 exceptNoteE action err = (hush <$> try action) !? err
 
 infixl 9 exceptNoteE as !*
+
+fromJustWithErr :: forall a. String -> Maybe a -> a
+fromJustWithErr message = fromMaybe' (\_ -> unsafeCrashWith $ "fromJust: " <> message)
 
 errV :: forall e. Boolean -> e -> V (Array e) Unit
 errV x error = if x then pure unit else invalid [ error ]

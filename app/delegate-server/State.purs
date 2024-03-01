@@ -7,6 +7,7 @@ module DelegateServer.State
   , runApp
   , runAppEff
   , runContract
+  , runContractExitOnErr
   , setAuctionInfo
   , setHeadStatus
   ) where
@@ -37,7 +38,15 @@ import Effect.Aff (Aff, launchAff)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar (empty, new, read, tryPut) as AVar
 import Effect.Aff.Class (liftAff)
-import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended)
+import Effect.Class (liftEffect)
+import Effect.Console (log)
+import HydraAuctionOffchain.Contract.Types
+  ( AuctionInfoExtended
+  , ContractOutput(ContractOutputError, ContractOutputResult)
+  , contractErrorCodec
+  )
+import HydraAuctionOffchain.Lib.Json (caEncodeString)
+import Node.Process (exit)
 
 type AppM (a :: Type) = ReaderT AppState Aff a
 
@@ -51,6 +60,15 @@ runContract :: forall (a :: Type). Contract a -> AppM a
 runContract contract = do
   { contractEnv } <- ask
   liftAff $ runContractInEnv contractEnv contract
+
+runContractExitOnErr :: forall (a :: Type). Contract (ContractOutput a) -> AppM a
+runContractExitOnErr =
+  runContract >=> case _ of
+    ContractOutputResult res -> pure res
+    ContractOutputError err ->
+      liftEffect do
+        log $ caEncodeString contractErrorCodec err
+        exit one
 
 type AppState =
   { config :: AppConfig
@@ -107,7 +125,7 @@ mkContractParams blockfrostApiKey =
   , logLevel: Trace
   , walletSpec: Nothing
   , customLogger: Nothing
-  , suppressLogs: false
+  , suppressLogs: true
   , hooks: emptyHooks
   , timeParams: defaultTimeParams
   , synchronizationParams: disabledSynchronizationParams
