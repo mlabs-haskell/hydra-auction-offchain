@@ -1,6 +1,7 @@
 module DelegateServer.State
   ( AppM
   , AppState
+  , askAuctionInfo
   , askHeadStatus
   , becomeCommitLeader
   , initApp
@@ -10,6 +11,7 @@ module DelegateServer.State
   , runContractExitOnErr
   , setAuctionInfo
   , setHeadStatus
+  , whenCommitLeader
   ) where
 
 import Prelude
@@ -84,6 +86,9 @@ setAuctionInfo auctionInfo =
   asks _.auctionInfo >>=
     (void <<< liftAff <<< AVar.tryPut auctionInfo)
 
+askAuctionInfo :: AppM AuctionInfoExtended
+askAuctionInfo = (liftAff <<< AVar.read) =<< asks _.auctionInfo
+
 askHeadStatus :: AppM HydraHeadStatus
 askHeadStatus = (liftAff <<< AVar.read) =<< asks _.headStatus
 
@@ -96,6 +101,12 @@ becomeCommitLeader :: AppM Unit
 becomeCommitLeader =
   asks _.isCommitLeader >>=
     (liftAff <<< flip modifyAVar_ (const (pure true)))
+
+whenCommitLeader :: AppM Unit -> AppM Unit
+whenCommitLeader action = do
+  avar <- asks _.isCommitLeader
+  commitLeader <- liftAff $ AVar.read avar
+  when commitLeader action
 
 initApp :: AppConfig -> Aff AppState
 initApp config = do

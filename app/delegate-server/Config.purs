@@ -133,7 +133,7 @@ parseOref =
 
 readOref :: String -> Maybe TransactionInput
 readOref str =
-  case String.split (Pattern "@") str of
+  case String.split (Pattern "#") str of
     [ txHashStr, idx ]
       | Just txHash <- hexToByteArray txHashStr
       , byteLength txHash == 32

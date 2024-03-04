@@ -1,12 +1,15 @@
 module DelegateServer.Lib.Json
   ( printJson
+  , printJsonUsingCodec
   ) where
 
 import Prelude
 
-import Data.Argonaut (stringifyWithIndent) as A
+import Data.Argonaut (Json, stringifyWithIndent) as A
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 
-printJson :: forall (a :: Type). CA.JsonCodec a -> a -> String
-printJson codec =
-  A.stringifyWithIndent 2 <<< CA.encode codec
+printJson :: A.Json -> String
+printJson = A.stringifyWithIndent 2
+
+printJsonUsingCodec :: forall (a :: Type). CA.JsonCodec a -> a -> String
+printJsonUsingCodec codec = printJson <<< CA.encode codec

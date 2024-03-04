@@ -4,7 +4,7 @@ module DelegateServer.ClientServer.Handlers.MoveBidL2
 
 import Prelude
 
-import DelegateServer.Contract.CommitStandingBid (commitStandingBid)
+import DelegateServer.Contract.CommitBid (commitStandingBid)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (AppM, askHeadStatus, becomeCommitLeader)
 import DelegateServer.Types.HydraHeadStatus

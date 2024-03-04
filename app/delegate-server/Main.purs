@@ -17,7 +17,7 @@ import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
-import DelegateServer.Lib.Json (printJson)
+import DelegateServer.Lib.Json (printJsonUsingCodec)
 import DelegateServer.State
   ( AppM
   , AppState
@@ -59,7 +59,7 @@ setAuction = do
   { auctionMetadataOref } <- asks _.config
   auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
   setAuctionInfo auctionInfo
-  liftEffect $ log $ "Set valid auction: " <> printJson auctionInfoExtendedCodec
+  liftEffect $ log $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
     auctionInfo
 
 startServices :: AppState -> Effect Unit

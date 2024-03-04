@@ -9,6 +9,7 @@ import Control.Monad.Reader (ask)
 import Data.Array (length) as Array
 import Data.Set (delete, insert, member, size) as Set
 import Data.Tuple.Nested ((/\))
+import DelegateServer.Contract.CommitBid (commitStandingBid)
 import DelegateServer.HydraNodeApi.Types.Message
   ( GreetingsMessage
   , HydraNodeApi_InMessage
@@ -23,8 +24,11 @@ import DelegateServer.HydraNodeApi.Types.Message
   , hydraNodeApiOutMessageCodec
   )
 import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.State (AppM, runAppEff, setHeadStatus)
-import DelegateServer.Types.HydraHeadStatus (printHeadStatus)
+import DelegateServer.State (AppM, runAppEff, setHeadStatus, whenCommitLeader)
+import DelegateServer.Types.HydraHeadStatus
+  ( HydraHeadStatus(HeadStatus_Initializing)
+  , printHeadStatus
+  )
 import DelegateServer.WebSocket (WebSocket, mkWebSocket)
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
@@ -52,7 +56,7 @@ mkHydraNodeApiWebSocket onConnect = do
       , baseWs: ws
       }
   ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
-  ws.onMessage messageHandler
+  ws.onMessage (messageHandler hydraNodeApiWs)
   ws.onError errorHandler
 
 ----------------------------------------------------------------------
@@ -68,8 +72,8 @@ errorHandler err =
   liftEffect do
     log $ "hydra-node-api ws error: " <> err
 
-messageHandler :: HydraNodeApi_InMessage -> AppM Unit
-messageHandler = case _ of
+messageHandler :: HydraNodeApiWebSocket -> HydraNodeApi_InMessage -> AppM Unit
+messageHandler _ws = case _ of
   In_Greetings msg ->
     msgGreetingsHandler msg
   In_PeerConnected msg ->
@@ -112,4 +116,6 @@ msgPeerDisconnectedHandler { peer } = do
       _, _ -> pure livePeers
 
 msgHeadIsInitializingHandler :: AppM Unit
-msgHeadIsInitializingHandler = pure unit
+msgHeadIsInitializingHandler = do
+  setHeadStatus HeadStatus_Initializing
+  whenCommitLeader commitStandingBid
