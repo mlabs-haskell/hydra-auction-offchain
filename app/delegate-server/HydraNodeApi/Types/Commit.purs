@@ -75,7 +75,7 @@ mkStandingBidCommit (oref /\ txOut) standingBidValidator = do
               , description: "Standing bid validator"
               , "type": PlutusScriptV2
               }
-          , datum: plutusDataToCbor $ unwrap datum
+          , datum: Nothing
           , redeemer: plutusDataToCbor $ toData MoveToHydraRedeemer
           }
     }
@@ -163,7 +163,7 @@ txOutWithWitnessCodec =
 
 type ScriptWitness =
   { plutusV2Script :: PlutusV2Script
-  , datum :: ByteArray
+  , datum :: Maybe ByteArray
   , redeemer :: ByteArray
   }
 
@@ -171,7 +171,7 @@ scriptWitnessCodec :: CA.JsonCodec ScriptWitness
 scriptWitnessCodec =
   CA.object "ScriptWitness" $ CAR.record
     { plutusV2Script: plutusV2ScriptCodec
-    , datum: byteArrayCodec
+    , datum: CA.maybe byteArrayCodec
     , redeemer: byteArrayCodec
     }
 

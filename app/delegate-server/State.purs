@@ -20,6 +20,8 @@ import Contract.Config
   ( ContractParams
   , LogLevel(Trace)
   , NetworkId(TestnetId)
+  , PrivatePaymentKeySource(PrivatePaymentKeyFile)
+  , WalletSpec(UseKeys)
   , blockfrostPublicPreprodServerConfig
   , defaultConfirmTxDelay
   , defaultTimeParams
@@ -110,7 +112,7 @@ whenCommitLeader action = do
 
 initApp :: AppConfig -> Aff AppState
 initApp config = do
-  contractEnv <- mkContractEnv $ mkContractParams config.blockfrostApiKey
+  contractEnv <- mkContractEnv $ mkContractParams config
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeersAVar <- AVar.new Set.empty
@@ -124,17 +126,17 @@ initApp config = do
     , isCommitLeader
     }
 
-mkContractParams :: String -> ContractParams
-mkContractParams blockfrostApiKey =
+mkContractParams :: AppConfig -> ContractParams
+mkContractParams config =
   { backendParams:
       mkBlockfrostBackendParams
         { blockfrostConfig: blockfrostPublicPreprodServerConfig
-        , blockfrostApiKey: Just blockfrostApiKey
+        , blockfrostApiKey: Just config.blockfrostApiKey
         , confirmTxDelay: defaultConfirmTxDelay
         }
   , networkId: TestnetId
   , logLevel: Trace
-  , walletSpec: Nothing
+  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile config.cardanoSk) Nothing
   , customLogger: Nothing
   , suppressLogs: true
   , hooks: emptyHooks

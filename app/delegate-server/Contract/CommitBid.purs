@@ -4,9 +4,19 @@ module DelegateServer.Contract.CommitBid
 
 import Contract.Prelude
 
-import Contract.Transaction (submit)
+import Contract.Monad (Contract)
+import Contract.Transaction
+  ( BalancedSignedTransaction(BalancedSignedTransaction)
+  , _vkeys
+  , _witnessSet
+  , signTransaction
+  , submit
+  )
 import Control.Monad.Reader (asks)
 import Data.Argonaut (encodeJson)
+import Data.Lens ((.~))
+import Data.Lens.Common (simple)
+import Data.Lens.Iso.Newtype (_Newtype)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.HydraNodeApi.Types.Commit (mkStandingBidCommit)
 import DelegateServer.Lib.Json (printJson)
@@ -29,7 +39,14 @@ commitStandingBid = do
         let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
         liftAff (commit serverConfig commitUtxo) >>= case _ of
           Right draftCommitTx -> do
-            txHash <- submit $ wrap draftCommitTx.cborHex
-            liftEffect $ log $ "Submitted commit tx, hash: " <> show txHash <> "."
+            let commitTx = BalancedSignedTransaction draftCommitTx.cborHex
+            signedTx <- reSignTransaction commitTx
+            txHash <- submit signedTx
+            liftEffect $ log $ "Submitted commit tx: " <> show txHash <> "."
           Left err -> liftEffect $ log $ show err
       _ -> pure unit
+
+reSignTransaction :: BalancedSignedTransaction -> Contract BalancedSignedTransaction
+reSignTransaction tx =
+  signTransaction
+    (tx # simple _Newtype <<< _witnessSet <<< _vkeys .~ Nothing)
