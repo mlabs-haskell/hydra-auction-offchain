@@ -5,6 +5,7 @@ module DelegateServer.HydraNodeApi.Types.Message
       , In_PeerConnected
       , In_PeerDisconnected
       , In_HeadIsInitializing
+      , In_Committed
       )
   , HydraNodeApi_OutMessage
       ( Out_Init
@@ -34,6 +35,7 @@ data HydraNodeApi_InMessage
   | In_PeerConnected PeerConnMessage
   | In_PeerDisconnected PeerConnMessage
   | In_HeadIsInitializing
+  | In_Committed
 
 hydraNodeApiInMessageCodec :: CA.JsonCodec HydraNodeApi_InMessage
 hydraNodeApiInMessageCodec =
@@ -44,6 +46,7 @@ hydraNodeApiInMessageCodec =
           , "PeerConnected": Right peerConnMessageCodec
           , "PeerDisconnected": Right peerConnMessageCodec
           , "HeadIsInitializing": Left unit
+          , "Committed": Left unit
           }
       )
   where
@@ -56,12 +59,15 @@ hydraNodeApiInMessageCodec =
       Variant.inj (Proxy :: Proxy "PeerDisconnected") rec
     In_HeadIsInitializing ->
       Variant.inj (Proxy :: Proxy "HeadIsInitializing") unit
+    In_Committed ->
+      Variant.inj (Proxy :: Proxy "Committed") unit
 
   fromVariant = Variant.match
     { "Greetings": In_Greetings
     , "PeerConnected": In_PeerConnected
     , "PeerDisconnected": In_PeerDisconnected
     , "HeadIsInitializing": const In_HeadIsInitializing
+    , "Committed": const In_Committed
     }
 
 type PeerConnMessage =

@@ -25,7 +25,7 @@ plutip-env:
 
 delegate-server1:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref 447bf24bbfa587a1d1a8e5ffae609a7834bb709115729096690cd85c8a2b2028#0 \
+		--auction-metadata-oref f103be75d3cd9c40de4c3650588e4c3f998dc129bbdf6fa7da0bdc2f7c9f364e#0 \
 		--client-server-port :7010 \
 		--hydra-node-id A \
 		--hydra-node 127.0.0.1:7000 \
@@ -33,13 +33,14 @@ delegate-server1:
 		--hydra-persist-dir ./hydra-persist \
 		--hydra-sk hydra.sk \
 		--cardano-sk cardano.sk \
+		--wallet-sk wallet.sk \
 		--node-socket-preprod ~/state-node-preprod/node.socket \
 		--blockfrost-api-key ${BLOCKFROST_API_KEY} \
 		--peer '{ \"hydraNode\": \"127.0.0.1:7002\", \"hydraVk\": \"hydra2.vk\", \"cardanoVk\": \"cardano2.vk\" }'"
 
 delegate-server2:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref 447bf24bbfa587a1d1a8e5ffae609a7834bb709115729096690cd85c8a2b2028#0  \
+		--auction-metadata-oref f103be75d3cd9c40de4c3650588e4c3f998dc129bbdf6fa7da0bdc2f7c9f364e#0  \
 		--client-server-port :7011 \
 		--hydra-node-id B \
 		--hydra-node 127.0.0.1:7002 \
@@ -47,6 +48,7 @@ delegate-server2:
 		--hydra-persist-dir ./hydra-persist \
 		--hydra-sk hydra2.sk \
 		--cardano-sk cardano2.sk \
+		--wallet-sk wallet2.sk \
 		--node-socket-preprod ~/state-node-preprod/node.socket \
 		--blockfrost-api-key ${BLOCKFROST_API_KEY} \
 		--peer '{ \"hydraNode\": \"127.0.0.1:7000\", \"hydraVk\": \"hydra.vk\", \"cardanoVk\": \"cardano.vk\" }'"

@@ -35,6 +35,7 @@ type AppConfig =
   , hydraPersistDir :: FilePath
   , hydraSk :: FilePath
   , cardanoSk :: FilePath
+  , walletSk :: FilePath
   , peers :: Array HydraHeadPeer
   , nodeSocketPreprod :: FilePath
   , blockfrostApiKey :: String
@@ -74,6 +75,10 @@ configParser = ado
     [ Optparse.long "cardano-sk"
     , Optparse.metavar "FILE"
     ]
+  walletSk <- Optparse.strOption $ fold
+    [ Optparse.long "wallet-sk"
+    , Optparse.metavar "FILE"
+    ]
   peers <- Optparse.many $ Optparse.option parseHydraHeadPeer $ fold
     [ Optparse.long "peer"
     , Optparse.metavar "JSON"
@@ -95,6 +100,7 @@ configParser = ado
     , hydraPersistDir
     , hydraSk
     , cardanoSk
+    , walletSk
     , peers: Array.fromFoldable peers
     , nodeSocketPreprod
     , blockfrostApiKey

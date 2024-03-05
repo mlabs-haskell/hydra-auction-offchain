@@ -2,6 +2,7 @@ module DelegateServer.State
   ( AppM
   , AppState
   , askAuctionInfo
+  , askCollateralUtxo
   , askHeadStatus
   , becomeCommitLeader
   , initApp
@@ -10,6 +11,7 @@ module DelegateServer.State
   , runContract
   , runContractExitOnErr
   , setAuctionInfo
+  , setCollateralUtxo
   , setHeadStatus
   , whenCommitLeader
   ) where
@@ -47,6 +49,7 @@ import Effect.Console (log)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended
   , ContractOutput(ContractOutputError, ContractOutputResult)
+  , Utxo
   , contractErrorCodec
   )
 import HydraAuctionOffchain.Lib.Json (caEncodeString)
@@ -78,6 +81,7 @@ type AppState =
   { config :: AppConfig
   , contractEnv :: ContractEnv
   , auctionInfo :: AVar AuctionInfoExtended
+  , collateralUtxo :: AVar Utxo
   , headStatus :: AVar HydraHeadStatus
   , livePeersAVar :: AVar (Set String)
   , isCommitLeader :: AVar Boolean
@@ -90,6 +94,14 @@ setAuctionInfo auctionInfo =
 
 askAuctionInfo :: AppM AuctionInfoExtended
 askAuctionInfo = (liftAff <<< AVar.read) =<< asks _.auctionInfo
+
+setCollateralUtxo :: Utxo -> AppM Unit
+setCollateralUtxo collateralUtxo =
+  asks _.collateralUtxo >>=
+    (void <<< liftAff <<< AVar.tryPut collateralUtxo)
+
+askCollateralUtxo :: AppM Utxo
+askCollateralUtxo = (liftAff <<< AVar.read) =<< asks _.collateralUtxo
 
 askHeadStatus :: AppM HydraHeadStatus
 askHeadStatus = (liftAff <<< AVar.read) =<< asks _.headStatus
@@ -114,6 +126,7 @@ initApp :: AppConfig -> Aff AppState
 initApp config = do
   contractEnv <- mkContractEnv $ mkContractParams config
   auctionInfo <- AVar.empty
+  collateralUtxo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeersAVar <- AVar.new Set.empty
   isCommitLeader <- AVar.new false
@@ -121,6 +134,7 @@ initApp config = do
     { config
     , contractEnv
     , auctionInfo
+    , collateralUtxo
     , headStatus
     , livePeersAVar
     , isCommitLeader
@@ -136,7 +150,7 @@ mkContractParams config =
         }
   , networkId: TestnetId
   , logLevel: Trace
-  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile config.cardanoSk) Nothing
+  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile config.walletSk) Nothing
   , customLogger: Nothing
   , suppressLogs: true
   , hooks: emptyHooks

@@ -15,6 +15,7 @@ import Data.UInt (toString) as UInt
 import DelegateServer.ClientServer.Server (clientServer)
 import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
+import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
 import DelegateServer.Lib.Json (printJsonUsingCodec)
@@ -24,8 +25,10 @@ import DelegateServer.State
   , initApp
   , runApp
   , runAppEff
+  , runContract
   , runContractExitOnErr
   , setAuctionInfo
+  , setCollateralUtxo
   )
 import Effect (Effect)
 import Effect.AVar (new, tryTake) as AVar
@@ -46,7 +49,7 @@ main :: Effect Unit
 main = launchAff_ do
   appConfig <- liftEffect $ Optparse.execParser opts
   appState <- initApp appConfig
-  runApp appState setAuction
+  runApp appState $ setAuction *> prepareCollateralUtxo
   liftEffect $ startServices appState
 
 opts :: Optparse.ParserInfo AppConfig
@@ -61,6 +64,12 @@ setAuction = do
   setAuctionInfo auctionInfo
   liftEffect $ log $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
     auctionInfo
+
+prepareCollateralUtxo :: AppM Unit
+prepareCollateralUtxo = do
+  utxo <- runContract getCollateralUtxo
+  setCollateralUtxo utxo
+  liftEffect $ log $ "Prepared collateral utxo: " <> show utxo
 
 startServices :: AppState -> Effect Unit
 startServices appState@{ config: appConfig } = do

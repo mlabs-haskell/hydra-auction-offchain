@@ -18,18 +18,18 @@ import Data.Either (Either(Left, Right))
 import Data.HTTP.Method (Method(POST))
 import Data.Maybe (Maybe(Just))
 import Data.Newtype (wrap)
-import DelegateServer.HydraNodeApi.Types.Commit (CommitUtxo)
+import DelegateServer.HydraNodeApi.Types.Commit (CommitUtxoMap)
 import DelegateServer.HydraNodeApi.Types.DraftCommitTx (DraftCommitTx, draftCommitTxCodec)
 import DelegateServer.Types.ServiceError
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
   )
 import Effect.Aff (Aff)
 
-commit :: ServerConfig -> CommitUtxo -> Aff (Either ServiceError DraftCommitTx)
-commit serverConfig commitUtxo = do
+commit :: ServerConfig -> CommitUtxoMap -> Aff (Either ServiceError DraftCommitTx)
+commit serverConfig utxos = do
   let endpoint = mkHttpUrl serverConfig <> "/commit"
   handleResponse draftCommitTxCodec <$>
-    postRequest endpoint (Just $ encodeJson commitUtxo)
+    postRequest endpoint (Just $ encodeJson utxos)
 
 postRequest :: Affjax.URL -> Maybe Json -> Aff (Either Affjax.Error (Affjax.Response Json))
 postRequest endpoint mPayload =

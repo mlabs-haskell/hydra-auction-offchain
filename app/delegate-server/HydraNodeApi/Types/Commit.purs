@@ -1,9 +1,10 @@
 module DelegateServer.HydraNodeApi.Types.Commit
-  ( CommitUtxo(CommitUtxo)
+  ( CommitUtxoMap(CommitUtxoMap)
   , PlutusV2Script
   , PlutusV2ScriptType(PlutusScriptV2)
   , ScriptWitness
   , TxOutWithWitness
+  , mkCollateralCommit
   , mkStandingBidCommit
   ) where
 
@@ -21,8 +22,9 @@ import Ctl.Internal.Serialization (toBytes)
 import Ctl.Internal.Serialization.Address (addressFromBech32)
 import Ctl.Internal.Serialization.PlutusData (convertPlutusData)
 import Ctl.Internal.Types.BigNum (toBigInt) as BigNum
-import Data.Argonaut (class EncodeJson, Json, encodeJson, fromObject, jsonSingletonObject)
+import Data.Argonaut (class EncodeJson, Json, encodeJson, fromObject)
 import Data.Array ((:))
+import Data.Bifunctor (bimap)
 import Data.BigInt (toNumber) as BigInt
 import Data.Codec.Argonaut (JsonCodec, encode, json, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
@@ -31,7 +33,7 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Generic.Rep (class Generic)
 import Data.Int (hexadecimal, toStringAs)
 import Data.Maybe (Maybe(Just, Nothing))
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (toString) as UInt
@@ -39,28 +41,53 @@ import Foreign.Object (delete, fromFoldable) as Obj
 import HydraAuctionOffchain.Codec (byteArrayCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidRedeemer(MoveToHydraRedeemer), Utxo)
 
-data CommitUtxo = CommitUtxo TransactionInput TxOutWithWitness
+newtype CommitUtxoMap = CommitUtxoMap (Array (TransactionInput /\ TxOutWithWitness))
 
-derive instance Generic CommitUtxo _
+derive instance Generic CommitUtxoMap _
+derive instance Newtype CommitUtxoMap _
+derive newtype instance Semigroup CommitUtxoMap
+derive newtype instance Monoid CommitUtxoMap
 
-instance EncodeJson CommitUtxo where
-  encodeJson (CommitUtxo oref txOutWithWitness) =
-    jsonSingletonObject (printOref oref) $ CA.encode txOutWithWitnessCodec
-      txOutWithWitness
+instance EncodeJson CommitUtxoMap where
+  encodeJson =
+    fromObject
+      <<< Obj.fromFoldable
+      <<< map (bimap printOref (CA.encode txOutWithWitnessCodec))
+      <<< unwrap
 
 printOref :: TransactionInput -> String
 printOref (TransactionInput rec) =
   byteArrayToHex (unwrap rec.transactionId) <> "#" <> UInt.toString rec.index
 
+commitUtxoMapSingleton :: TransactionInput -> TxOutWithWitness -> CommitUtxoMap
+commitUtxoMapSingleton oref txOutWithWitness =
+  wrap [ oref /\ txOutWithWitness ]
+
 --
 
-mkStandingBidCommit :: Utxo -> Validator -> Maybe CommitUtxo
+mkCollateralCommit :: Utxo -> CommitUtxoMap
+mkCollateralCommit (oref /\ txOut) =
+  let
+    rec = unwrap $ (unwrap txOut).output
+  in
+    commitUtxoMapSingleton oref
+      { address: rec.address
+      , value: encodeValue rec.amount
+      , referenceScript: Nothing
+      , datumhash: Nothing
+      , inlineDatum: Nothing
+      , inlineDatumhash: Nothing
+      , datum: Nothing
+      , witness: Nothing
+      }
+
+mkStandingBidCommit :: Utxo -> Validator -> Maybe CommitUtxoMap
 mkStandingBidCommit (oref /\ txOut) standingBidValidator = do
   let
     rec = unwrap $ (unwrap txOut).output
     validatorBytes = fst $ unwrap $ unwrap standingBidValidator
   datum <- outputDatumDatum rec.datum
-  pure $ CommitUtxo oref $
+  pure $ commitUtxoMapSingleton oref
     { address: rec.address
     , value: encodeValue rec.amount
     , referenceScript: Nothing

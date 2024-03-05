@@ -9,7 +9,7 @@ import Control.Monad.Reader (ask)
 import Data.Array (length) as Array
 import Data.Set (delete, insert, member, size) as Set
 import Data.Tuple.Nested ((/\))
-import DelegateServer.Contract.CommitBid (commitStandingBid)
+import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.HydraNodeApi.Types.Message
   ( GreetingsMessage
   , HydraNodeApi_InMessage
@@ -17,6 +17,7 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_PeerConnected
       , In_PeerDisconnected
       , In_HeadIsInitializing
+      , In_Committed
       )
   , HydraNodeApi_OutMessage(Out_Init)
   , PeerConnMessage
@@ -82,6 +83,8 @@ messageHandler _ws = case _ of
     msgPeerDisconnectedHandler msg
   In_HeadIsInitializing ->
     msgHeadIsInitializingHandler
+  In_Committed ->
+    msgCommittedHandler
 
 msgGreetingsHandler :: GreetingsMessage -> AppM Unit
 msgGreetingsHandler { headStatus } = do
@@ -119,3 +122,6 @@ msgHeadIsInitializingHandler :: AppM Unit
 msgHeadIsInitializingHandler = do
   setHeadStatus HeadStatus_Initializing
   whenCommitLeader commitStandingBid
+
+msgCommittedHandler :: AppM Unit
+msgCommittedHandler = commitCollateral
