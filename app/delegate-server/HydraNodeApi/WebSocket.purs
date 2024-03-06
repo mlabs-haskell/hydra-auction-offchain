@@ -7,6 +7,7 @@ import Prelude
 
 import Control.Monad.Reader (ask)
 import Data.Array (length) as Array
+import Data.Maybe (fromMaybe)
 import Data.Set (delete, insert, member, size) as Set
 import Data.Tuple.Nested ((/\))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
@@ -18,18 +19,24 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_PeerDisconnected
       , In_HeadIsInitializing
       , In_Committed
+      , In_HeadIsOpen
+      , In_SnapshotConfirmed
       )
   , HydraNodeApi_OutMessage(Out_Init)
   , PeerConnMessage
+  , SnapshotConfirmedMessage
+  , HeadOpenMessage
   , hydraNodeApiInMessageCodec
   , hydraNodeApiOutMessageCodec
   )
 import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.State (AppM, runAppEff, setHeadStatus, whenCommitLeader)
+import DelegateServer.Lib.Json (printJsonUsingCodec)
+import DelegateServer.State (AppM, runAppEff, setHeadStatus, setSnapshot, whenCommitLeader)
 import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus(HeadStatus_Initializing)
+  ( HydraHeadStatus(HeadStatus_Initializing, HeadStatus_Open)
   , printHeadStatus
   )
+import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.WebSocket (WebSocket, mkWebSocket)
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
@@ -73,6 +80,8 @@ errorHandler err =
   liftEffect do
     log $ "hydra-node-api ws error: " <> err
 
+--
+
 messageHandler :: HydraNodeApiWebSocket -> HydraNodeApi_InMessage -> AppM Unit
 messageHandler _ws = case _ of
   In_Greetings msg ->
@@ -85,11 +94,17 @@ messageHandler _ws = case _ of
     msgHeadIsInitializingHandler
   In_Committed ->
     msgCommittedHandler
+  In_HeadIsOpen msg ->
+    msgHeadOpenHandler msg
+  In_SnapshotConfirmed msg ->
+    msgSnapshotConfirmedHandler msg
 
 msgGreetingsHandler :: GreetingsMessage -> AppM Unit
-msgGreetingsHandler { headStatus } = do
-  setHeadStatus headStatus
-  liftEffect $ log $ "New head status: " <> printHeadStatus headStatus <> "."
+msgGreetingsHandler { headStatus, snapshotUtxo } = do
+  setHeadStatus' headStatus
+  setSnapshot'
+    { utxo: fromMaybe mempty snapshotUtxo
+    }
 
 msgPeerConnectedHandler :: PeerConnMessage -> AppM Unit
 msgPeerConnectedHandler { peer } = do
@@ -120,8 +135,29 @@ msgPeerDisconnectedHandler { peer } = do
 
 msgHeadIsInitializingHandler :: AppM Unit
 msgHeadIsInitializingHandler = do
-  setHeadStatus HeadStatus_Initializing
+  setHeadStatus' HeadStatus_Initializing
   whenCommitLeader commitStandingBid
 
 msgCommittedHandler :: AppM Unit
 msgCommittedHandler = commitCollateral
+
+msgHeadOpenHandler :: HeadOpenMessage -> AppM Unit
+msgHeadOpenHandler { utxo } = do
+  setHeadStatus' HeadStatus_Open
+  setSnapshot' { utxo }
+
+msgSnapshotConfirmedHandler :: SnapshotConfirmedMessage -> AppM Unit
+msgSnapshotConfirmedHandler = setSnapshot' <<< _.snapshot
+
+--
+
+setHeadStatus' :: HydraHeadStatus -> AppM Unit
+setHeadStatus' headStatus = do
+  setHeadStatus headStatus
+  liftEffect $ log $ "New head status: " <> printHeadStatus headStatus <> "."
+
+setSnapshot' :: HydraSnapshot -> AppM Unit
+setSnapshot' snapshot = do
+  setSnapshot snapshot
+  liftEffect $ log $ "New confirmed snapshot: " <> printJsonUsingCodec hydraSnapshotCodec
+    snapshot

@@ -5,18 +5,13 @@ module DelegateServer.Config
 
 import Prelude
 
-import Contract.Prim.ByteArray (byteLength, hexToByteArray)
 import Contract.Transaction (TransactionInput)
 import Data.Array (fromFoldable) as Array
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (note)
 import Data.Foldable (fold)
-import Data.Maybe (Maybe(Just, Nothing))
-import Data.Newtype (wrap)
-import Data.String (Pattern(Pattern))
-import Data.String (split) as String
-import Data.UInt (fromString) as UInt
+import DelegateServer.Helpers (readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
 import HydraAuctionOffchain.Config (HostPort, readHostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
@@ -136,14 +131,3 @@ parseOref :: Optparse.ReadM TransactionInput
 parseOref =
   Optparse.eitherReader $ \str ->
     note ("Can't parse as TransactionInput: `" <> str <> "`") $ readOref str
-
-readOref :: String -> Maybe TransactionInput
-readOref str =
-  case String.split (Pattern "#") str of
-    [ txHashStr, idx ]
-      | Just txHash <- hexToByteArray txHashStr
-      , byteLength txHash == 32
-      , Just index <- UInt.fromString idx ->
-          Just $ wrap { transactionId: wrap txHash, index }
-    _ ->
-      Nothing

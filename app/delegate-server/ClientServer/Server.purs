@@ -4,12 +4,14 @@ module DelegateServer.ClientServer.Server
 
 import Prelude
 
-import DelegateServer.ClientServer.Handlers.MoveBidL2 (moveBidL2Handler)
+import DelegateServer.ClientServer.Handlers.MoveBid (moveBidHandler)
+import DelegateServer.ClientServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (AppState, AppM, runApp)
+import Effect.Aff.Class (liftAff)
 import Effect.Console (log)
 import HTTPure (Method(Post))
-import HTTPure (Request, Response, ServerM, notFound, serve) as HTTPure
+import HTTPure (Request, Response, ServerM, notFound, serve, toString) as HTTPure
 import URI.Port (toInt) as Port
 
 clientServer :: AppState -> HydraNodeApiWebSocket -> HTTPure.ServerM
@@ -19,7 +21,11 @@ clientServer appState ws = do
     log $ "Client server now accepts connections on port " <> show port <> "."
 
 router :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
-router ws { method: Post, path: [ "moveBidL2" ] } =
-  moveBidL2Handler ws
+router ws { method: Post, path: [ "moveBid" ] } =
+  moveBidHandler ws
+
+router ws { body, method: Post, path: [ "placeBid" ] } = do
+  bodyStr <- liftAff $ HTTPure.toString body
+  placeBidHandler ws bodyStr
 
 router _ _ = HTTPure.notFound

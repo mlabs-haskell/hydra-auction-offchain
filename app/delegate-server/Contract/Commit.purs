@@ -27,14 +27,14 @@ import DelegateServer.HydraNodeApi.Types.Commit
 import DelegateServer.Lib.Json (printJson)
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (AppM, askAuctionInfo, askCollateralUtxo, runContract)
+import DelegateServer.State (AppM, readAppState, runContract)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
 
 commitStandingBid :: AppM Unit
 commitStandingBid = do
-  auctionInfo <- unwrap <$> askAuctionInfo
-  collateralUtxo <- askCollateralUtxo
+  auctionInfo <- unwrap <$> readAppState _.auctionInfo
+  collateralUtxo <- readAppState _.collateralUtxo
   standingBidValidator <- runContract $ mkStandingBidValidator auctionInfo.auctionId
     auctionInfo.auctionTerms
   bidUtxo <- runContract $ queryStandingBidUtxo auctionInfo
@@ -46,7 +46,8 @@ commitStandingBid = do
     _ -> pure unit
 
 commitCollateral :: AppM Unit
-commitCollateral = (commitUtxos <<< mkCollateralCommit) =<< askCollateralUtxo
+commitCollateral =
+  (commitUtxos <<< mkCollateralCommit) =<< readAppState _.collateralUtxo
 
 commitUtxos :: CommitUtxoMap -> AppM Unit
 commitUtxos utxos = do

@@ -10,23 +10,17 @@ module DelegateServer.HydraNodeApi.Types.Commit
 
 import Prelude
 
-import Contract.Address (Address, NetworkId(TestnetId), addressWithNetworkTagToBech32)
+import Contract.Address (Address)
 import Contract.Hashing (datumHash)
-import Contract.PlutusData (PlutusData(Constr, Map, List, Integer, Bytes), toData)
-import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, byteLength, hexToByteArrayUnsafe)
+import Contract.PlutusData (PlutusData, toData)
+import Contract.Prim.ByteArray (ByteArray, byteLength, hexToByteArrayUnsafe)
 import Contract.Scripts (Validator)
-import Contract.Transaction (TransactionInput(TransactionInput), outputDatumDatum)
-import Contract.Value (Value, getCurrencySymbol, getTokenName, getValue, valueToCoin')
-import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
+import Contract.Transaction (TransactionInput, outputDatumDatum)
 import Ctl.Internal.Serialization (toBytes)
-import Ctl.Internal.Serialization.Address (addressFromBech32)
 import Ctl.Internal.Serialization.PlutusData (convertPlutusData)
-import Ctl.Internal.Types.BigNum (toBigInt) as BigNum
-import Data.Argonaut (class EncodeJson, Json, encodeJson, fromObject)
-import Data.Array ((:))
+import Data.Argonaut (class EncodeJson, Json, fromObject)
 import Data.Bifunctor (bimap)
-import Data.BigInt (toNumber) as BigInt
-import Data.Codec.Argonaut (JsonCodec, encode, json, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut (JsonCodec, encode, json, object, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Codec.Argonaut.Record (record) as CAR
@@ -36,8 +30,9 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Tuple (fst)
 import Data.Tuple.Nested (type (/\), (/\))
-import Data.UInt (toString) as UInt
-import Foreign.Object (delete, fromFoldable) as Obj
+import DelegateServer.Helpers (printOref)
+import DelegateServer.Types.HydraUtxoMap (addressCodec, encodePlutusData, encodeValue)
+import Foreign.Object (fromFoldable) as Obj
 import HydraAuctionOffchain.Codec (byteArrayCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidRedeemer(MoveToHydraRedeemer), Utxo)
 
@@ -54,10 +49,6 @@ instance EncodeJson CommitUtxoMap where
       <<< Obj.fromFoldable
       <<< map (bimap printOref (CA.encode txOutWithWitnessCodec))
       <<< unwrap
-
-printOref :: TransactionInput -> String
-printOref (TransactionInput rec) =
-  byteArrayToHex (unwrap rec.transactionId) <> "#" <> UInt.toString rec.index
 
 commitUtxoMapSingleton :: TransactionInput -> TxOutWithWitness -> CommitUtxoMap
 commitUtxoMapSingleton oref txOutWithWitness =
@@ -107,8 +98,6 @@ mkStandingBidCommit (oref /\ txOut) standingBidValidator = do
           }
     }
 
---
-
 bytesToCbor :: ByteArray -> ByteArray
 bytesToCbor ba =
   hexToByteArrayUnsafe ("59" <> toStringAs hexadecimal (byteLength ba))
@@ -116,49 +105,6 @@ bytesToCbor ba =
 
 plutusDataToCbor :: PlutusData -> ByteArray
 plutusDataToCbor = unwrap <<< toBytes <<< convertPlutusData
-
-encodeValue :: Value -> Json
-encodeValue value =
-  fromObject $ Obj.delete mempty $
-    Obj.fromFoldable (lovelace : nonAdaAssets)
-  where
-  lovelace :: String /\ Json
-  lovelace = "lovelace" /\ encodeJson (BigInt.toNumber $ valueToCoin' value)
-
-  nonAdaAssets :: Array (String /\ Json)
-  nonAdaAssets =
-    unwrap (getValue value) <#> \(cs /\ mp) ->
-      byteArrayToHex (getCurrencySymbol cs) /\
-        ( fromObject $ Obj.fromFoldable $
-            unwrap mp <#> \(tn /\ quantity) ->
-              byteArrayToHex (getTokenName tn) /\ encodeJson (BigInt.toNumber quantity)
-        )
-
-encodePlutusData :: PlutusData -> Json
-encodePlutusData = case _ of
-  Constr constr fields ->
-    encodeJson
-      { constructor: BigInt.toNumber $ BigNum.toBigInt constr
-      , fields: encodePlutusData <$> fields
-      }
-  Map kvs ->
-    encodeJson
-      { map:
-          kvs <#> \(k /\ v) ->
-            { k: encodePlutusData k, v: encodePlutusData v }
-      }
-  List xs ->
-    encodeJson
-      { list: encodePlutusData <$> xs
-      }
-  Integer bi ->
-    encodeJson
-      { int: BigInt.toNumber bi
-      }
-  Bytes ba ->
-    encodeJson
-      { bytes: byteArrayToHex ba
-      }
 
 --
 
@@ -226,12 +172,3 @@ derive instance Generic PlutusV2ScriptType _
 
 plutusV2ScriptTypeCodec :: CA.JsonCodec PlutusV2ScriptType
 plutusV2ScriptTypeCodec = CAG.nullarySum "PlutusV2ScriptType"
-
---
-
-addressCodec :: CA.JsonCodec Address
-addressCodec =
-  CA.prismaticCodec "Address"
-    (toPlutusAddress <=< addressFromBech32)
-    (addressWithNetworkTagToBech32 <<< wrap <<< { address: _, networkId: TestnetId })
-    CA.string

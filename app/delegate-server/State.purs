@@ -1,11 +1,9 @@
 module DelegateServer.State
   ( AppM
   , AppState
-  , askAuctionInfo
-  , askCollateralUtxo
-  , askHeadStatus
   , becomeCommitLeader
   , initApp
+  , readAppState
   , runApp
   , runAppEff
   , runContract
@@ -13,6 +11,7 @@ module DelegateServer.State
   , setAuctionInfo
   , setCollateralUtxo
   , setHeadStatus
+  , setSnapshot
   , whenCommitLeader
   ) where
 
@@ -39,6 +38,7 @@ import Data.Set (empty) as Set
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
+import DelegateServer.Types.HydraSnapshot (HydraSnapshot)
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
 import Effect.Aff.AVar (AVar)
@@ -83,38 +83,34 @@ type AppState =
   , auctionInfo :: AVar AuctionInfoExtended
   , collateralUtxo :: AVar Utxo
   , headStatus :: AVar HydraHeadStatus
+  , snapshot :: AVar HydraSnapshot
   , livePeersAVar :: AVar (Set String)
   , isCommitLeader :: AVar Boolean
   }
 
-setAuctionInfo :: AuctionInfoExtended -> AppM Unit
-setAuctionInfo auctionInfo =
-  asks _.auctionInfo >>=
-    (void <<< liftAff <<< AVar.tryPut auctionInfo)
+readAppState :: forall (a :: Type). (AppState -> AVar a) -> AppM a
+readAppState f = (liftAff <<< AVar.read) =<< asks f
 
-askAuctionInfo :: AppM AuctionInfoExtended
-askAuctionInfo = (liftAff <<< AVar.read) =<< asks _.auctionInfo
+putAppState :: forall (a :: Type). (AppState -> AVar a) -> a -> AppM Unit
+putAppState f val = asks f >>= (void <<< liftAff <<< AVar.tryPut val)
+
+updAppState :: forall (a :: Type). (AppState -> AVar a) -> a -> AppM Unit
+updAppState f val = asks f >>= (liftAff <<< flip modifyAVar_ (const (pure val)))
+
+setAuctionInfo :: AuctionInfoExtended -> AppM Unit
+setAuctionInfo = putAppState _.auctionInfo
 
 setCollateralUtxo :: Utxo -> AppM Unit
-setCollateralUtxo collateralUtxo =
-  asks _.collateralUtxo >>=
-    (void <<< liftAff <<< AVar.tryPut collateralUtxo)
-
-askCollateralUtxo :: AppM Utxo
-askCollateralUtxo = (liftAff <<< AVar.read) =<< asks _.collateralUtxo
-
-askHeadStatus :: AppM HydraHeadStatus
-askHeadStatus = (liftAff <<< AVar.read) =<< asks _.headStatus
+setCollateralUtxo = putAppState _.collateralUtxo
 
 setHeadStatus :: HydraHeadStatus -> AppM Unit
-setHeadStatus headStatus =
-  asks _.headStatus >>=
-    (liftAff <<< flip modifyAVar_ (const (pure headStatus)))
+setHeadStatus = updAppState _.headStatus
+
+setSnapshot :: HydraSnapshot -> AppM Unit
+setSnapshot = updAppState _.snapshot
 
 becomeCommitLeader :: AppM Unit
-becomeCommitLeader =
-  asks _.isCommitLeader >>=
-    (liftAff <<< flip modifyAVar_ (const (pure true)))
+becomeCommitLeader = updAppState _.isCommitLeader true
 
 whenCommitLeader :: AppM Unit -> AppM Unit
 whenCommitLeader action = do
@@ -128,6 +124,7 @@ initApp config = do
   auctionInfo <- AVar.empty
   collateralUtxo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
+  snapshot <- AVar.new mempty
   livePeersAVar <- AVar.new Set.empty
   isCommitLeader <- AVar.new false
   pure
@@ -136,6 +133,7 @@ initApp config = do
     , auctionInfo
     , collateralUtxo
     , headStatus
+    , snapshot
     , livePeersAVar
     , isCommitLeader
     }
