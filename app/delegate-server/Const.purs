@@ -3,8 +3,8 @@ module DelegateServer.Const
   , appConst
   ) where
 
-import Data.BigInt (BigInt)
-import Data.BigInt (fromInt) as BigInt
+import JS.BigInt (BigInt)
+import JS.BigInt (fromInt) as BigInt
 import Node.Path (FilePath)
 
 type AppConst =

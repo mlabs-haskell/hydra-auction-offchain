@@ -9,7 +9,7 @@
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     liqwid-nix.url = "github:Liqwid-Labs/liqwid-nix";
-    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5a560eb9ac1bef94d718b90f5ac2a541515127dd";
+    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5cef4dea87d917327161ac09d493824928d9fe80";
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/standing-bid-validator";
@@ -26,6 +26,7 @@
           filter = path: ftype: !(lib.hasSuffix ".md" path) && (builtins.baseNameOf path != "flake.nix");
         };
 
+        nodejsPackage = pkgs.nodejs-18_x;
         packageLock = ./package-lock.json;
         packageJson = ./package.json;
 
@@ -35,18 +36,10 @@
           "UserDefinedWarning"
         ];
 
-        shell.shellHook =
-          let
-            symlinkNodeModules = ''
-              ln -sfn $NODE_PATH node_modules
-            '';
-
-            installOnchainScripts = ''
-              mkdir -p scripts
-              cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
-            '';
-          in
-          symlinkNodeModules + installOnchainScripts;
+        shell.shellHook = ''
+          mkdir -p scripts
+          cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
+        '';
 
         enableFormatCheck = true;
       };

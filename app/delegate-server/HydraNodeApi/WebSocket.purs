@@ -5,6 +5,7 @@ module DelegateServer.HydraNodeApi.WebSocket
 
 import Prelude
 
+import Contract.Transaction (Transaction)
 import Control.Monad.Reader (ask)
 import Data.Array (length) as Array
 import Data.Maybe (fromMaybe)
@@ -22,7 +23,7 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_HeadIsOpen
       , In_SnapshotConfirmed
       )
-  , HydraNodeApi_OutMessage(Out_Init)
+  , HydraNodeApi_OutMessage(Out_Init, Out_NewTx)
   , PeerConnMessage
   , SnapshotConfirmedMessage
   , HeadOpenMessage
@@ -46,6 +47,7 @@ import Effect.Console (log)
 type HydraNodeApiWebSocket =
   { baseWs :: WebSocket AppM HydraNodeApi_InMessage HydraNodeApi_OutMessage
   , initHead :: Effect Unit
+  , newTx :: Transaction -> Effect Unit
   }
 
 mkHydraNodeApiWebSocket :: (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
@@ -60,8 +62,9 @@ mkHydraNodeApiWebSocket onConnect = do
   let
     hydraNodeApiWs :: HydraNodeApiWebSocket
     hydraNodeApiWs =
-      { initHead: ws.send Out_Init
-      , baseWs: ws
+      { baseWs: ws
+      , initHead: ws.send Out_Init
+      , newTx: ws.send <<< Out_NewTx <<< { transaction: _ }
       }
   ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
   ws.onMessage (messageHandler hydraNodeApiWs)

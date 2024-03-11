@@ -4,6 +4,7 @@ module DelegateServer.Types.HydraUtxoMap
   , encodePlutusData
   , encodeValue
   , hydraUtxoMapCodec
+  , toUtxoMapWithoutRefScripts
   ) where
 
 import Prelude
@@ -20,6 +21,7 @@ import Contract.Transaction
   , TransactionOutput(TransactionOutput)
   , outputDatumDatum
   )
+import Contract.Utxos (UtxoMap)
 import Contract.Value
   ( Value
   , getCurrencySymbol
@@ -50,14 +52,13 @@ import Data.Argonaut
   )
 import Data.Array ((:))
 import Data.Bifunctor (bimap, lmap)
-import Data.BigInt (BigInt)
-import Data.BigInt (fromNumber, toNumber) as BigInt
 import Data.Bitraversable (bitraverse)
 import Data.Codec.Argonaut (JsonCodec, decode, encode, json, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Either (Either, hush, note)
 import Data.Generic.Rep (class Generic)
+import Data.Map (fromFoldable) as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Show.Generic (genericShow)
@@ -66,7 +67,10 @@ import Data.Tuple.Nested (type (/\), (/\))
 import DelegateServer.Helpers (printOref, readOref)
 import Foreign.Object (delete, fromFoldable, toUnfoldable) as Obj
 import HydraAuctionOffchain.Codec (byteArrayCodec)
+import HydraAuctionOffchain.Helpers (withoutRefScript)
 import HydraAuctionOffchain.Lib.Json (fromCaJsonDecodeError)
+import JS.BigInt (BigInt)
+import JS.BigInt (fromNumber, toNumber) as BigInt
 
 newtype HydraUtxoMap = HydraUtxoMap (Array (TransactionInput /\ TransactionOutput))
 
@@ -98,6 +102,12 @@ hydraUtxoMapCodec :: CA.JsonCodec HydraUtxoMap
 hydraUtxoMapCodec =
   CA.prismaticCodec "HydraUtxoMap" (hush <<< decodeJson) encodeJson
     CA.json
+
+toUtxoMapWithoutRefScripts :: HydraUtxoMap -> UtxoMap
+toUtxoMapWithoutRefScripts =
+  Map.fromFoldable
+    <<< map (map withoutRefScript)
+    <<< unwrap
 
 --
 

@@ -1,5 +1,6 @@
 module DelegateServer.Helpers
-  ( printOref
+  ( modifyF
+  , printOref
   , readOref
   ) where
 
@@ -8,10 +9,13 @@ import Prelude
 import Contract.Prim.ByteArray (byteArrayToHex, byteLength, hexToByteArray)
 import Contract.Transaction (TransactionInput(TransactionInput))
 import Data.Maybe (Maybe(Just, Nothing))
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.String (Pattern(Pattern))
 import Data.String (split) as String
 import Data.UInt (fromString, toString) as UInt
+
+modifyF :: forall t a f. Newtype t a => Functor f => (a -> f a) -> t -> f t
+modifyF f t = wrap <$> f (unwrap t)
 
 printOref :: TransactionInput -> String
 printOref (TransactionInput rec) =

@@ -1,5 +1,6 @@
 module DelegateServer.Contract.Collateral
-  ( getCollateralUtxo
+  ( findCollateralUtxo
+  , getCollateralUtxo
   ) where
 
 import Contract.Prelude
@@ -8,8 +9,9 @@ import Contract.Monad (Contract, liftedM)
 import Contract.PlutusData (OutputDatum(NoOutputDatum))
 import Contract.Transaction (TransactionOutput(TransactionOutput), awaitTxConfirmed)
 import Contract.TxConstraints (mustPayToPubKey) as Constraints
+import Contract.Utxos (UtxoMap)
 import Contract.Value (lovelaceValueOf) as Value
-import Contract.Wallet (getWalletUtxos, ownPaymentPubKeyHash)
+import Contract.Wallet (getWalletAddress, getWalletUtxos, ownPaymentPubKeyHash)
 import Data.Array (find) as Array
 import Data.Map (toUnfoldable) as Map
 import DelegateServer.Const (appConst)
@@ -29,12 +31,21 @@ getCollateralUtxo =
       pure
 
 queryCollateralUtxo :: Contract (Maybe Utxo)
-queryCollateralUtxo =
-  getWalletUtxos >>=
-    maybe (pure Nothing)
-      ( pure <<< Array.find (isCollateralTxOut <<< _.output <<< unwrap <<< snd) <<<
-          Map.toUnfoldable
-      )
+queryCollateralUtxo = do
+  utxos <- liftedM "Could not get wallet utxos." getWalletUtxos
+  findCollateralUtxo utxos
+
+findCollateralUtxo :: UtxoMap -> Contract (Maybe Utxo)
+findCollateralUtxo utxos = do
+  ownAddress <- liftedM "Could not get wallet address." getWalletAddress
+  pure $ Map.toUnfoldable utxos # Array.find
+    ( \utxo ->
+        let
+          txOut = _.output $ unwrap $ snd utxo
+        in
+          isCollateralTxOut txOut
+            && ((unwrap txOut).address == ownAddress)
+    )
 
 isCollateralTxOut :: TransactionOutput -> Boolean
 isCollateralTxOut (TransactionOutput txOut) =

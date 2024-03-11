@@ -47,8 +47,6 @@ import Contract.Value (flattenValue, singleton) as Value
 import Control.Promise (Promise, fromAff)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes, ed25519KeyHashToBytes)
 import Data.Argonaut (Json)
-import Data.BigInt (BigInt)
-import Data.BigInt (fromString, toString) as BigInt
 import Data.Codec.Argonaut
   ( JsonCodec
   , array
@@ -74,6 +72,8 @@ import Data.UInt (fromString, toString) as UInt
 import Effect (Effect)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
+import JS.BigInt (BigInt)
+import JS.BigInt (fromString, toString) as BigInt
 import Type.Proxy (Proxy(Proxy))
 
 addressCodec :: NetworkId -> CA.JsonCodec Address

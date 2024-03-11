@@ -8,6 +8,7 @@ module DelegateServer.State
   , runAppEff
   , runContract
   , runContractExitOnErr
+  , runContractNullCosts
   , setAuctionInfo
   , setCollateralUtxo
   , setHeadStatus
@@ -31,10 +32,17 @@ import Contract.Config
   , mkBlockfrostBackendParams
   )
 import Contract.Monad (Contract, ContractEnv, mkContractEnv, runContractInEnv)
-import Control.Monad.Reader (ReaderT, ask, asks, runReaderT)
+import Contract.Numeric.BigNum (one, zero) as BigNum
+import Contract.ProtocolParameters (getProtocolParameters)
+import Control.Monad.Reader (ReaderT, ask, asks, local, runReaderT)
+import Ctl.Internal.Types.ProtocolParameters
+  ( CoinsPerUtxoUnit(CoinsPerUtxoByte, CoinsPerUtxoWord)
+  )
 import Data.Maybe (Maybe(Just, Nothing))
+import Data.Newtype (modify)
 import Data.Set (Set)
 import Data.Set (empty) as Set
+import Data.UInt (UInt)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
@@ -67,6 +75,30 @@ runContract :: forall (a :: Type). Contract a -> AppM a
 runContract contract = do
   { contractEnv } <- ask
   liftAff $ runContractInEnv contractEnv contract
+
+runContractNullCosts :: forall (a :: Type). Contract a -> AppM a
+runContractNullCosts contract = do
+  { contractEnv } <- ask
+  liftAff $ runContractInEnv contractEnv do
+    pparams <- getProtocolParameters <#> modify \rec ->
+      rec
+        { txFeeFixed = (zero :: UInt)
+        , txFeePerByte = (zero :: UInt)
+        , coinsPerUtxoUnit =
+            case rec.coinsPerUtxoUnit of
+              CoinsPerUtxoByte _ -> CoinsPerUtxoByte zero
+              CoinsPerUtxoWord _ -> CoinsPerUtxoWord zero
+        , prices =
+            { memPrice: { numerator: BigNum.zero, denominator: BigNum.one }
+            , stepPrice: { numerator: BigNum.zero, denominator: BigNum.one }
+            }
+        }
+    contract # local _
+      { ledgerConstants =
+          contractEnv.ledgerConstants
+            { pparams = pparams
+            }
+      }
 
 runContractExitOnErr :: forall (a :: Type). Contract (ContractOutput a) -> AppM a
 runContractExitOnErr =

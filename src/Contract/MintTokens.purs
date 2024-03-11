@@ -12,9 +12,9 @@ import Contract.Transaction (TransactionHash)
 import Contract.TxConstraints (TxConstraints)
 import Contract.TxConstraints (mustMintCurrency) as Constraints
 import Contract.Value (TokenName)
-import Data.BigInt (BigInt)
 import HydraAuctionOffchain.Contract.MintingPolicies (mkAlwaysMintsPolicy)
 import HydraAuctionOffchain.Contract.Types (emptySubmitTxData, submitTxReturningContractResult)
+import JS.BigInt (BigInt)
 
 mintTokenUsingAlwaysMints :: TokenName -> BigInt -> Contract TransactionHash
 mintTokenUsingAlwaysMints tokenName quantity = do
@@ -23,10 +23,10 @@ mintTokenUsingAlwaysMints tokenName quantity = do
     alwaysMintsPolicyHash :: MintingPolicyHash
     alwaysMintsPolicyHash = mintingPolicyHash alwaysMintsPolicy
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = Constraints.mustMintCurrency alwaysMintsPolicyHash tokenName quantity
 
-    lookups :: ScriptLookups Void
+    lookups :: ScriptLookups
     lookups = Lookups.mintingPolicy alwaysMintsPolicy
 
   map _.txHash $ submitTxReturningContractResult {} $ emptySubmitTxData

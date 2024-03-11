@@ -25,7 +25,7 @@ plutip-env:
 
 delegate-server1:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref dcb36173f0498dce58cbe06d9be464a232ae613683eb210bf64ca7e0985e4f8a#0 \
+		--auction-metadata-oref 193bfe8fb61c2c3779def349ad031495ab1f4d1f91459d1885fa62741bee45b0#0 \
 		--client-server-port :7010 \
 		--hydra-node-id A \
 		--hydra-node 127.0.0.1:7000 \
@@ -40,7 +40,7 @@ delegate-server1:
 
 delegate-server2:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref dcb36173f0498dce58cbe06d9be464a232ae613683eb210bf64ca7e0985e4f8a#0  \
+		--auction-metadata-oref 193bfe8fb61c2c3779def349ad031495ab1f4d1f91459d1885fa62741bee45b0#0  \
 		--client-server-port :7011 \
 		--hydra-node-id B \
 		--hydra-node 127.0.0.1:7002 \

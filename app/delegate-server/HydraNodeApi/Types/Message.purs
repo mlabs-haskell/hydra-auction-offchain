@@ -12,7 +12,9 @@ module DelegateServer.HydraNodeApi.Types.Message
       )
   , HydraNodeApi_OutMessage
       ( Out_Init
+      , Out_NewTx
       )
+  , NewTxMessage
   , PeerConnMessage
   , SnapshotConfirmedMessage
   , hydraNodeApiInMessageCodec
@@ -21,6 +23,7 @@ module DelegateServer.HydraNodeApi.Types.Message
 
 import Prelude
 
+import Contract.Transaction (Transaction)
 import Data.Codec.Argonaut (JsonCodec, object, string) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -28,7 +31,7 @@ import Data.Either (Either(Left, Right))
 import Data.Maybe (Maybe)
 import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
-import DelegateServer.Lib.Codec (fixTaggedSumCodec)
+import DelegateServer.Lib.Codec (fixTaggedSumCodec, txCodec)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
@@ -132,7 +135,9 @@ snapshotConfirmedMessageCodec =
 ----------------------------------------------------------------------
 -- Outcoming messages
 
-data HydraNodeApi_OutMessage = Out_Init
+data HydraNodeApi_OutMessage
+  = Out_Init
+  | Out_NewTx NewTxMessage
 
 hydraNodeApiOutMessageCodec :: CA.JsonCodec HydraNodeApi_OutMessage
 hydraNodeApiOutMessageCodec =
@@ -140,13 +145,27 @@ hydraNodeApiOutMessageCodec =
     dimap toVariant fromVariant
       ( CAV.variantMatch
           { "Init": Left unit
+          , "NewTx": Right newTxMessageCodec
           }
       )
   where
   toVariant = case _ of
     Out_Init ->
       Variant.inj (Proxy :: Proxy "Init") unit
+    Out_NewTx rec ->
+      Variant.inj (Proxy :: Proxy "NewTx") rec
 
   fromVariant = Variant.match
     { "Init": const Out_Init
+    , "NewTx": Out_NewTx
+    }
+
+type NewTxMessage =
+  { transaction :: Transaction
+  }
+
+newTxMessageCodec :: CA.JsonCodec NewTxMessage
+newTxMessageCodec =
+  CA.object "NewTxMessage" $ CAR.record
+    { transaction: txCodec
     }

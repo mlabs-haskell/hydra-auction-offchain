@@ -1,17 +1,24 @@
 module DelegateServer.Lib.Codec
   ( fixTaggedSumCodec
+  , txCodec
   ) where
 
 import Prelude
 
+import Contract.Transaction (Transaction)
+import Ctl.Internal.Deserialization.Transaction (deserializeTransaction)
+import Ctl.Internal.Serialization (convertTransaction, toBytes)
 import Data.Argonaut (Json)
 import Data.Argonaut (caseJsonObject, fromObject) as A
 import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (Codec(Codec), JsonCodec, JsonDecodeError) as CA
-import Data.Either (Either)
+import Data.Codec.Argonaut (Codec(Codec), JsonCodec, JsonDecodeError, prismaticCodec) as CA
+import Data.Either (Either, hush)
 import Data.Maybe (Maybe(Just))
+import Data.Newtype (unwrap, wrap)
 import Data.Tuple (Tuple)
+import Effect.Unsafe (unsafePerformEffect)
 import Foreign.Object (delete, fromHomogeneous, lookup, member, size, union) as Obj
+import HydraAuctionOffchain.Codec (byteArrayCodec)
 
 fixTaggedSumCodec :: forall (a :: Type). CA.JsonCodec a -> CA.JsonCodec a
 fixTaggedSumCodec (CA.Codec dec enc) = CA.Codec decFixed encFixed
@@ -39,3 +46,11 @@ fixTaggedSumCodec (CA.Codec dec enc) = CA.Codec decFixed encFixed
             valueJson # A.caseJsonObject json \valueObj ->
               A.fromObject $ Obj.union valueObj $ Obj.delete "value" obj
           _, _ -> json
+
+txCodec :: CA.JsonCodec Transaction
+txCodec =
+  CA.prismaticCodec
+    "Transaction"
+    (hush <<< deserializeTransaction <<< wrap)
+    (unwrap <<< toBytes <<< unsafePerformEffect <<< convertTransaction)
+    byteArrayCodec

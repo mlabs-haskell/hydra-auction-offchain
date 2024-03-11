@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.QueryUtxo
-  ( queryAuctionEscrowUtxo
+  ( findStandingBidUtxo
+  , queryAuctionEscrowUtxo
   , queryBidderDepositUtxo
   , queryStandingBidUtxo
   ) where
@@ -9,7 +10,7 @@ import Contract.Prelude
 import Contract.Monad (Contract)
 import Contract.PlutusData (OutputDatum(OutputDatum), toData)
 import Contract.Transaction (TransactionOutput(TransactionOutput))
-import Contract.Utxos (utxosAt)
+import Contract.Utxos (UtxoMap, utxosAt)
 import Contract.Value (CurrencySymbol)
 import Contract.Value (valueOf) as Value
 import Data.Array (find) as Array
@@ -56,17 +57,25 @@ queryStandingBidUtxo
    . Record (AuctionInfoRec r)
   -> Contract (Maybe (Utxo /\ StandingBidState))
 queryStandingBidUtxo auctionInfo =
-  utxosAt auctionInfo.standingBidAddr <#> \utxos -> do
-    let getTxOut = _.output <<< unwrap <<< snd
-    standingBidUtxo <- Array.find (hasStandingBidToken <<< getTxOut) $ Map.toUnfoldable utxos
-    Tuple standingBidUtxo <$> getInlineDatum (getTxOut standingBidUtxo)
+  findStandingBidUtxo auctionInfo <$> utxosAt auctionInfo.standingBidAddr
+
+findStandingBidUtxo
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
+  -> UtxoMap
+  -> Maybe (Utxo /\ StandingBidState)
+findStandingBidUtxo auctionInfo utxos = do
+  let getTxOut = _.output <<< unwrap <<< snd
+  standingBidUtxo <- Array.find (isStandingBidUtxo <<< getTxOut) $ Map.toUnfoldable utxos
+  Tuple standingBidUtxo <$> getInlineDatum (getTxOut standingBidUtxo)
   where
   auctionCs :: CurrencySymbol
   auctionCs = auctionInfo.auctionId
 
-  hasStandingBidToken :: TransactionOutput -> Boolean
-  hasStandingBidToken txOut =
-    Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one
+  isStandingBidUtxo :: TransactionOutput -> Boolean
+  isStandingBidUtxo txOut =
+    (unwrap txOut).address == auctionInfo.standingBidAddr
+      && (Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one)
 
 ----------------------------------------------------------------------
 -- BidderDeposit
