@@ -8,7 +8,7 @@
 
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
-    liqwid-nix.url = "github:Liqwid-Labs/liqwid-nix";
+    liqwid-nix.url = "github:mlabs-haskell/liqwid-nix/aciceri/fix-new-ctl";
     cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5cef4dea87d917327161ac09d493824928d9fe80";
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
@@ -33,6 +33,7 @@
         ignoredWarningCodes = [
           "ImplicitImport"
           "ImplicitQualifiedImport"
+          "ImplicitQualifiedImportReExport"
           "UserDefinedWarning"
         ];
 

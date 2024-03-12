@@ -11244,15 +11244,16 @@
         "pre-commit-hooks": "pre-commit-hooks_5"
       },
       "locked": {
-        "lastModified": 1686833384,
-        "narHash": "sha256-EO8oKzOEGZTkEjwW77qU2I5e3yB3AB/ilJ1auROP1jY=",
-        "owner": "Liqwid-Labs",
+        "lastModified": 1705351573,
+        "narHash": "sha256-4pOk01JeVTWvcUcKg7pOmOnBm1YldYjDBHELuSUMhkE=",
+        "owner": "mlabs-haskell",
         "repo": "liqwid-nix",
-        "rev": "d99acdf94bbba5d480ed68e859071d462e733d40",
+        "rev": "15948d3e8e0480923e86cd8b1cfadb5a2025125e",
         "type": "github"
       },
       "original": {
-        "owner": "Liqwid-Labs",
+        "owner": "mlabs-haskell",
+        "ref": "aciceri/fix-new-ctl",
         "repo": "liqwid-nix",
         "type": "github"
       }
