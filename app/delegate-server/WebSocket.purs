@@ -59,10 +59,9 @@ mkWebSocket builder = do
         \callback ->
           liftEffect $
             _onWsMessage ws wsLogger \msgRaw -> do
-              log $ "_onWsMessage: " <> msgRaw
-              either (\_ -> pure unit) (builder.runM <<< callback) $ caDecodeString
-                builder.inMsgCodec
-                msgRaw
+              log $ "onMessage raw: " <> msgRaw
+              either (log <<< append "onMessage decode error: ") (builder.runM <<< callback)
+                (caDecodeString builder.inMsgCodec msgRaw)
 
     , onError:
         \callback ->

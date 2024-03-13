@@ -13,6 +13,8 @@ module DelegateServer.HydraNodeApi.Types.Message
   , HydraNodeApi_OutMessage
       ( Out_Init
       , Out_NewTx
+      , Out_Close
+      , Out_Fanout
       )
   , NewTxMessage
   , PeerConnMessage
@@ -138,6 +140,8 @@ snapshotConfirmedMessageCodec =
 data HydraNodeApi_OutMessage
   = Out_Init
   | Out_NewTx NewTxMessage
+  | Out_Close
+  | Out_Fanout
 
 hydraNodeApiOutMessageCodec :: CA.JsonCodec HydraNodeApi_OutMessage
 hydraNodeApiOutMessageCodec =
@@ -146,6 +150,8 @@ hydraNodeApiOutMessageCodec =
       ( CAV.variantMatch
           { "Init": Left unit
           , "NewTx": Right newTxMessageCodec
+          , "Close": Left unit
+          , "Fanout": Left unit
           }
       )
   where
@@ -154,10 +160,16 @@ hydraNodeApiOutMessageCodec =
       Variant.inj (Proxy :: Proxy "Init") unit
     Out_NewTx rec ->
       Variant.inj (Proxy :: Proxy "NewTx") rec
+    Out_Close ->
+      Variant.inj (Proxy :: Proxy "Close") unit
+    Out_Fanout ->
+      Variant.inj (Proxy :: Proxy "Fanout") unit
 
   fromVariant = Variant.match
     { "Init": const Out_Init
     , "NewTx": Out_NewTx
+    , "Close": const Out_Close
+    , "Fanout": const Out_Fanout
     }
 
 type NewTxMessage =

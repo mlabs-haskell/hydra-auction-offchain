@@ -34,6 +34,8 @@ import Contract.Value
   )
 import Contract.Value (singleton) as Value
 import Control.Alt ((<|>))
+import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
+import Control.Monad.Trans.Class (lift)
 import Control.Safely (foldM)
 import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
 import Ctl.Internal.Serialization.Address (addressFromBech32)
@@ -49,6 +51,7 @@ import Data.Argonaut
   , fromObject
   , fromString
   , (.:)
+  , (.:?)
   )
 import Data.Array ((:))
 import Data.Bifunctor (bimap, lmap)
@@ -189,11 +192,12 @@ decodeValue json = do
   let
     lovelaceKey = "lovelace"
 
-    decodeLovelace :: Either JsonDecodeError BigInt
-    decodeLovelace = do
-      lovelaceNum <- obj .: lovelaceKey
-      BigInt.fromNumber lovelaceNum #
-        note (AtKey lovelaceKey $ UnexpectedValue $ fromNumber lovelaceNum)
+    decodeLovelace :: Either JsonDecodeError (Maybe BigInt)
+    decodeLovelace =
+      runMaybeT do
+        lovelaceNum <- MaybeT $ obj .:? lovelaceKey
+        lift $ BigInt.fromNumber lovelaceNum #
+          note (AtKey lovelaceKey $ UnexpectedValue $ fromNumber lovelaceNum)
 
     decodeNonAdaAssets :: Either JsonDecodeError Value
     decodeNonAdaAssets =
@@ -217,7 +221,7 @@ decodeValue json = do
 
   lovelace <- decodeLovelace
   nonAdaAssets <- decodeNonAdaAssets
-  pure $ nonAdaAssets <> lovelaceValueOf lovelace
+  pure $ nonAdaAssets <> maybe mempty lovelaceValueOf lovelace
 
 --
 

@@ -35,9 +35,6 @@ import Contract.Monad (Contract, ContractEnv, mkContractEnv, runContractInEnv)
 import Contract.Numeric.BigNum (one, zero) as BigNum
 import Contract.ProtocolParameters (getProtocolParameters)
 import Control.Monad.Reader (ReaderT, ask, asks, local, runReaderT)
-import Ctl.Internal.Types.ProtocolParameters
-  ( CoinsPerUtxoUnit(CoinsPerUtxoByte, CoinsPerUtxoWord)
-  )
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (modify)
 import Data.Set (Set)
@@ -84,10 +81,6 @@ runContractNullCosts contract = do
       rec
         { txFeeFixed = (zero :: UInt)
         , txFeePerByte = (zero :: UInt)
-        , coinsPerUtxoUnit =
-            case rec.coinsPerUtxoUnit of
-              CoinsPerUtxoByte _ -> CoinsPerUtxoByte zero
-              CoinsPerUtxoWord _ -> CoinsPerUtxoWord zero
         , prices =
             { memPrice: { numerator: BigNum.zero, denominator: BigNum.one }
             , stepPrice: { numerator: BigNum.zero, denominator: BigNum.one }

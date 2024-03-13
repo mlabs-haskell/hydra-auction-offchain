@@ -1,7 +1,6 @@
 {
     "txFeeFixed": 0,
     "txFeePerByte": 0,
-    "utxoCostPerByte": 0,
     "executionUnitPrices": {
         "priceMemory": 0,
         "priceSteps": 0
@@ -381,5 +380,6 @@
     "stakeAddressDeposit": 2000000,
     "stakePoolDeposit": 500000000,
     "stakePoolTargetNum": 500,
-    "treasuryCut": 0.2
+    "treasuryCut": 0.2,
+    "utxoCostPerByte": 4310
 }

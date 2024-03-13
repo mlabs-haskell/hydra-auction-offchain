@@ -6,10 +6,15 @@ import Contract.Prelude
 
 import Contract.Address (getNetworkId)
 import Contract.BalanceTxConstraints (BalanceTxConstraintsBuilder)
-import Contract.BalanceTxConstraints (mustUseCollateralUtxos, mustUseUtxosAtAddresses) as BalancerConstraints
+import Contract.BalanceTxConstraints
+  ( mustUseAdditionalUtxos
+  , mustUseCoinSelectionStrategy
+  , mustUseCollateralUtxos
+  , mustUseUtxosAtAddresses
+  ) as BalancerConstraints
 import Contract.Chain (currentTime)
-import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, Redeemer, toData)
+import Contract.Monad (Contract, liftedM)
+import Contract.PlutusData (Datum, OutputDatum(NoOutputDatum), Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
@@ -24,14 +29,16 @@ import Contract.TxConstraints
   ) as Constraints
 import Contract.Utxos (UtxoMap)
 import Contract.Value (Value)
-import Contract.Value (singleton) as Value
+import Contract.Value (adaSymbol, singleton, symbols) as Value
+import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Reader (asks)
 import Control.Monad.Trans.Class (lift)
-import Data.Map (fromFoldable) as Map
+import Ctl.Internal.BalanceTx.CoinSelection (SelectionStrategy(SelectionStrategyMinimal))
+import Data.Array (find) as Array
+import Data.Map (fromFoldable, toUnfoldable) as Map
 import Data.Newtype (modify)
-import DelegateServer.Contract.Collateral (findCollateralUtxo)
 import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
@@ -48,6 +55,7 @@ import HydraAuctionOffchain.Contract.Types
   , BidTerms
   , ContractOutput(ContractOutputError, ContractOutputResult)
   , StandingBidRedeemer(NewBidRedeemer)
+  , Utxo
   , buildTx
   , contractErrorCodec
   , emptySubmitTxData
@@ -122,7 +130,8 @@ placeBidL2ContractWithErrors auctionInfo bidTerms utxos = do
     txValidRange :: POSIXTimeRange
     txValidRange = to $ auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000)
 
-    -- mkFiniteInterval nowTime
+    spendableUtxos :: UtxoMap
+    spendableUtxos = Map.fromFoldable [ collateralUtxo, standingBidUtxo ]
 
     -- StandingBid ---------------------------------------------------
 
@@ -142,9 +151,10 @@ placeBidL2ContractWithErrors auctionInfo bidTerms utxos = do
 
     balancerConstraints :: BalanceTxConstraintsBuilder
     balancerConstraints = mconcat
-      [ BalancerConstraints.mustUseUtxosAtAddresses networkId []
+      [ BalancerConstraints.mustUseCoinSelectionStrategy SelectionStrategyMinimal
+      , BalancerConstraints.mustUseUtxosAtAddresses networkId []
       , BalancerConstraints.mustUseCollateralUtxos $ Map.fromFoldable [ collateralUtxo ]
-      -- , BalancerConstraints.mustUseAdditionalUtxos $ Map.fromFoldable [ standingBidUtxo ]
+      , BalancerConstraints.mustUseAdditionalUtxos spendableUtxos
       ]
 
     constraints :: TxConstraints
@@ -165,7 +175,7 @@ placeBidL2ContractWithErrors auctionInfo bidTerms utxos = do
 
     lookups :: ScriptLookups
     lookups = mconcat
-      [ Lookups.unspentOutputs $ Map.fromFoldable [ standingBidUtxo ]
+      [ Lookups.unspentOutputs spendableUtxos
       , Lookups.validator (unwrap validators).standingBid
       ]
 
@@ -174,6 +184,23 @@ placeBidL2ContractWithErrors auctionInfo bidTerms utxos = do
     , constraints = constraints
     , balancerConstraints = balancerConstraints
     }
+
+----------------------------------------------------------------------
+-- Queries
+
+findCollateralUtxo :: UtxoMap -> Contract (Maybe Utxo)
+findCollateralUtxo utxos = do
+  ownAddress <- liftedM "Could not get wallet address." getWalletAddress
+  pure $ Map.toUnfoldable utxos # Array.find
+    ( \utxo ->
+        let
+          txOut = unwrap $ _.output $ unwrap $ snd utxo
+        in
+          txOut.address == ownAddress
+            && (Value.symbols txOut.amount == [ Value.adaSymbol ])
+            && (txOut.datum == NoOutputDatum)
+            && isNothing txOut.referenceScript
+    )
 
 ----------------------------------------------------------------------
 -- Errors

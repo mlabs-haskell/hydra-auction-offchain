@@ -18,6 +18,6 @@ appConst :: AppConst
 appConst =
   { testnetMagic: "1"
   , protocolParams: "protocol-parameters.json"
-  , hydraScriptsTxHash: "d8ba8c488f52228b200df48fe28305bc311d0507da2c2420b10835bf00d21948"
-  , collateralLovelace: BigInt.fromInt 5_000_000
+  , hydraScriptsTxHash: "8ce483e2d4b81f9254392afda1f85d1e123165665593228c39064691903f431a"
+  , collateralLovelace: BigInt.fromInt 10_000_000
   }
