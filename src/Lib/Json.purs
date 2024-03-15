@@ -2,6 +2,7 @@ module HydraAuctionOffchain.Lib.Json
   ( caDecodeString
   , caEncodeString
   , fromCaJsonDecodeError
+  , writeJsonToFile
   ) where
 
 import Prelude
@@ -12,6 +13,7 @@ import Data.Argonaut
   , printJsonDecodeError
   , stringify
   ) as A
+import Data.Argonaut (class EncodeJson, encodeJson)
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut
   ( JsonCodec
@@ -21,6 +23,10 @@ import Data.Codec.Argonaut
   , printJsonDecodeError
   ) as CA
 import Data.Either (Either)
+import Effect (Effect)
+import Node.Encoding (Encoding(UTF8)) as Encoding
+import Node.FS.Sync (writeTextFile) as FSSync
+import Node.Path (FilePath)
 
 caDecodeString :: forall a. CA.JsonCodec a -> String -> Either String a
 caDecodeString codec jsonStr = do
@@ -38,3 +44,9 @@ fromCaJsonDecodeError = case _ of
   CA.AtKey key err -> A.AtKey key $ fromCaJsonDecodeError err
   CA.Named name err -> A.Named name $ fromCaJsonDecodeError err
   CA.MissingValue -> A.MissingValue
+
+writeJsonToFile :: forall a. EncodeJson a => FilePath -> a -> Effect Unit
+writeJsonToFile fp =
+  FSSync.writeTextFile Encoding.UTF8 fp
+    <<< A.stringify
+    <<< encodeJson
