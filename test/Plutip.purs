@@ -1,4 +1,4 @@
-module Test.Main
+module Test.Plutip
   ( main
   ) where
 
@@ -15,7 +15,7 @@ import Data.UInt (fromInt) as UInt
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
 import Mote (group)
-import Test.DelegateServer.PlaceBid.Spec (suite) as PlaceBid
+import Test.DelegateServer.PlaceBid.Suite (suite) as PlaceBid
 
 main :: Effect Unit
 main = do

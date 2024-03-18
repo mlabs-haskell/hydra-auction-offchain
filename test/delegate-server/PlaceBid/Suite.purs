@@ -1,4 +1,6 @@
-module Test.DelegateServer.PlaceBid.Spec where
+module Test.DelegateServer.PlaceBid.Suite
+  ( suite
+  ) where
 
 import Prelude
 

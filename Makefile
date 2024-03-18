@@ -1,4 +1,4 @@
-.PHONY: build bundle serve repl format check test plutip-env delegate-server1 delegate-server2
+.PHONY: build bundle serve repl format check plutip-test plutip-env delegate-server1 delegate-server2
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
@@ -20,8 +20,8 @@ format:
 check:
 	@nix build .#checks.x86_64-linux.all
 
-test:
-	spago run --main Test.Main
+plutip-test:
+	spago run --main Test.Plutip
 
 plutip-env:
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 

@@ -43,6 +43,7 @@
         '';
 
         enableFormatCheck = true;
+        plutip.testMain = "Test.Plutip";
       };
 
       pre-commit.settings.hooks.nixpkgs-fmt = {
