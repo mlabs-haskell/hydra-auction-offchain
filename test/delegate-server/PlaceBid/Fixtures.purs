@@ -1,6 +1,7 @@
 module Test.DelegateServer.PlaceBid.Fixtures
   ( auctionInfoFixture
   , bidFixture0
+  , bidFixture1
   , commitUtxoMapFixture0
   , commitUtxoMapFixture1
   ) where
@@ -39,6 +40,28 @@ import HydraAuctionOffchain.Contract.Validators (mkAuctionValidators)
 import HydraAuctionOffchain.Helpers (fromJustWithErr, mkPosixTimeUnsafe)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
+
+bidFixture1 :: BidTerms
+bidFixture1 = wrap
+  { bidder: wrap
+      { bidderAddress:
+          mkAddressUnsafe
+            "addr_test1qpsjljwwefv553ly43alu97cd5wtjvfdvqk9f76la7gejgw5p2hj0e0fx5lp95vk3055zcm\
+            \y8edf63uwpe37zhcnjvrsev08p0"
+      , bidderVk:
+          mkVerificationKeyUnsafe
+            "c059d4c74359ffe1b8326e03065ab08b0b8c2579cc32e29cf087257b59ec79e9"
+      }
+  , price: BigInt.fromInt 15_000_000
+  , bidderSignature:
+      hexToByteArrayUnsafe
+        "04d80101455aac2d81890f41e7a3e8c1c76691061428dc4138e01488c592aa88752187556676f29d12aaf\
+        \2d8ce27c536612cf43a6394ce5a472c1e9e93c4a50d"
+  , sellerSignature:
+      hexToByteArrayUnsafe
+        "ec1066a6ea9476f7628ac2eeb90fb93a0da09d86e597115b666d18fcc3925801afddcd39e89b768d49cc1\
+        \872d44427145d3c0adfc5c45a2f520319c63a93240e"
+  }
 
 bidFixture0 :: BidTerms
 bidFixture0 = wrap

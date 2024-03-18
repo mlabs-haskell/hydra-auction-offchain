@@ -57,7 +57,7 @@ import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (AppM, readAppState, runContract, runContractNullCosts)
+import DelegateServer.State (AppM, readAppState, runContractNullCosts)
 import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
@@ -77,7 +77,6 @@ import HydraAuctionOffchain.Contract.Types
   , validateNewBid
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (nowPosix)
 import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import JS.BigInt (fromInt) as BigInt
 import Node.Path (FilePath)
@@ -126,7 +125,7 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
   networkId <- lift getNetworkId
 
   -- Check that the current time is within the bidding period:
-  nowTime <- nowPosix
+  nowTime <- lift currentTime
   when (nowTime < auctionTermsRec.biddingStart) $
     throwError PlaceBidL2_Error_CurrentTimeBeforeBiddingStart
   when (nowTime >= auctionTermsRec.biddingEnd) $

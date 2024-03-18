@@ -46,7 +46,7 @@ plutipConfig =
       , path: Nothing
       }
   , suppressLogs: true
-  , customLogger: Nothing
+  , customLogger: Just $ \_ _ -> pure unit
   , hooks: emptyHooks
   , clusterConfig:
       { slotLength: Seconds one

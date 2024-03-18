@@ -1,7 +1,9 @@
 module HydraAuctionOffchain.Lib.Json
-  ( caDecodeString
+  ( caDecodeFile
+  , caDecodeString
   , caEncodeString
   , fromCaJsonDecodeError
+  , readJsonFromFile
   , writeJsonToFile
   ) where
 
@@ -13,7 +15,7 @@ import Data.Argonaut
   , printJsonDecodeError
   , stringify
   ) as A
-import Data.Argonaut (class EncodeJson, encodeJson)
+import Data.Argonaut (class DecodeJson, class EncodeJson, decodeJson, encodeJson)
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut
   ( JsonCodec
@@ -25,8 +27,13 @@ import Data.Codec.Argonaut
 import Data.Either (Either)
 import Effect (Effect)
 import Node.Encoding (Encoding(UTF8)) as Encoding
-import Node.FS.Sync (writeTextFile) as FSSync
+import Node.FS.Sync (readTextFile, writeTextFile) as FSSync
 import Node.Path (FilePath)
+
+caDecodeFile :: forall a. CA.JsonCodec a -> FilePath -> Effect (Either String a)
+caDecodeFile codec =
+  map (caDecodeString codec)
+    <<< FSSync.readTextFile Encoding.UTF8
 
 caDecodeString :: forall a. CA.JsonCodec a -> String -> Either String a
 caDecodeString codec jsonStr = do
@@ -44,6 +51,11 @@ fromCaJsonDecodeError = case _ of
   CA.AtKey key err -> A.AtKey key $ fromCaJsonDecodeError err
   CA.Named name err -> A.Named name $ fromCaJsonDecodeError err
   CA.MissingValue -> A.MissingValue
+
+readJsonFromFile :: forall a. DecodeJson a => FilePath -> Effect (Either String a)
+readJsonFromFile =
+  map (lmap A.printJsonDecodeError <<< (decodeJson <=< A.parseJson))
+    <<< FSSync.readTextFile Encoding.UTF8
 
 writeJsonToFile :: forall a. EncodeJson a => FilePath -> a -> Effect Unit
 writeJsonToFile fp =

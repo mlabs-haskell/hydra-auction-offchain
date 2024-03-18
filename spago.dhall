@@ -20,6 +20,7 @@
   , "exceptions"
   , "foldable-traversable"
   , "foreign-object"
+  , "formatters"
   , "http-methods"
   , "httpure"
   , "integers"
