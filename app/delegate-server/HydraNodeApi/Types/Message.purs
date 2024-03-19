@@ -9,6 +9,7 @@ module DelegateServer.HydraNodeApi.Types.Message
       , In_Committed
       , In_HeadIsOpen
       , In_SnapshotConfirmed
+      , In_TxInvalid
       )
   , HydraNodeApi_OutMessage
       ( Out_Init
@@ -50,6 +51,7 @@ data HydraNodeApi_InMessage
   | In_Committed
   | In_HeadIsOpen HeadOpenMessage
   | In_SnapshotConfirmed SnapshotConfirmedMessage
+  | In_TxInvalid
 
 hydraNodeApiInMessageCodec :: CA.JsonCodec HydraNodeApi_InMessage
 hydraNodeApiInMessageCodec =
@@ -63,6 +65,7 @@ hydraNodeApiInMessageCodec =
           , "Committed": Left unit
           , "HeadIsOpen": Right headOpenMessageCodec
           , "SnapshotConfirmed": Right snapshotConfirmedMessageCodec
+          , "TxInvalid": Left unit
           }
       )
   where
@@ -81,6 +84,8 @@ hydraNodeApiInMessageCodec =
       Variant.inj (Proxy :: Proxy "HeadIsOpen") rec
     In_SnapshotConfirmed rec ->
       Variant.inj (Proxy :: Proxy "SnapshotConfirmed") rec
+    In_TxInvalid ->
+      Variant.inj (Proxy :: Proxy "TxInvalid") unit
 
   fromVariant = Variant.match
     { "Greetings": In_Greetings
@@ -90,6 +95,7 @@ hydraNodeApiInMessageCodec =
     , "Committed": const In_Committed
     , "HeadIsOpen": In_HeadIsOpen
     , "SnapshotConfirmed": In_SnapshotConfirmed
+    , "TxInvalid": const In_TxInvalid
     }
 
 type PeerConnMessage =

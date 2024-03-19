@@ -20,18 +20,22 @@
   , "exceptions"
   , "foldable-traversable"
   , "foreign-object"
+  , "formatters"
   , "http-methods"
   , "httpure"
   , "integers"
   , "js-bigints"
   , "lists"
   , "maybe"
+  , "mote"
   , "newtype"
   , "node-buffer"
   , "node-child-process"
+  , "node-fs"
   , "node-path"
   , "node-process"
   , "node-streams"
+  , "now"
   , "optparse"
   , "ordered-collections"
   , "parallel"
@@ -46,6 +50,7 @@
   , "read"
   , "record"
   , "safely"
+  , "spec"
   , "strings"
   , "transformers"
   , "tuples"
@@ -56,5 +61,5 @@
   , "variant"
   ]
 , packages = ./packages.dhall
-, sources = [ "src/**/*.purs", "app/**/*.purs" ]
+, sources = [ "src/**/*.purs", "app/**/*.purs", "test/**/*.purs" ]
 }

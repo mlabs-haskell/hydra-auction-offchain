@@ -1,4 +1,4 @@
-.PHONY: build bundle serve repl format check plutip-env delegate-server1 delegate-server2
+.PHONY: build bundle serve repl format check plutip-test plutip-env delegate-server1 delegate-server2
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
@@ -20,12 +20,15 @@ format:
 check:
 	@nix build .#checks.x86_64-linux.all
 
+plutip-test:
+	spago run --main Test.Plutip
+
 plutip-env:
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
 
 delegate-server1:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref fbf95ca3493ede46f3227c53bf06bb5c222ce36dcf850d13ce8f7cb060001242#0 \
+		--auction-metadata-oref dd962cf61ac11b2e3f14e251ff3d4e8658a5435f9b06677bddfb6dee81cc0530#0 \
 		--client-server-port :7010 \
 		--hydra-node-id A \
 		--hydra-node 127.0.0.1:7000 \
@@ -40,7 +43,7 @@ delegate-server1:
 
 delegate-server2:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref fbf95ca3493ede46f3227c53bf06bb5c222ce36dcf850d13ce8f7cb060001242#0  \
+		--auction-metadata-oref dd962cf61ac11b2e3f14e251ff3d4e8658a5435f9b06677bddfb6dee81cc0530#0  \
 		--client-server-port :7011 \
 		--hydra-node-id B \
 		--hydra-node 127.0.0.1:7002 \

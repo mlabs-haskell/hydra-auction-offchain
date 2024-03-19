@@ -22,15 +22,15 @@ import Data.Tuple (Tuple(Tuple))
 import Data.Tuple.Nested (type (/\))
 import Data.UInt (toString) as UInt
 import Effect (Effect)
-import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Class (class MonadEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Config (HostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString, caEncodeString)
 
 type WebSocket (m :: Type -> Type) (in_ :: Type) (out :: Type) =
-  { onConnect :: m Unit -> m Unit
-  , onMessage :: (in_ -> m Unit) -> m Unit
-  , onError :: (String -> m Unit) -> m Unit
+  { onConnect :: m Unit -> Effect Unit
+  , onMessage :: (in_ -> m Unit) -> Effect Unit
+  , onError :: (String -> m Unit) -> Effect Unit
   , send :: out -> Effect Unit
   , close :: Effect Unit
   }
@@ -46,27 +46,24 @@ mkWebSocket
   :: forall (m :: Type -> Type) (in_ :: Type) (out :: Type)
    . MonadEffect m
   => WebSocketBuilder m in_ out
-  -> m (WebSocket m in_ out /\ String)
+  -> Effect (WebSocket m in_ out /\ String)
 mkWebSocket builder = do
-  ws <- liftEffect $ _mkWebSocket wsLogger wsUrl
+  ws <- _mkWebSocket wsLogger wsUrl
   pure $ flip Tuple wsUrl $
     { onConnect:
         \callback ->
-          liftEffect $
-            _onWsConnect ws (builder.runM callback)
+          _onWsConnect ws (builder.runM callback)
 
     , onMessage:
         \callback ->
-          liftEffect $
-            _onWsMessage ws wsLogger \msgRaw -> do
-              log $ "onMessage raw: " <> msgRaw
-              either (log <<< append "onMessage decode error: ") (builder.runM <<< callback)
-                (caDecodeString builder.inMsgCodec msgRaw)
+          _onWsMessage ws wsLogger \msgRaw -> do
+            log $ "onMessage raw: " <> msgRaw
+            either (log <<< append "onMessage decode error: ") (builder.runM <<< callback)
+              (caDecodeString builder.inMsgCodec msgRaw)
 
     , onError:
         \callback ->
-          void $ liftEffect $
-            _onWsError ws (builder.runM <<< callback)
+          void $ _onWsError ws (builder.runM <<< callback)
 
     , send:
         \msg ->

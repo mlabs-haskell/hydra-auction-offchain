@@ -1,5 +1,14 @@
 module DelegateServer.Contract.PlaceBid
-  ( placeBidL2
+  ( PlaceBidL2ContractError
+      ( PlaceBidL2_Error_CurrentTimeBeforeBiddingStart
+      , PlaceBidL2_Error_CurrentTimeAfterBiddingEnd
+      , PlaceBidL2_Error_CouldNotFindCollateralUtxo
+      , PlaceBidL2_Error_CouldNotFindCurrentStandingBidUtxo
+      , PlaceBidL2_Error_InvalidBidStateTransition
+      , PlaceBidL2_Error_CouldNotBuildAuctionValidators
+      )
+  , placeBidL2
+  , placeBidL2'
   ) where
 
 import Contract.Prelude
@@ -19,7 +28,12 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, to)
-import Contract.Transaction (FinalizedTransaction, TransactionInput, signTransaction)
+import Contract.Transaction
+  ( FinalizedTransaction
+  , Transaction
+  , TransactionInput
+  , signTransaction
+  )
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustNotBeValid
@@ -43,19 +57,19 @@ import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (AppM, readAppState, runContract, runContractNullCosts)
+import DelegateServer.State (AppM, readAppState, runContractNullCosts)
 import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (findStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
-  , AuctionInfoExtended
   , AuctionTerms(AuctionTerms)
   , BidTerms
   , ContractOutput(ContractOutputError, ContractOutputResult)
   , StandingBidRedeemer(NewBidRedeemer)
   , Utxo
+  , AuctionInfoRec
   , buildTx
   , contractErrorCodec
   , emptySubmitTxData
@@ -65,34 +79,46 @@ import HydraAuctionOffchain.Contract.Types
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import JS.BigInt (fromInt) as BigInt
+import Node.Path (FilePath)
 
 placeBidL2 :: HydraNodeApiWebSocket -> BidTerms -> AppM Unit
 placeBidL2 ws bidTerms = do
   auctionInfo <- readAppState _.auctionInfo
   utxos <- readAppState _.snapshot <#> toUtxoMapWithoutRefScripts <<< _.utxo
+  { cardanoSk } <- asks _.config
   res <- runContractNullCosts do
     mkContractOutput identity $
-      placeBidL2ContractWithErrors auctionInfo bidTerms utxos
+      placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
   case res of
     ContractOutputError err ->
       liftEffect $ log $ "Failed to place bid on L2: " <> caEncodeString contractErrorCodec err
-    ContractOutputResult balancedTx -> do
-      let validTx = modify setTxValid balancedTx
-      evaluatedTx <- runContract $ modifyF setExUnitsToMax validTx
-      { cardanoSk } <- asks _.config
-      signedTx <- runContract do
-        signedTx' <- signTransaction evaluatedTx
-        withWallet cardanoSk $ signTransaction signedTx'
-      liftEffect $ ws.newTx $ unwrap signedTx
+    ContractOutputResult _ ->
+      pure unit
+
+placeBidL2'
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
+  -> BidTerms
+  -> (Transaction -> Effect Unit)
+  -> UtxoMap
+  -> FilePath
+  -> ExceptT PlaceBidL2ContractError Contract Unit
+placeBidL2' auctionInfo bidTerms submitTxL2 utxos cardanoSk = do
+  balancedTx <- placeBidL2ContractWithErrors auctionInfo bidTerms utxos
+  let validTx = modify setTxValid balancedTx
+  evaluatedTx <- lift $ modifyF setExUnitsToMax validTx
+  signedTx <- lift $ (withWallet cardanoSk <<< signTransaction) =<< signTransaction
+    evaluatedTx
+  liftEffect $ submitTxL2 $ unwrap signedTx
 
 placeBidL2ContractWithErrors
-  :: AuctionInfoExtended
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
   -> BidTerms
   -> UtxoMap
   -> ExceptT PlaceBidL2ContractError Contract FinalizedTransaction
-placeBidL2ContractWithErrors auctionInfo bidTerms utxos = do
+placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
   let
-    auctionInfoRec = unwrap auctionInfo
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 

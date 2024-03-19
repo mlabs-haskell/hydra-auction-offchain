@@ -3,6 +3,7 @@ module HydraAuctionOffchain.Codec
   , addressCodec
   , addressWithNetworkTagCodec
   , bigIntCodec
+  , bigIntCodecNum
   , byteArrayCodec
   , currencySymbolCodec
   , fromJs
@@ -12,6 +13,7 @@ module HydraAuctionOffchain.Codec
   , orefCodec
   , posixTimeCodec
   , pubKeyHashCodec
+  , sysStartCodec
   , toJs
   , tokenNameCodec
   , transactionHashCodec
@@ -29,7 +31,7 @@ import Contract.Address
   )
 import Contract.Config (NetworkId)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
-import Contract.Time (POSIXTime(POSIXTime))
+import Contract.Time (POSIXTime(POSIXTime), SystemStart)
 import Contract.Transaction
   ( TransactionHash(TransactionHash)
   , TransactionInput(TransactionInput)
@@ -64,6 +66,7 @@ import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Foldable (foldMap)
+import Data.Formatter.DateTime (formatDateTime, unformatDateTime)
 import Data.Maybe (Maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Profunctor (dimap, wrapIso)
@@ -73,7 +76,7 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
-import JS.BigInt (fromString, toString) as BigInt
+import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
 import Type.Proxy (Proxy(Proxy))
 
 addressCodec :: NetworkId -> CA.JsonCodec Address
@@ -94,8 +97,21 @@ currencySymbolCodec =
 bigIntCodec :: CA.JsonCodec BigInt
 bigIntCodec = CA.prismaticCodec "BigInt" BigInt.fromString BigInt.toString CA.string
 
+bigIntCodecNum :: CA.JsonCodec BigInt
+bigIntCodecNum = CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber CA.number
+
 byteArrayCodec :: CA.JsonCodec ByteArray
 byteArrayCodec = CA.prismaticCodec "ByteArray" hexToByteArray byteArrayToHex CA.string
+
+sysStartCodec :: CA.JsonCodec SystemStart
+sysStartCodec =
+  CA.prismaticCodec "SystemStart"
+    (map wrap <<< hush <<< unformatDateTime formatter)
+    (fromJustWithErr "sysStartCodec" <<< hush <<< formatDateTime formatter <<< unwrap)
+    CA.string
+  where
+  formatter :: String
+  formatter = "YYYY-MM-DDTHH:mm:ssZ"
 
 orefCodec :: CA.JsonCodec TransactionInput
 orefCodec =

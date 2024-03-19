@@ -9,6 +9,7 @@ module DelegateServer.State
   , runContract
   , runContractExitOnErr
   , runContractNullCosts
+  , runContractNullCostsAff
   , setAuctionInfo
   , setCollateralUtxo
   , setHeadStatus
@@ -76,7 +77,11 @@ runContract contract = do
 runContractNullCosts :: forall (a :: Type). Contract a -> AppM a
 runContractNullCosts contract = do
   { contractEnv } <- ask
-  liftAff $ runContractInEnv contractEnv do
+  liftAff $ runContractNullCostsAff contractEnv contract
+
+runContractNullCostsAff :: forall (a :: Type). ContractEnv -> Contract a -> Aff a
+runContractNullCostsAff contractEnv contract =
+  runContractInEnv contractEnv do
     pparams <- getProtocolParameters <#> modify \rec ->
       rec
         { txFeeFixed = (zero :: UInt)

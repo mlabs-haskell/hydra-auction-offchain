@@ -22,6 +22,7 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_Committed
       , In_HeadIsOpen
       , In_SnapshotConfirmed
+      , In_TxInvalid
       )
   , HydraNodeApi_OutMessage(Out_Init, Out_NewTx, Out_Close, Out_Fanout)
   , PeerConnMessage
@@ -47,32 +48,32 @@ import Effect.Console (log)
 type HydraNodeApiWebSocket =
   { baseWs :: WebSocket AppM HydraNodeApi_InMessage HydraNodeApi_OutMessage
   , initHead :: Effect Unit
-  , newTx :: Transaction -> Effect Unit
+  , submitTxL2 :: Transaction -> Effect Unit
   , closeHead :: Effect Unit
   , fanout :: Effect Unit
   }
 
 mkHydraNodeApiWebSocket :: (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
-mkHydraNodeApiWebSocket onConnect = do
-  appState <- ask
-  ws /\ wsUrl <- mkWebSocket
-    { hostPort: appState.config.hydraNodeApi
-    , inMsgCodec: hydraNodeApiInMessageCodec
-    , outMsgCodec: hydraNodeApiOutMessageCodec
-    , runM: runAppEff appState
-    }
-  let
-    hydraNodeApiWs :: HydraNodeApiWebSocket
-    hydraNodeApiWs =
-      { baseWs: ws
-      , initHead: ws.send Out_Init
-      , newTx: ws.send <<< Out_NewTx <<< { transaction: _ }
-      , closeHead: ws.send Out_Close
-      , fanout: ws.send Out_Fanout
+mkHydraNodeApiWebSocket onConnect =
+  ask >>= \appState -> liftEffect do
+    ws /\ wsUrl <- mkWebSocket
+      { hostPort: appState.config.hydraNodeApi
+      , inMsgCodec: hydraNodeApiInMessageCodec
+      , outMsgCodec: hydraNodeApiOutMessageCodec
+      , runM: runAppEff appState
       }
-  ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
-  ws.onMessage (messageHandler hydraNodeApiWs)
-  ws.onError errorHandler
+    let
+      hydraNodeApiWs :: HydraNodeApiWebSocket
+      hydraNodeApiWs =
+        { baseWs: ws
+        , initHead: ws.send Out_Init
+        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ }
+        , closeHead: ws.send Out_Close
+        , fanout: ws.send Out_Fanout
+        }
+    ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
+    ws.onMessage (messageHandler hydraNodeApiWs)
+    ws.onError errorHandler
 
 ----------------------------------------------------------------------
 -- Handlers
@@ -105,6 +106,8 @@ messageHandler _ws = case _ of
     msgHeadOpenHandler msg
   In_SnapshotConfirmed msg ->
     msgSnapshotConfirmedHandler msg
+  In_TxInvalid ->
+    pure unit
 
 msgGreetingsHandler :: GreetingsMessage -> AppM Unit
 msgGreetingsHandler { headStatus, snapshotUtxo } = do
