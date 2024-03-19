@@ -12,24 +12,21 @@ import Data.Posix.Signal (toString) as Signal
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
 import Data.UInt (toString) as UInt
-import DelegateServer.Server (server)
+import DelegateServer.App
+  ( AppM
+  , AppState
+  , runApp
+  , runAppEff
+  , runContract
+  , runContractExitOnErr
+  )
 import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
-import DelegateServer.Lib.Json (printJsonUsingCodec)
-import DelegateServer.State
-  ( AppM
-  , AppState
-  , initApp
-  , runApp
-  , runAppEff
-  , runContract
-  , runContractExitOnErr
-  , setAuctionInfo
-  , setCollateralUtxo
-  )
+import DelegateServer.Server (server)
+import DelegateServer.State (initApp, setAuctionInfo, setCollateralUtxo)
 import Effect (Effect)
 import Effect.AVar (new, tryTake) as AVar
 import Effect.Aff (launchAff_, runAff_)
@@ -38,6 +35,7 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Config (printHostPort)
 import HydraAuctionOffchain.Contract.Types (auctionInfoExtendedCodec)
+import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 import Node.ChildProcess (defaultSpawnOptions, spawn, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal)

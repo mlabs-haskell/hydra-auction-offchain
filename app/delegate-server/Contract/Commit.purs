@@ -18,18 +18,19 @@ import Data.Argonaut (encodeJson)
 import Data.Lens ((.~))
 import Data.Lens.Common (simple)
 import Data.Lens.Iso.Newtype (_Newtype)
+import DelegateServer.App (AppM, runContract)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.HydraNodeApi.Types.Commit
   ( CommitUtxoMap
   , mkCollateralCommit
   , mkStandingBidCommit
   )
-import DelegateServer.Lib.Json (printJson)
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (AppM, readAppState, runContract)
+import DelegateServer.State (readAppState)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
+import HydraAuctionOffchain.Lib.Json (printJson)
 
 commitStandingBid :: AppM Unit
 commitStandingBid = do

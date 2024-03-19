@@ -3,6 +3,8 @@ module HydraAuctionOffchain.Lib.Json
   , caDecodeString
   , caEncodeString
   , fromCaJsonDecodeError
+  , printJson
+  , printJsonUsingCodec
   , readJsonFromFile
   , writeJsonToFile
   ) where
@@ -10,10 +12,12 @@ module HydraAuctionOffchain.Lib.Json
 import Prelude
 
 import Data.Argonaut
-  ( JsonDecodeError(TypeMismatch, UnexpectedValue, AtIndex, AtKey, Named, MissingValue)
+  ( Json
+  , JsonDecodeError(TypeMismatch, UnexpectedValue, AtIndex, AtKey, Named, MissingValue)
   , parseJson
   , printJsonDecodeError
   , stringify
+  , stringifyWithIndent
   ) as A
 import Data.Argonaut (class DecodeJson, class EncodeJson, decodeJson, encodeJson)
 import Data.Bifunctor (lmap)
@@ -51,6 +55,12 @@ fromCaJsonDecodeError = case _ of
   CA.AtKey key err -> A.AtKey key $ fromCaJsonDecodeError err
   CA.Named name err -> A.Named name $ fromCaJsonDecodeError err
   CA.MissingValue -> A.MissingValue
+
+printJson :: A.Json -> String
+printJson = A.stringifyWithIndent 2
+
+printJsonUsingCodec :: forall (a :: Type). CA.JsonCodec a -> a -> String
+printJsonUsingCodec codec = printJson <<< CA.encode codec
 
 readJsonFromFile :: forall a. DecodeJson a => FilePath -> Effect (Either String a)
 readJsonFromFile =

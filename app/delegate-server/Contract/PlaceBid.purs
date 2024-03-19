@@ -53,11 +53,12 @@ import Ctl.Internal.BalanceTx.CoinSelection (SelectionStrategy(SelectionStrategy
 import Data.Array (find) as Array
 import Data.Map (fromFoldable, toUnfoldable) as Map
 import Data.Newtype (modify)
+import DelegateServer.App (AppM, runContractNullCosts)
 import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (AppM, readAppState, runContractNullCosts)
+import DelegateServer.State (readAppState)
 import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)

@@ -6,10 +6,10 @@ import Prelude
 
 import Data.Newtype (unwrap)
 import Data.Tuple.Nested ((/\))
+import DelegateServer.App (AppState, AppM, runApp)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
-import DelegateServer.State (AppState, AppM, runApp)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)

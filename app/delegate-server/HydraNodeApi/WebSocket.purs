@@ -11,6 +11,7 @@ import Data.Array (length) as Array
 import Data.Maybe (fromMaybe)
 import Data.Set (delete, insert, member, size) as Set
 import Data.Tuple.Nested ((/\))
+import DelegateServer.App (AppM, runAppEff)
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.HydraNodeApi.Types.Message
   ( GreetingsMessage
@@ -32,8 +33,7 @@ import DelegateServer.HydraNodeApi.Types.Message
   , hydraNodeApiOutMessageCodec
   )
 import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.Lib.Json (printJsonUsingCodec)
-import DelegateServer.State (AppM, runAppEff, setHeadStatus, setSnapshot, whenCommitLeader)
+import DelegateServer.State (setHeadStatus, setSnapshot, whenCommitLeader)
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus(HeadStatus_Initializing, HeadStatus_Open)
   , printHeadStatus
@@ -44,6 +44,7 @@ import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
+import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 
 type HydraNodeApiWebSocket =
   { baseWs :: WebSocket AppM HydraNodeApi_InMessage HydraNodeApi_OutMessage

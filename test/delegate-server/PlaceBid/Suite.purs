@@ -38,8 +38,8 @@ import DelegateServer.HydraNodeApi.Types.Message
   , hydraNodeApiInMessageCodec
   , hydraNodeApiOutMessageCodec
   )
+import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (runContractNullCostsAff)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, toUtxoMapWithoutRefScripts)
 import DelegateServer.WebSocket (WebSocket, mkWebSocket)
 import Effect (Effect)

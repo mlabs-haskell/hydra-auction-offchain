@@ -5,9 +5,9 @@ module DelegateServer.Handlers.PlaceBid
 import Prelude
 
 import Data.Either (Either(Left, Right))
+import DelegateServer.App (AppM)
 import DelegateServer.Contract.PlaceBid (placeBidL2)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
-import DelegateServer.State (AppM)
 import HTTPure (Response, badRequest, created) as HTTPure
 import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
