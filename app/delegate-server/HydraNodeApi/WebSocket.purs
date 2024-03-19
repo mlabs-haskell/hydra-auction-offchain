@@ -48,7 +48,7 @@ import Effect.Console (log)
 type HydraNodeApiWebSocket =
   { baseWs :: WebSocket AppM HydraNodeApi_InMessage HydraNodeApi_OutMessage
   , initHead :: Effect Unit
-  , newTx :: Transaction -> Effect Unit
+  , submitTxL2 :: Transaction -> Effect Unit
   , closeHead :: Effect Unit
   , fanout :: Effect Unit
   }
@@ -67,7 +67,7 @@ mkHydraNodeApiWebSocket onConnect =
       hydraNodeApiWs =
         { baseWs: ws
         , initHead: ws.send Out_Init
-        , newTx: ws.send <<< Out_NewTx <<< { transaction: _ }
+        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ }
         , closeHead: ws.send Out_Close
         , fanout: ws.send Out_Fanout
         }

@@ -88,7 +88,7 @@ placeBidL2 ws bidTerms = do
   { cardanoSk } <- asks _.config
   res <- runContractNullCosts do
     mkContractOutput identity $
-      placeBidL2' (unwrap auctionInfo) bidTerms ws.newTx utxos cardanoSk
+      placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
   case res of
     ContractOutputError err ->
       liftEffect $ log $ "Failed to place bid on L2: " <> caEncodeString contractErrorCodec err
@@ -103,13 +103,13 @@ placeBidL2'
   -> UtxoMap
   -> FilePath
   -> ExceptT PlaceBidL2ContractError Contract Unit
-placeBidL2' auctionInfo bidTerms newTx utxos cardanoSk = do
+placeBidL2' auctionInfo bidTerms submitTxL2 utxos cardanoSk = do
   balancedTx <- placeBidL2ContractWithErrors auctionInfo bidTerms utxos
   let validTx = modify setTxValid balancedTx
   evaluatedTx <- lift $ modifyF setExUnitsToMax validTx
   signedTx <- lift $ (withWallet cardanoSk <<< signTransaction) =<< signTransaction
     evaluatedTx
-  liftEffect $ newTx $ unwrap signedTx
+  liftEffect $ submitTxL2 $ unwrap signedTx
 
 placeBidL2ContractWithErrors
   :: forall (r :: Row Type)
