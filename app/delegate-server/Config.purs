@@ -23,7 +23,7 @@ import URI.Port (parser) as Port
 
 type AppConfig =
   { auctionMetadataOref :: TransactionInput
-  , clientServerPort :: Port
+  , serverPort :: Port
   , hydraNodeId :: String
   , hydraNode :: HostPort
   , hydraNodeApi :: HostPort
@@ -42,8 +42,8 @@ configParser = ado
     [ Optparse.long "auction-metadata-oref"
     , Optparse.metavar "TXOUTREF"
     ]
-  clientServerPort <- Optparse.option parsePort $ fold
-    [ Optparse.long "client-server-port"
+  serverPort <- Optparse.option parsePort $ fold
+    [ Optparse.long "server-port"
     , Optparse.metavar "PORT"
     ]
   hydraNodeId <- Optparse.strOption $ fold
@@ -88,7 +88,7 @@ configParser = ado
     ]
   in
     { auctionMetadataOref
-    , clientServerPort
+    , serverPort
     , hydraNodeId
     , hydraNode
     , hydraNodeApi

@@ -12,7 +12,7 @@ import Data.Posix.Signal (toString) as Signal
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
 import Data.UInt (toString) as UInt
-import DelegateServer.ClientServer.Server (clientServer)
+import DelegateServer.Server (server)
 import DelegateServer.Config (AppConfig, configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
@@ -81,11 +81,11 @@ startServices appState@{ config: appConfig } = do
         mkHydraNodeApiWebSocket \ws ->
           liftEffect do
             sem <- AVar.new unit
-            closeClientServer <- clientServer appState ws
+            closeServer <- server appState ws
             let
               closeWs = ws.baseWs.close
               addCleanupHandler' sig =
-                addCleanupHandler sig closeClientServer closeWs appState.contractEnv sem
+                addCleanupHandler sig closeServer closeWs appState.contractEnv sem
             addCleanupHandler' SIGINT *> addCleanupHandler' SIGTERM
   where
   peerArgs :: Array String
@@ -135,7 +135,7 @@ addCleanupHandler
   -> ContractEnv
   -> AVar Unit
   -> Effect Unit
-addCleanupHandler sig closeClientServer closeWs contractEnv sem =
+addCleanupHandler sig closeServer closeWs contractEnv sem =
   onSignal sig $
     AVar.tryTake sem >>= case _ of
       Nothing ->
@@ -143,8 +143,8 @@ addCleanupHandler sig closeClientServer closeWs contractEnv sem =
           ", not executing cleanup handlers twice, doing nothing."
       Just _ -> do
         log $ "\nReceived " <> Signal.toString sig <> ", executing cleanup handlers."
-        log "Stopping client server."
-        closeClientServer $ pure unit
+        log "Stopping http server."
+        closeServer $ pure unit
         log "Closing hydra-node-api ws connection."
         closeWs
         log "Finalizing Contract environment."

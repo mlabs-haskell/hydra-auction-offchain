@@ -25,7 +25,6 @@
   , "httpure"
   , "integers"
   , "js-bigints"
-  , "lists"
   , "maybe"
   , "mote"
   , "newtype"

@@ -1,4 +1,4 @@
-module DelegateServer.ClientServer.Handlers.PlaceBid
+module DelegateServer.Handlers.PlaceBid
   ( placeBidHandler
   ) where
 

@@ -1,4 +1,4 @@
-module DelegateServer.ClientServer.Handlers.MoveBid
+module DelegateServer.Handlers.MoveBid
   ( moveBidHandler
   ) where
 

@@ -1,13 +1,13 @@
-module DelegateServer.ClientServer.Server
-  ( clientServer
+module DelegateServer.Server
+  ( server
   ) where
 
 import Prelude
 
 import Data.Newtype (unwrap)
 import Data.Tuple.Nested ((/\))
-import DelegateServer.ClientServer.Handlers.MoveBid (moveBidHandler)
-import DelegateServer.ClientServer.Handlers.PlaceBid (placeBidHandler)
+import DelegateServer.Handlers.MoveBid (moveBidHandler)
+import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (AppState, AppM, runApp)
 import Effect.Aff.Class (liftAff)
@@ -30,11 +30,11 @@ import HTTPure (Method(Options, Post), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
 import URI.Port (toInt) as Port
 
-clientServer :: AppState -> HydraNodeApiWebSocket -> HTTPure.ServerM
-clientServer appState ws = do
-  let port = Port.toInt appState.config.clientServerPort
+server :: AppState -> HydraNodeApiWebSocket -> HTTPure.ServerM
+server appState ws = do
+  let port = Port.toInt appState.config.serverPort
   HTTPure.serve port (runApp appState <<< router ws) do
-    log $ "Client server now accepts connections on port " <> show port <> "."
+    log $ "Http server now accepts connections on port " <> show port <> "."
 
 router :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
 router _ { method: Options, headers }
