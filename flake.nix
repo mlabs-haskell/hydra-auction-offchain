@@ -38,14 +38,23 @@
           "UserDefinedWarning"
         ];
 
-        shell.extraCommandLineTools = [ inputs.hydra.packages.${system}.hydra-node ];
-        shell.shellHook = ''
-          mkdir -p scripts
-          cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
-        '';
+        shell = {
+          shellHook = ''
+            mkdir -p scripts
+            cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
+          '';
+          extraCommandLineTools = [
+            inputs.hydra.packages.${system}.hydra-node
+          ];
+        };
 
         enableFormatCheck = true;
-        plutip.testMain = "Test.Plutip";
+        plutip = {
+          testMain = "Test.Plutip";
+          buildInputs = [
+            inputs.hydra.packages.${system}.hydra-node
+          ];
+        };
       };
 
       pre-commit.settings.hooks.nixpkgs-fmt = {
