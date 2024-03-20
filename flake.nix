@@ -13,6 +13,7 @@
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/standing-bid-validator";
+    hydra.url = "github:input-output-hk/hydra/0.15.0";
   };
 
   outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; } ({ self, ... }: {
@@ -37,6 +38,7 @@
           "UserDefinedWarning"
         ];
 
+        shell.extraCommandLineTools = [ inputs.hydra.packages.${system}.hydra-node ];
         shell.shellHook = ''
           mkdir -p scripts
           cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
