@@ -24,6 +24,7 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_PeerDisconnected
       , In_HeadIsInitializing
       , In_Committed
+      , In_HeadIsAborted
       , In_HeadIsOpen
       , In_SnapshotConfirmed
       , In_TxInvalid
@@ -31,7 +32,7 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_ReadyToFanout
       , In_HeadIsFinalized
       )
-  , HydraNodeApi_OutMessage(Out_Init, Out_NewTx, Out_Close, Out_Contest, Out_Fanout)
+  , HydraNodeApi_OutMessage(Out_Init, Out_Abort, Out_NewTx, Out_Close, Out_Contest, Out_Fanout)
   , PeerConnMessage
   , SnapshotConfirmedMessage
   , HeadFinalizedMessage
@@ -62,6 +63,7 @@ import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 type HydraNodeApiWebSocket =
   { baseWs :: WebSocket AppM HydraNodeApi_InMessage HydraNodeApi_OutMessage
   , initHead :: Effect Unit
+  , abortHead :: Effect Unit
   , submitTxL2 :: Transaction -> Effect Unit
   , closeHead :: Effect Unit
   , challengeSnapshot :: Effect Unit
@@ -82,6 +84,7 @@ mkHydraNodeApiWebSocket onConnect =
       hydraNodeApiWs =
         { baseWs: ws
         , initHead: ws.send Out_Init
+        , abortHead: ws.send Out_Abort
         , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ }
         , closeHead: ws.send Out_Close
         , challengeSnapshot: ws.send Out_Contest
@@ -118,6 +121,8 @@ messageHandler ws = case _ of
     msgHeadIsInitializingHandler
   In_Committed ->
     msgCommittedHandler
+  In_HeadIsAborted ->
+    msgHeadAbortedHandler
   In_HeadIsOpen msg ->
     msgHeadOpenHandler msg
   In_SnapshotConfirmed msg ->
@@ -173,6 +178,11 @@ msgHeadIsInitializingHandler = do
 
 msgCommittedHandler :: AppM Unit
 msgCommittedHandler = commitCollateral
+
+msgHeadAbortedHandler :: AppM Unit
+msgHeadAbortedHandler = do
+  setHeadStatus' HeadStatus_Final
+  throwError $ error $ "Head is finalized, stopping delegate-server."
 
 msgHeadOpenHandler :: HeadOpenMessage -> AppM Unit
 msgHeadOpenHandler { utxo } = do

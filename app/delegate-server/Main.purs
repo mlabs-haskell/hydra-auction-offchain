@@ -15,6 +15,7 @@ import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
+import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UInt (toString) as UInt
 import DelegateServer.App
   ( AppM
@@ -33,13 +34,13 @@ import DelegateServer.Lib.Timer (scheduleAt)
 import DelegateServer.Server (server)
 import DelegateServer.State (initApp, readAppState, setAuctionInfo, setCollateralUtxo)
 import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus(HeadStatus_Open)
+  ( HydraHeadStatus(HeadStatus_Initializing, HeadStatus_Open)
   , isHeadClosed
   , printHeadStatus
   )
 import Effect (Effect)
 import Effect.AVar (tryPut, tryTake) as AVarSync
-import Effect.Aff (Aff, launchAff_, runAff_)
+import Effect.Aff (Aff, delay, launchAff_, runAff_)
 import Effect.Aff.AVar (empty, new, take, tryPut) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -123,8 +124,13 @@ closeHeadAtBiddingEnd ws = do
   auctionInfo <- readAppState _.auctionInfo
   let biddingEnd = (unwrap (unwrap auctionInfo).auctionTerms).biddingEnd
   liftEffect $ scheduleAt biddingEnd $ runAppEff appState do
+    liftAff $ delay $ Milliseconds 5000.0
     headStatus <- readAppState _.headStatus
     case headStatus of
+      HeadStatus_Initializing ->
+        liftEffect do
+          log $ "Bidding time expired, aborting the head."
+          ws.abortHead
       HeadStatus_Open ->
         liftEffect do
           log $ "Bidding time expired, closing the head."

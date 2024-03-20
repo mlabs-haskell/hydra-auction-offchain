@@ -9,6 +9,7 @@ module DelegateServer.HydraNodeApi.Types.Message
       , In_PeerDisconnected
       , In_HeadIsInitializing
       , In_Committed
+      , In_HeadIsAborted
       , In_HeadIsOpen
       , In_SnapshotConfirmed
       , In_TxInvalid
@@ -18,6 +19,7 @@ module DelegateServer.HydraNodeApi.Types.Message
       )
   , HydraNodeApi_OutMessage
       ( Out_Init
+      , Out_Abort
       , Out_NewTx
       , Out_Close
       , Out_Contest
@@ -55,6 +57,7 @@ data HydraNodeApi_InMessage
   | In_PeerDisconnected PeerConnMessage
   | In_HeadIsInitializing
   | In_Committed
+  | In_HeadIsAborted
   | In_HeadIsOpen HeadOpenMessage
   | In_SnapshotConfirmed SnapshotConfirmedMessage
   | In_TxInvalid
@@ -72,6 +75,7 @@ hydraNodeApiInMessageCodec =
           , "PeerDisconnected": Right peerConnMessageCodec
           , "HeadIsInitializing": Left unit
           , "Committed": Left unit
+          , "HeadIsAborted": Left unit
           , "HeadIsOpen": Right headOpenMessageCodec
           , "SnapshotConfirmed": Right snapshotConfirmedMessageCodec
           , "TxInvalid": Left unit
@@ -92,6 +96,8 @@ hydraNodeApiInMessageCodec =
       Variant.inj (Proxy :: Proxy "HeadIsInitializing") unit
     In_Committed ->
       Variant.inj (Proxy :: Proxy "Committed") unit
+    In_HeadIsAborted ->
+      Variant.inj (Proxy :: Proxy "HeadIsAborted") unit
     In_HeadIsOpen rec ->
       Variant.inj (Proxy :: Proxy "HeadIsOpen") rec
     In_SnapshotConfirmed rec ->
@@ -111,6 +117,7 @@ hydraNodeApiInMessageCodec =
     , "PeerDisconnected": In_PeerDisconnected
     , "HeadIsInitializing": const In_HeadIsInitializing
     , "Committed": const In_Committed
+    , "HeadIsAborted": const In_HeadIsAborted
     , "HeadIsOpen": In_HeadIsOpen
     , "SnapshotConfirmed": In_SnapshotConfirmed
     , "TxInvalid": const In_TxInvalid
@@ -186,6 +193,7 @@ headFinalizedMessageCodec =
 
 data HydraNodeApi_OutMessage
   = Out_Init
+  | Out_Abort
   | Out_NewTx NewTxMessage
   | Out_Close
   | Out_Contest
@@ -197,6 +205,7 @@ hydraNodeApiOutMessageCodec =
     dimap toVariant fromVariant
       ( CAV.variantMatch
           { "Init": Left unit
+          , "Abort": Left unit
           , "NewTx": Right newTxMessageCodec
           , "Close": Left unit
           , "Contest": Left unit
@@ -207,6 +216,8 @@ hydraNodeApiOutMessageCodec =
   toVariant = case _ of
     Out_Init ->
       Variant.inj (Proxy :: Proxy "Init") unit
+    Out_Abort ->
+      Variant.inj (Proxy :: Proxy "Abort") unit
     Out_NewTx rec ->
       Variant.inj (Proxy :: Proxy "NewTx") rec
     Out_Close ->
@@ -218,6 +229,7 @@ hydraNodeApiOutMessageCodec =
 
   fromVariant = Variant.match
     { "Init": const Out_Init
+    , "Abort": const Out_Abort
     , "NewTx": Out_NewTx
     , "Close": const Out_Close
     , "Contest": const Out_Contest
