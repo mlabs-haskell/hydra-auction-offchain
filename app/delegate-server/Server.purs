@@ -11,14 +11,12 @@ import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import Effect.Aff.Class (liftAff)
-import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HTTPure
   ( Headers
   , Request
   , Response
   , ServerM
-  , created
   , emptyResponse'
   , header
   , headers
@@ -50,14 +48,6 @@ routerCors ws { method: Post, path: [ "moveBid" ] } =
 routerCors ws { body, method: Post, path: [ "placeBid" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   placeBidHandler ws bodyStr
-
-routerCors ws { method: Post, path: [ "close" ] } = do -- TODO: remove
-  liftEffect $ ws.closeHead
-  HTTPure.created
-
-routerCors ws { method: Post, path: [ "fanout" ] } = do -- TODO: remove
-  liftEffect $ ws.fanout
-  HTTPure.created
 
 routerCors _ _ = HTTPure.notFound
 

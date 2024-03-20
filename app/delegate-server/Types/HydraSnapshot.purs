@@ -1,20 +1,29 @@
 module DelegateServer.Types.HydraSnapshot
   ( HydraSnapshot
+  , emptySnapshot
   , hydraSnapshotCodec
   ) where
 
 import Prelude
 
-import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut (JsonCodec, int, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
 
 type HydraSnapshot =
-  { utxo :: HydraUtxoMap
+  { snapshotNumber :: Int
+  , utxo :: HydraUtxoMap
+  }
+
+emptySnapshot :: HydraSnapshot
+emptySnapshot =
+  { snapshotNumber: zero
+  , utxo: mempty
   }
 
 hydraSnapshotCodec :: CA.JsonCodec HydraSnapshot
 hydraSnapshotCodec =
   CA.object "HydraSnapshot" $ CAR.record
-    { utxo: hydraUtxoMapCodec
+    { snapshotNumber: CA.int
+    , utxo: hydraUtxoMapCodec
     }

@@ -1,5 +1,7 @@
 module DelegateServer.HydraNodeApi.Types.Message
   ( GreetingsMessage
+  , HeadClosedMessage
+  , HeadFinalizedMessage
   , HeadOpenMessage
   , HydraNodeApi_InMessage
       ( In_Greetings
@@ -10,11 +12,15 @@ module DelegateServer.HydraNodeApi.Types.Message
       , In_HeadIsOpen
       , In_SnapshotConfirmed
       , In_TxInvalid
+      , In_HeadIsClosed
+      , In_ReadyToFanout
+      , In_HeadIsFinalized
       )
   , HydraNodeApi_OutMessage
       ( Out_Init
       , Out_NewTx
       , Out_Close
+      , Out_Contest
       , Out_Fanout
       )
   , NewTxMessage
@@ -27,7 +33,7 @@ module DelegateServer.HydraNodeApi.Types.Message
 import Prelude
 
 import Contract.Transaction (Transaction)
-import Data.Codec.Argonaut (JsonCodec, object, string) as CA
+import Data.Codec.Argonaut (JsonCodec, int, object, string) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
@@ -52,6 +58,9 @@ data HydraNodeApi_InMessage
   | In_HeadIsOpen HeadOpenMessage
   | In_SnapshotConfirmed SnapshotConfirmedMessage
   | In_TxInvalid
+  | In_HeadIsClosed HeadClosedMessage
+  | In_ReadyToFanout
+  | In_HeadIsFinalized HeadFinalizedMessage
 
 hydraNodeApiInMessageCodec :: CA.JsonCodec HydraNodeApi_InMessage
 hydraNodeApiInMessageCodec =
@@ -66,6 +75,9 @@ hydraNodeApiInMessageCodec =
           , "HeadIsOpen": Right headOpenMessageCodec
           , "SnapshotConfirmed": Right snapshotConfirmedMessageCodec
           , "TxInvalid": Left unit
+          , "HeadIsClosed": Right headClosedMessageCodec
+          , "ReadyToFanout": Left unit
+          , "HeadIsFinalized": Right headFinalizedMessageCodec
           }
       )
   where
@@ -86,6 +98,12 @@ hydraNodeApiInMessageCodec =
       Variant.inj (Proxy :: Proxy "SnapshotConfirmed") rec
     In_TxInvalid ->
       Variant.inj (Proxy :: Proxy "TxInvalid") unit
+    In_HeadIsClosed rec ->
+      Variant.inj (Proxy :: Proxy "HeadIsClosed") rec
+    In_ReadyToFanout ->
+      Variant.inj (Proxy :: Proxy "ReadyToFanout") unit
+    In_HeadIsFinalized rec ->
+      Variant.inj (Proxy :: Proxy "HeadIsFinalized") rec
 
   fromVariant = Variant.match
     { "Greetings": In_Greetings
@@ -96,6 +114,9 @@ hydraNodeApiInMessageCodec =
     , "HeadIsOpen": In_HeadIsOpen
     , "SnapshotConfirmed": In_SnapshotConfirmed
     , "TxInvalid": const In_TxInvalid
+    , "HeadIsClosed": In_HeadIsClosed
+    , "ReadyToFanout": const In_ReadyToFanout
+    , "HeadIsFinalized": In_HeadIsFinalized
     }
 
 type PeerConnMessage =
@@ -140,6 +161,26 @@ snapshotConfirmedMessageCodec =
     { snapshot: hydraSnapshotCodec
     }
 
+type HeadClosedMessage =
+  { snapshotNumber :: Int
+  }
+
+headClosedMessageCodec :: CA.JsonCodec HeadClosedMessage
+headClosedMessageCodec =
+  CA.object "HeadClosedMessage" $ CAR.record
+    { snapshotNumber: CA.int
+    }
+
+type HeadFinalizedMessage =
+  { utxo :: HydraUtxoMap
+  }
+
+headFinalizedMessageCodec :: CA.JsonCodec HeadFinalizedMessage
+headFinalizedMessageCodec =
+  CA.object "HeadFinalizedMessage" $ CAR.record
+    { utxo: hydraUtxoMapCodec
+    }
+
 ----------------------------------------------------------------------
 -- Outcoming messages
 
@@ -147,6 +188,7 @@ data HydraNodeApi_OutMessage
   = Out_Init
   | Out_NewTx NewTxMessage
   | Out_Close
+  | Out_Contest
   | Out_Fanout
 
 hydraNodeApiOutMessageCodec :: CA.JsonCodec HydraNodeApi_OutMessage
@@ -157,6 +199,7 @@ hydraNodeApiOutMessageCodec =
           { "Init": Left unit
           , "NewTx": Right newTxMessageCodec
           , "Close": Left unit
+          , "Contest": Left unit
           , "Fanout": Left unit
           }
       )
@@ -168,6 +211,8 @@ hydraNodeApiOutMessageCodec =
       Variant.inj (Proxy :: Proxy "NewTx") rec
     Out_Close ->
       Variant.inj (Proxy :: Proxy "Close") unit
+    Out_Contest ->
+      Variant.inj (Proxy :: Proxy "Contest") unit
     Out_Fanout ->
       Variant.inj (Proxy :: Proxy "Fanout") unit
 
@@ -175,6 +220,7 @@ hydraNodeApiOutMessageCodec =
     { "Init": const Out_Init
     , "NewTx": Out_NewTx
     , "Close": const Out_Close
+    , "Contest": const Out_Contest
     , "Fanout": const Out_Fanout
     }
 

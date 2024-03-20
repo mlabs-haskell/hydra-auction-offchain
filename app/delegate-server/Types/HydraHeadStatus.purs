@@ -9,6 +9,7 @@ module DelegateServer.Types.HydraHeadStatus
       , HeadStatus_Final
       )
   , headStatusCodec
+  , isHeadClosed
   , printHeadStatus
   , readHeadStatus
   ) where
@@ -29,7 +30,14 @@ data HydraHeadStatus
   | HeadStatus_FanoutPossible
   | HeadStatus_Final
 
+isHeadClosed :: HydraHeadStatus -> Boolean
+isHeadClosed status =
+  (status == HeadStatus_Closed)
+    || (status == HeadStatus_FanoutPossible)
+    || (status == HeadStatus_Final)
+
 derive instance Generic HydraHeadStatus _
+derive instance Eq HydraHeadStatus
 
 instance Show HydraHeadStatus where
   show = genericShow

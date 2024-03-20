@@ -6,6 +6,7 @@ module DelegateServer.HydraNodeApi.WebSocket
 import Prelude
 
 import Contract.Transaction (Transaction)
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.Reader (ask)
 import Data.Array (length) as Array
 import Data.Maybe (fromMaybe)
@@ -15,6 +16,8 @@ import DelegateServer.App (AppM, runAppEff)
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.HydraNodeApi.Types.Message
   ( GreetingsMessage
+  , HeadClosedMessage
+  , HeadOpenMessage
   , HydraNodeApi_InMessage
       ( In_Greetings
       , In_PeerConnected
@@ -24,18 +27,27 @@ import DelegateServer.HydraNodeApi.Types.Message
       , In_HeadIsOpen
       , In_SnapshotConfirmed
       , In_TxInvalid
+      , In_HeadIsClosed
+      , In_ReadyToFanout
+      , In_HeadIsFinalized
       )
-  , HydraNodeApi_OutMessage(Out_Init, Out_NewTx, Out_Close, Out_Fanout)
+  , HydraNodeApi_OutMessage(Out_Init, Out_NewTx, Out_Close, Out_Contest, Out_Fanout)
   , PeerConnMessage
   , SnapshotConfirmedMessage
-  , HeadOpenMessage
+  , HeadFinalizedMessage
   , hydraNodeApiInMessageCodec
   , hydraNodeApiOutMessageCodec
   )
 import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.State (setHeadStatus, setSnapshot, whenCommitLeader)
+import DelegateServer.State (readAppState, setHeadStatus, setSnapshot, whenCommitLeader)
 import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus(HeadStatus_Initializing, HeadStatus_Open)
+  ( HydraHeadStatus
+      ( HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Closed
+      , HeadStatus_FanoutPossible
+      , HeadStatus_Final
+      )
   , printHeadStatus
   )
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
@@ -44,6 +56,7 @@ import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
+import Effect.Exception (error)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 
 type HydraNodeApiWebSocket =
@@ -51,6 +64,7 @@ type HydraNodeApiWebSocket =
   , initHead :: Effect Unit
   , submitTxL2 :: Transaction -> Effect Unit
   , closeHead :: Effect Unit
+  , challengeSnapshot :: Effect Unit
   , fanout :: Effect Unit
   }
 
@@ -70,6 +84,7 @@ mkHydraNodeApiWebSocket onConnect =
         , initHead: ws.send Out_Init
         , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ }
         , closeHead: ws.send Out_Close
+        , challengeSnapshot: ws.send Out_Contest
         , fanout: ws.send Out_Fanout
         }
     ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
@@ -92,7 +107,7 @@ errorHandler err =
 --
 
 messageHandler :: HydraNodeApiWebSocket -> HydraNodeApi_InMessage -> AppM Unit
-messageHandler _ws = case _ of
+messageHandler ws = case _ of
   In_Greetings msg ->
     msgGreetingsHandler msg
   In_PeerConnected msg ->
@@ -109,12 +124,19 @@ messageHandler _ws = case _ of
     msgSnapshotConfirmedHandler msg
   In_TxInvalid ->
     pure unit
+  In_HeadIsClosed msg ->
+    msgHeadClosedHandler ws msg
+  In_ReadyToFanout ->
+    msgReadyToFanoutHandler ws
+  In_HeadIsFinalized msg ->
+    msgHeadFinalizedHandler msg
 
 msgGreetingsHandler :: GreetingsMessage -> AppM Unit
 msgGreetingsHandler { headStatus, snapshotUtxo } = do
   setHeadStatus' headStatus
   setSnapshot'
-    { utxo: fromMaybe mempty snapshotUtxo
+    { snapshotNumber: zero -- FIXME: hydra-node: `Greetings` message should include snapshot number.
+    , utxo: fromMaybe mempty snapshotUtxo
     }
 
 msgPeerConnectedHandler :: PeerConnMessage -> AppM Unit
@@ -155,10 +177,30 @@ msgCommittedHandler = commitCollateral
 msgHeadOpenHandler :: HeadOpenMessage -> AppM Unit
 msgHeadOpenHandler { utxo } = do
   setHeadStatus' HeadStatus_Open
-  setSnapshot' { utxo }
+  setSnapshot'
+    { snapshotNumber: zero
+    , utxo
+    }
 
 msgSnapshotConfirmedHandler :: SnapshotConfirmedMessage -> AppM Unit
 msgSnapshotConfirmedHandler = setSnapshot' <<< _.snapshot
+
+msgHeadClosedHandler :: HydraNodeApiWebSocket -> HeadClosedMessage -> AppM Unit
+msgHeadClosedHandler ws { snapshotNumber } = do
+  setHeadStatus' HeadStatus_Closed
+  ownSnapshot <- readAppState _.snapshot
+  when (ownSnapshot.snapshotNumber > snapshotNumber) $
+    liftEffect ws.challengeSnapshot
+
+msgReadyToFanoutHandler :: HydraNodeApiWebSocket -> AppM Unit
+msgReadyToFanoutHandler ws = do
+  setHeadStatus' HeadStatus_FanoutPossible
+  liftEffect $ ws.fanout
+
+msgHeadFinalizedHandler :: HeadFinalizedMessage -> AppM Unit
+msgHeadFinalizedHandler _ = do
+  setHeadStatus' HeadStatus_Final
+  throwError $ error $ "Head is finalized, stopping delegate-server."
 
 --
 

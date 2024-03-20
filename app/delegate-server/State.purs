@@ -32,7 +32,7 @@ import DelegateServer.App (AppState, AppM)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
-import DelegateServer.Types.HydraSnapshot (HydraSnapshot)
+import DelegateServer.Types.HydraSnapshot (HydraSnapshot, emptySnapshot)
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar (empty, new, read, tryPut) as AVar
@@ -75,7 +75,7 @@ initApp config = do
   auctionInfo <- AVar.empty
   collateralUtxo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
-  snapshot <- AVar.new mempty
+  snapshot <- AVar.new emptySnapshot
   livePeersAVar <- AVar.new Set.empty
   isCommitLeader <- AVar.new false
   pure

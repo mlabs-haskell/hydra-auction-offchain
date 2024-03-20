@@ -25,6 +25,7 @@
   , "httpure"
   , "integers"
   , "js-bigints"
+  , "js-timers"
   , "maybe"
   , "mote"
   , "newtype"
