@@ -42,7 +42,7 @@ import DelegateServer.State
   , setCollateralUtxo
   )
 import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus(HeadStatus_Initializing, HeadStatus_Open)
+  ( HydraHeadStatus(HeadStatus_Idle, HeadStatus_Initializing, HeadStatus_Open)
   , isHeadClosed
   , printHeadStatus
   )
@@ -76,7 +76,7 @@ main = launchAff_ do
   ws <- initHydraApiWsConn appState
   closeServer <- liftEffect $ server appState ws
 
-  runApp appState $ closeHeadAtBiddingEnd ws
+  runApp appState $ initHeadAtBiddingStart ws *> closeHeadAtBiddingEnd ws
 
   -- Handle process events, perform cleanup of allocated resources:
   cleanupSem <- AVar.new unit
@@ -128,6 +128,21 @@ prepareCollateralUtxo = do
   utxo <- runContract getCollateralUtxo
   setCollateralUtxo utxo
   liftEffect $ log $ "Prepared collateral utxo: " <> show utxo
+
+initHeadAtBiddingStart :: HydraNodeApiWebSocket -> AppM Unit
+initHeadAtBiddingStart ws = do
+  appState <- ask
+  auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
+  let biddingStart = (unwrap (unwrap auctionInfo).auctionTerms).biddingStart
+  liftEffect $ scheduleAt biddingStart $ runAppEff appState do
+    headStatus <- readAppState (Proxy :: _ "headStatus")
+    case headStatus of
+      HeadStatus_Idle ->
+        liftEffect do
+          log $ "Bidding period active, initializing the head."
+          ws.initHead
+      _ ->
+        pure unit
 
 closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM Unit
 closeHeadAtBiddingEnd ws = do
