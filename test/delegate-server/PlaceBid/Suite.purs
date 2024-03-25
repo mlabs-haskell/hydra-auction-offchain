@@ -286,8 +286,8 @@ messageHandler params ws = case _ of
         liftAff $ params.callback $ ContractError contractError
       Right _ ->
         pure unit
-  In_SnapshotConfirmed { snapshot: { utxo } } -> do
-    let utxos = toUtxoMapWithoutRefScripts utxo
+  In_SnapshotConfirmed { snapshot } -> do
+    let utxos = toUtxoMapWithoutRefScripts (unwrap snapshot).utxo
     liftAff $ params.callback $ SnapshotConfirmed $ snd <$> findStandingBidUtxo
       (unwrap params.auctionInfo)
       utxos

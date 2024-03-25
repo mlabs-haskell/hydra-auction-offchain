@@ -1,5 +1,5 @@
 module DelegateServer.Config
-  ( AppConfig
+  ( AppConfig(AppConfig)
   , configParser
   ) where
 
@@ -11,6 +11,9 @@ import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (note)
 import Data.Foldable (fold)
+import Data.Generic.Rep (class Generic)
+import Data.Newtype (class Newtype, wrap)
+import Data.Show.Generic (genericShow)
 import DelegateServer.Helpers (readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
 import HydraAuctionOffchain.Config (HostPort, readHostPort)
@@ -21,7 +24,7 @@ import Parsing (Parser, runParser)
 import URI.Port (Port)
 import URI.Port (parser) as Port
 
-type AppConfig =
+newtype AppConfig = AppConfig
   { auctionMetadataOref :: TransactionInput
   , serverPort :: Port
   , hydraNodeId :: String
@@ -35,6 +38,13 @@ type AppConfig =
   , nodeSocketPreprod :: FilePath
   , blockfrostApiKey :: String
   }
+
+derive instance Generic AppConfig _
+derive instance Newtype AppConfig _
+derive instance Eq AppConfig
+
+instance Show AppConfig where
+  show = genericShow
 
 configParser :: Optparse.Parser AppConfig
 configParser = ado
@@ -87,19 +97,20 @@ configParser = ado
     , Optparse.metavar "STR"
     ]
   in
-    { auctionMetadataOref
-    , serverPort
-    , hydraNodeId
-    , hydraNode
-    , hydraNodeApi
-    , hydraPersistDir
-    , hydraSk
-    , cardanoSk
-    , walletSk
-    , peers: Array.fromFoldable peers
-    , nodeSocketPreprod
-    , blockfrostApiKey
-    }
+    wrap
+      { auctionMetadataOref
+      , serverPort
+      , hydraNodeId
+      , hydraNode
+      , hydraNodeApi
+      , hydraPersistDir
+      , hydraSk
+      , cardanoSk
+      , walletSk
+      , peers: Array.fromFoldable peers
+      , nodeSocketPreprod
+      , blockfrostApiKey
+      }
 
 ----------------------------------------------------------------------
 -- Readers

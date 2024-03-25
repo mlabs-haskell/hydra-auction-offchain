@@ -47,18 +47,17 @@ import Contract.Value (adaSymbol, singleton, symbols) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
-import Control.Monad.Reader (asks)
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.BalanceTx.CoinSelection (SelectionStrategy(SelectionStrategyMinimal))
 import Data.Array (find) as Array
 import Data.Map (fromFoldable, toUnfoldable) as Map
-import Data.Newtype (modify)
-import DelegateServer.App (AppM, runContractNullCosts)
+import Data.Newtype (modify, unwrap)
+import DelegateServer.App (runContractNullCosts)
 import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (readAppState)
+import DelegateServer.State (class AppOpen, access, readAppState)
 import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
@@ -81,12 +80,14 @@ import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuc
 import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import JS.BigInt (fromInt) as BigInt
 import Node.Path (FilePath)
+import Type.Proxy (Proxy(Proxy))
 
-placeBidL2 :: HydraNodeApiWebSocket -> BidTerms -> AppM Unit
+placeBidL2 :: forall m. AppOpen m => HydraNodeApiWebSocket -> BidTerms -> m Unit
 placeBidL2 ws bidTerms = do
-  auctionInfo <- readAppState _.auctionInfo
-  utxos <- readAppState _.snapshot <#> toUtxoMapWithoutRefScripts <<< _.utxo
-  { cardanoSk } <- asks _.config
+  auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
+  utxos <- readAppState (Proxy :: _ "snapshot") <#> toUtxoMapWithoutRefScripts <<< _.utxo <<<
+    unwrap
+  { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
   res <- runContractNullCosts do
     mkContractOutput identity $
       placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk

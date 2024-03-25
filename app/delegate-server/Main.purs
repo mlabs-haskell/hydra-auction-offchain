@@ -8,7 +8,7 @@ import Ansi.Codes (Color(Red))
 import Ansi.Output (dim, foreground, withGraphics)
 import Contract.Monad (ContractEnv, stopContractEnv)
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.Reader (ask, asks)
+import Control.Monad.Reader (ask)
 import Data.Foldable (foldMap)
 import Data.Maybe (maybe)
 import Data.Newtype (unwrap)
@@ -20,19 +20,27 @@ import Data.UInt (toString) as UInt
 import DelegateServer.App
   ( AppM
   , AppState
+  , initApp
   , runApp
   , runAppEff
   , runContract
   , runContractExitOnErr
   )
-import DelegateServer.Config (AppConfig, configParser)
+import DelegateServer.Config (AppConfig(AppConfig), configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket, mkHydraNodeApiWebSocket)
 import DelegateServer.Lib.Timer (scheduleAt)
 import DelegateServer.Server (server)
-import DelegateServer.State (initApp, readAppState, setAuctionInfo, setCollateralUtxo)
+import DelegateServer.State
+  ( class AppBase
+  , class AppInit
+  , access
+  , readAppState
+  , setAuctionInfo
+  , setCollateralUtxo
+  )
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus(HeadStatus_Initializing, HeadStatus_Open)
   , isHeadClosed
@@ -55,6 +63,7 @@ import Node.Process (onSignal, onUncaughtException)
 import Node.Stream (onDataString)
 import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
+import Type.Proxy (Proxy(Proxy))
 
 main :: Effect Unit
 main = launchAff_ do
@@ -75,7 +84,9 @@ main = launchAff_ do
     cleanupHandler' = do
       AVarSync.tryTake cleanupSem >>=
         maybe (pure unit)
-          (const (cleanupHandler hydraNodeProcess ws closeServer appState.contractEnv))
+          ( const
+              (cleanupHandler hydraNodeProcess ws closeServer (unwrap appState.contractEnv))
+          )
   liftEffect do
     onUncaughtException \err -> do
       log $ withGraphics (foreground Red) $ message err
@@ -104,15 +115,15 @@ cleanupHandler hydraNodeProcess ws closeServer contractEnv = do
     flip runAff_ (stopContractEnv contractEnv) $
       const (log "Successfully completed all cleanup actions -> exiting.")
 
-setAuction :: AppM Unit
+setAuction :: forall m. AppBase m => m Unit
 setAuction = do
-  { auctionMetadataOref } <- asks _.config
+  { auctionMetadataOref } <- unwrap <$> access (Proxy :: _ "config")
   auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
   setAuctionInfo auctionInfo
   liftEffect $ log $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
     auctionInfo
 
-prepareCollateralUtxo :: AppM Unit
+prepareCollateralUtxo :: forall m. AppInit m => m Unit
 prepareCollateralUtxo = do
   utxo <- runContract getCollateralUtxo
   setCollateralUtxo utxo
@@ -121,11 +132,11 @@ prepareCollateralUtxo = do
 closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM Unit
 closeHeadAtBiddingEnd ws = do
   appState <- ask
-  auctionInfo <- readAppState _.auctionInfo
+  auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
   let biddingEnd = (unwrap (unwrap auctionInfo).auctionTerms).biddingEnd
   liftEffect $ scheduleAt biddingEnd $ runAppEff appState do
     liftAff $ delay $ Milliseconds 5000.0
-    headStatus <- readAppState _.headStatus
+    headStatus <- readAppState (Proxy :: _ "headStatus")
     case headStatus of
       HeadStatus_Initializing ->
         liftEffect do
@@ -152,7 +163,7 @@ initHydraApiWsConn appState = do
   AVar.take wsAVar
 
 startHydraNode :: AppConfig -> Aff ChildProcess
-startHydraNode appConfig = do
+startHydraNode (AppConfig appConfig) = do
   apiServerStartedSem <- AVar.empty
   hydraNodeProcess <- liftEffect $ spawn "hydra-node" hydraNodeArgs defaultSpawnOptions
 

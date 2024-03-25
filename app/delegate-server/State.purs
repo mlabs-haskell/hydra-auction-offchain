@@ -1,6 +1,14 @@
 module DelegateServer.State
-  ( becomeCommitLeader
-  , initApp
+  ( class AccessRec
+  , class App
+  , class AppBase
+  , class AppInit
+  , class AppOpen
+  , class MonadAccess
+  , ContractEnvWrapper(ContractEnvWrapper)
+  , access
+  , accessRec
+  , becomeCommitLeader
   , readAppState
   , setAuctionInfo
   , setCollateralUtxo
@@ -11,98 +19,169 @@ module DelegateServer.State
 
 import Prelude
 
-import Contract.Config
-  ( ContractParams
-  , LogLevel(Trace)
-  , NetworkId(TestnetId)
-  , PrivatePaymentKeySource(PrivatePaymentKeyFile)
-  , WalletSpec(UseKeys)
-  , blockfrostPublicPreprodServerConfig
-  , defaultConfirmTxDelay
-  , defaultTimeParams
-  , disabledSynchronizationParams
-  , emptyHooks
-  , mkBlockfrostBackendParams
-  )
-import Contract.Monad (mkContractEnv)
-import Control.Monad.Reader (asks)
-import Data.Maybe (Maybe(Just, Nothing))
-import Data.Set (empty) as Set
-import DelegateServer.App (AppState, AppM)
+import Contract.Monad (ContractEnv)
+import Control.Monad.Error.Class (class MonadThrow)
+import Data.Newtype (class Newtype)
+import Data.Set (Set)
+import Data.Symbol (class IsSymbol)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
-import DelegateServer.Types.HydraSnapshot (HydraSnapshot, emptySnapshot)
-import Effect.Aff (Aff)
+import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
+import DelegateServer.Types.HydraSnapshot (HydraSnapshot)
 import Effect.Aff.AVar (AVar)
-import Effect.Aff.AVar (empty, new, read, tryPut) as AVar
-import Effect.Aff.Class (liftAff)
+import Effect.Aff.AVar (read, tryPut) as AVar
+import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Exception (Error)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, Utxo)
+import Prim.Row (class Cons, class Lacks)
+import Record (insert) as Record
+import Type.Data.List (type (:>), List', Nil')
+import Type.Proxy (Proxy(Proxy))
 
-readAppState :: forall (a :: Type). (AppState -> AVar a) -> AppM a
-readAppState f = (liftAff <<< AVar.read) =<< asks f
+newtype ContractEnvWrapper = ContractEnvWrapper ContractEnv
 
-putAppState :: forall (a :: Type). (AppState -> AVar a) -> a -> AppM Unit
-putAppState f val = asks f >>= (void <<< liftAff <<< AVar.tryPut val)
+derive instance Newtype ContractEnvWrapper _
 
-updAppState :: forall (a :: Type). (AppState -> AVar a) -> a -> AppM Unit
-updAppState f val = asks f >>= (liftAff <<< flip modifyAVar_ (const (pure val)))
+class MonadAccess :: (Type -> Type) -> Symbol -> Type -> Constraint
+class (Monad m) <= MonadAccess m l a | m l -> a where
+  access :: Proxy l -> m a
 
-setAuctionInfo :: AuctionInfoExtended -> AppM Unit
-setAuctionInfo = putAppState _.auctionInfo
+class AccessRec :: (Type -> Type) -> List' Symbol -> Row Type -> Constraint
+class AccessRec m ls r | m ls -> r where
+  accessRec :: Proxy ls -> m (Record r)
 
-setCollateralUtxo :: Utxo -> AppM Unit
-setCollateralUtxo = putAppState _.collateralUtxo
+instance Applicative m => AccessRec m Nil' () where
+  accessRec _ = pure {}
 
-setHeadStatus :: HydraHeadStatus -> AppM Unit
-setHeadStatus = updAppState _.headStatus
+instance
+  ( MonadAccess m l a
+  , AccessRec m ls r'
+  , Cons l a r' r
+  , Lacks l r'
+  , IsSymbol l
+  ) =>
+  AccessRec m (l :> ls) r where
+  accessRec _ = do
+    let label = (Proxy :: Proxy l)
+    Record.insert label <$> access label <*> accessRec (Proxy :: Proxy ls)
 
-setSnapshot :: HydraSnapshot -> AppM Unit
-setSnapshot = updAppState _.snapshot
+-- FIXME: This instance breaks types for some reason.
+-- With this instance enabled, AppBase m will require MonadAsk r m.
+--
+-- instance (MonadAsk (Record r) m, IsSymbol l, Cons l a r' r) => MonadAccess m l a where
+--   access l = Record.get l <$> ask
 
-becomeCommitLeader :: AppM Unit
-becomeCommitLeader = updAppState _.isCommitLeader true
+class
+  ( MonadAff m
+  , MonadThrow Error m
+  , MonadAccess m "config" AppConfig
+  , MonadAccess m "contractEnv" ContractEnvWrapper
+  , MonadAccess m "auctionInfo" (AVar AuctionInfoExtended)
+  , MonadAccess m "headStatus" (AVar HydraHeadStatus)
+  , MonadAccess m "livePeers" (AVar (Set String))
+  ) <=
+  AppBase m
 
-whenCommitLeader :: AppM Unit -> AppM Unit
+-- We don't need access to the hydra snapshot until the head is open.
+class
+  ( AppBase m
+  , MonadAccess m "collateralUtxo" (AVar Utxo)
+  , MonadAccess m "isCommitLeader" (AVar Boolean)
+  ) <=
+  AppInit m
+
+-- We don't need access to commit-related info once the head is open.
+class
+  ( AppBase m
+  , MonadAccess m "snapshot" (AVar HydraSnapshot)
+  ) <=
+  AppOpen m
+
+class
+  ( AppBase m
+  , AppInit m
+  , AppOpen m
+  ) <=
+  App m
+
+readAppState
+  :: forall m l a
+   . MonadAccess m l (AVar a)
+  => MonadAff m
+  => Proxy l
+  -> m a
+readAppState l =
+  (liftAff <<< AVar.read)
+    =<< access l
+
+putAppState
+  :: forall m l a
+   . MonadAccess m l (AVar a)
+  => MonadAff m
+  => Proxy l
+  -> a
+  -> m Unit
+putAppState l val =
+  (void <<< liftAff <<< AVar.tryPut val)
+    =<< access l
+
+updAppState
+  :: forall m l a
+   . MonadAccess m l (AVar a)
+  => MonadAff m
+  => Proxy l
+  -> a
+  -> m Unit
+updAppState l val =
+  (liftAff <<< flip modifyAVar_ (const (pure val)))
+    =<< access l
+
+setAuctionInfo
+  :: forall m
+   . MonadAccess m "auctionInfo" (AVar AuctionInfoExtended)
+  => MonadAff m
+  => AuctionInfoExtended
+  -> m Unit
+setAuctionInfo = putAppState (Proxy :: _ "auctionInfo")
+
+setCollateralUtxo
+  :: forall m
+   . MonadAccess m "collateralUtxo" (AVar Utxo)
+  => MonadAff m
+  => Utxo
+  -> m Unit
+setCollateralUtxo = putAppState (Proxy :: _ "collateralUtxo")
+
+setHeadStatus
+  :: forall m
+   . MonadAccess m "headStatus" (AVar HydraHeadStatus)
+  => MonadAff m
+  => HydraHeadStatus
+  -> m Unit
+setHeadStatus = updAppState (Proxy :: _ "headStatus")
+
+setSnapshot
+  :: forall m
+   . MonadAccess m "snapshot" (AVar HydraSnapshot)
+  => MonadAff m
+  => HydraSnapshot
+  -> m Unit
+setSnapshot = updAppState (Proxy :: _ "snapshot")
+
+becomeCommitLeader
+  :: forall m
+   . MonadAccess m "isCommitLeader" (AVar Boolean)
+  => MonadAff m
+  => m Unit
+becomeCommitLeader = updAppState (Proxy :: _ "isCommitLeader") true
+
+whenCommitLeader
+  :: forall m
+   . MonadAccess m "isCommitLeader" (AVar Boolean)
+  => MonadAff m
+  => m Unit
+  -> m Unit
 whenCommitLeader action = do
-  avar <- asks _.isCommitLeader
+  avar <- access (Proxy :: _ "isCommitLeader")
   commitLeader <- liftAff $ AVar.read avar
   when commitLeader action
-
-initApp :: AppConfig -> Aff AppState
-initApp config = do
-  contractEnv <- mkContractEnv $ mkContractParams config
-  auctionInfo <- AVar.empty
-  collateralUtxo <- AVar.empty
-  headStatus <- AVar.new HeadStatus_Unknown
-  snapshot <- AVar.new emptySnapshot
-  livePeersAVar <- AVar.new Set.empty
-  isCommitLeader <- AVar.new false
-  pure
-    { config
-    , contractEnv
-    , auctionInfo
-    , collateralUtxo
-    , headStatus
-    , snapshot
-    , livePeersAVar
-    , isCommitLeader
-    }
-
-mkContractParams :: AppConfig -> ContractParams
-mkContractParams config =
-  { backendParams:
-      mkBlockfrostBackendParams
-        { blockfrostConfig: blockfrostPublicPreprodServerConfig
-        , blockfrostApiKey: Just config.blockfrostApiKey
-        , confirmTxDelay: defaultConfirmTxDelay
-        }
-  , networkId: TestnetId
-  , logLevel: Trace
-  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile config.walletSk) Nothing
-  , customLogger: Nothing
-  , suppressLogs: true
-  , hooks: emptyHooks
-  , timeParams: defaultTimeParams
-  , synchronizationParams: disabledSynchronizationParams
-  }

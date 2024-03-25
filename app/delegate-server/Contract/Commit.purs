@@ -13,12 +13,12 @@ import Contract.Transaction
   , signTransaction
   , submit
   )
-import Control.Monad.Reader (asks)
 import Data.Argonaut (encodeJson)
 import Data.Lens ((.~))
 import Data.Lens.Common (simple)
 import Data.Lens.Iso.Newtype (_Newtype)
-import DelegateServer.App (AppM, runContract)
+import Data.Newtype (unwrap)
+import DelegateServer.App (runContract)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.HydraNodeApi.Types.Commit
   ( CommitUtxoMap
@@ -27,15 +27,16 @@ import DelegateServer.HydraNodeApi.Types.Commit
   )
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (readAppState)
+import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
 import HydraAuctionOffchain.Lib.Json (printJson)
+import Type.Proxy (Proxy(Proxy))
 
-commitStandingBid :: AppM Unit
+commitStandingBid :: forall m. AppInit m => m Unit
 commitStandingBid = do
-  auctionInfo <- unwrap <$> readAppState _.auctionInfo
-  collateralUtxo <- readAppState _.collateralUtxo
+  auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
+  collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
   standingBidValidator <- runContract $ mkStandingBidValidator auctionInfo.auctionId
     auctionInfo.auctionTerms
   bidUtxo <- runContract $ queryStandingBidUtxo auctionInfo
@@ -46,13 +47,14 @@ commitStandingBid = do
       commitUtxos $ bidCommit <> mkCollateralCommit collateralUtxo
     _ -> pure unit
 
-commitCollateral :: AppM Unit
+commitCollateral :: forall m. AppInit m => m Unit
 commitCollateral =
-  (commitUtxos <<< mkCollateralCommit) =<< readAppState _.collateralUtxo
+  (commitUtxos <<< mkCollateralCommit)
+    =<< readAppState (Proxy :: _ "collateralUtxo")
 
-commitUtxos :: CommitUtxoMap -> AppM Unit
+commitUtxos :: forall m. AppBase m => CommitUtxoMap -> m Unit
 commitUtxos utxos = do
-  { hydraNodeApi, cardanoSk } <- asks _.config
+  { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
   commitRes <- liftAff $ commit serverConfig utxos
   case commitRes of

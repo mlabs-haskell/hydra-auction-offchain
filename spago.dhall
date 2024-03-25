@@ -54,6 +54,7 @@
   , "strings"
   , "transformers"
   , "tuples"
+  , "typelevel-lists"
   , "uint"
   , "uri"
   , "uuid"

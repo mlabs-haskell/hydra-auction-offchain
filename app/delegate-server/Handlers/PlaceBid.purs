@@ -5,14 +5,14 @@ module DelegateServer.Handlers.PlaceBid
 import Prelude
 
 import Data.Either (Either(Left, Right))
-import DelegateServer.App (AppM)
 import DelegateServer.Contract.PlaceBid (placeBidL2)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
+import DelegateServer.State (class AppOpen)
 import HTTPure (Response, badRequest, created) as HTTPure
 import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 
-placeBidHandler :: HydraNodeApiWebSocket -> String -> AppM HTTPure.Response
+placeBidHandler :: forall m. AppOpen m => HydraNodeApiWebSocket -> String -> m HTTPure.Response
 placeBidHandler ws bodyStr =
   case caDecodeString bidTermsCodec bodyStr of
     Left err ->

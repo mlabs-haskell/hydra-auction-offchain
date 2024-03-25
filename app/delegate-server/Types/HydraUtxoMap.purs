@@ -79,6 +79,7 @@ newtype HydraUtxoMap = HydraUtxoMap (Array (TransactionInput /\ TransactionOutpu
 
 derive instance Generic HydraUtxoMap _
 derive instance Newtype HydraUtxoMap _
+derive instance Eq HydraUtxoMap
 derive newtype instance Semigroup HydraUtxoMap
 derive newtype instance Monoid HydraUtxoMap
 
