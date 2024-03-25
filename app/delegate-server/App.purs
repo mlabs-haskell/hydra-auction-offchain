@@ -6,6 +6,7 @@ module DelegateServer.App
   , runAppEff
   , runContract
   , runContractExitOnErr
+  , runContractLift
   , runContractNullCosts
   ) where
 
@@ -27,6 +28,7 @@ import Contract.Config
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Reader (class MonadAsk, ReaderT, asks, runReaderT)
+import Control.Monad.Trans.Class (class MonadTrans, lift)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
@@ -42,6 +44,7 @@ import DelegateServer.State
   , ContractEnvWrapper
   , access
   )
+import DelegateServer.Types.CommitStatus (CommitStatus(ShouldCommitCollateral))
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, emptySnapshot)
 import Effect (Effect)
@@ -94,6 +97,9 @@ runContract contract = do
   contractEnv <- access (Proxy :: _ "contractEnv")
   liftAff $ runContractInEnv (unwrap contractEnv) contract
 
+runContractLift :: forall t m a. MonadTrans t => AppBase m => Contract a -> t m a
+runContractLift = lift <<< runContract
+
 runContractExitOnErr :: forall m a. AppBase m => Contract (ContractOutput a) -> m a
 runContractExitOnErr =
   runContract >=> case _ of
@@ -118,7 +124,7 @@ type AppState =
   , headStatus :: AVar HydraHeadStatus
   , livePeers :: AVar (Set String)
   , collateralUtxo :: AVar Utxo
-  , isCommitLeader :: AVar Boolean
+  , commitStatus :: AVar CommitStatus
   , snapshot :: AVar HydraSnapshot
   }
 
@@ -140,8 +146,8 @@ instance MonadAccess AppM "livePeers" (AVar (Set String)) where
 instance MonadAccess AppM "collateralUtxo" (AVar Utxo) where
   access _ = asks _.collateralUtxo
 
-instance MonadAccess AppM "isCommitLeader" (AVar Boolean) where
-  access _ = asks _.isCommitLeader
+instance MonadAccess AppM "commitStatus" (AVar CommitStatus) where
+  access _ = asks _.commitStatus
 
 instance MonadAccess AppM "snapshot" (AVar HydraSnapshot) where
   access _ = asks _.snapshot
@@ -150,20 +156,20 @@ initApp :: AppConfig -> Aff AppState
 initApp config = do
   contractEnv <- wrap <$> mkContractEnv (mkContractParams config)
   auctionInfo <- AVar.empty
-  collateralUtxo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
-  snapshot <- AVar.new emptySnapshot
   livePeers <- AVar.new Set.empty
-  isCommitLeader <- AVar.new false
+  collateralUtxo <- AVar.empty
+  commitStatus <- AVar.new ShouldCommitCollateral
+  snapshot <- AVar.new emptySnapshot
   pure
     { config
     , contractEnv
     , auctionInfo
-    , collateralUtxo
     , headStatus
-    , snapshot
     , livePeers
-    , isCommitLeader
+    , collateralUtxo
+    , commitStatus
+    , snapshot
     }
 
 mkContractParams :: AppConfig -> ContractParams

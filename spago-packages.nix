@@ -1517,6 +1517,30 @@ let
         installPhase = "ln -s $src $out";
       };
 
+    "typelevel-lists" = pkgs.stdenv.mkDerivation {
+        name = "typelevel-lists";
+        version = "v2.1.0";
+        src = pkgs.fetchgit {
+          url = "https://github.com/PureFunctor/purescript-typelevel-lists.git";
+          rev = "435206ebb9979db27e36e49329eae7ee5e3d7530";
+          sha256 = "04ac9rx920yksnwk0wfmy0gdaa736d5qrdj3dbhq2jwn30il1l77";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
+    "typelevel-peano" = pkgs.stdenv.mkDerivation {
+        name = "typelevel-peano";
+        version = "v1.0.1";
+        src = pkgs.fetchgit {
+          url = "https://github.com/csicar/purescript-typelevel-peano.git";
+          rev = "b9c670b69adfcebf0647059d1ba44cbdd360eba5";
+          sha256 = "0yfn4h6gahl4jbwd7vaq5487b741bydqqy0jd8k7s627fdkwqsak";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
     "typelevel-prelude" = pkgs.stdenv.mkDerivation {
         name = "typelevel-prelude";
         version = "v7.0.0";

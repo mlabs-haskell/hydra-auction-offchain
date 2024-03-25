@@ -1,5 +1,6 @@
 module DelegateServer.Lib.Transaction
-  ( setExUnitsToMax
+  ( reSignTransaction
+  , setExUnitsToMax
   , setTxValid
   ) where
 
@@ -8,19 +9,29 @@ import Prelude
 import Contract.Monad (Contract)
 import Contract.ProtocolParameters (getProtocolParameters)
 import Contract.Transaction
-  ( Language(PlutusV2)
+  ( BalancedSignedTransaction
+  , Language(PlutusV2)
   , Transaction
   , _isValid
   , _plutusData
+  , _vkeys
   , _witnessSet
+  , signTransaction
   )
 import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
 import Ctl.Internal.Transaction (setScriptDataHash)
 import Data.Lens ((^.), (%~), (.~))
+import Data.Lens.Common (simple)
+import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (filterKeys) as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (Maybe(Nothing), fromMaybe)
 import Data.Newtype (modify, unwrap, wrap)
 import Effect.Class (liftEffect)
+
+reSignTransaction :: BalancedSignedTransaction -> Contract BalancedSignedTransaction
+reSignTransaction tx =
+  signTransaction
+    (tx # simple _Newtype <<< _witnessSet <<< _vkeys .~ Nothing)
 
 setTxValid :: Transaction -> Transaction
 setTxValid = _isValid .~ true

@@ -7,8 +7,10 @@ import Prelude
 
 import Contract.Transaction (Transaction)
 import Control.Monad.Error.Class (throwError)
+import Control.Monad.Except (runExceptT)
 import Control.Monad.Reader (ask)
 import Data.Array (length) as Array
+import Data.Either (either)
 import Data.Maybe (fromMaybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Set (delete, insert, member, size) as Set
@@ -49,9 +51,12 @@ import DelegateServer.State
   , class AppOpen
   , accessRec
   , readAppState
+  , setCommitStatus
   , setHeadStatus
   , setSnapshot
-  , whenCommitLeader
+  )
+import DelegateServer.Types.CommitStatus
+  ( CommitStatus(ShouldCommitCollateral, ShouldCommitStandingBid)
   )
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus
@@ -186,10 +191,22 @@ msgPeerDisconnectedHandler { peer } = do
 msgHeadIsInitializingHandler :: forall m. AppInit m => m Unit
 msgHeadIsInitializingHandler = do
   setHeadStatus' HeadStatus_Initializing
-  whenCommitLeader commitStandingBid
+  commitStatus <- readAppState (Proxy :: _ "commitStatus")
+  when (commitStatus == ShouldCommitStandingBid) do
+    runExceptT commitStandingBid >>=
+      either
+        ( \err ->
+            liftEffect (log $ "Could not commit standing bid, error: " <> show err <> ".")
+              *> setCommitStatus ShouldCommitCollateral
+        )
+        (const (pure unit))
 
 msgCommittedHandler :: forall m. AppInit m => m Unit
-msgCommittedHandler = commitCollateral
+msgCommittedHandler =
+  runExceptT commitCollateral >>=
+    either
+      (\err -> liftEffect $ log $ "Could not commit collateral, error: " <> show err <> ".")
+      (const (pure unit))
 
 msgHeadAbortedHandler :: forall m. AppInit m => m Unit
 msgHeadAbortedHandler = do
@@ -232,9 +249,9 @@ msgHeadFinalizedHandler _ = do
 --
 
 setHeadStatus' :: forall m. AppBase m => HydraHeadStatus -> m Unit
-setHeadStatus' headStatus = do
-  setHeadStatus headStatus
-  liftEffect $ log $ "New head status: " <> printHeadStatus headStatus <> "."
+setHeadStatus' status = do
+  setHeadStatus status
+  liftEffect $ log $ "New head status: " <> printHeadStatus status <> "."
 
 setSnapshot' :: forall m. AppOpen m => HydraSnapshot -> m Unit
 setSnapshot' snapshot = do

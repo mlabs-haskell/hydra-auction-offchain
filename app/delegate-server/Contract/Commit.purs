@@ -1,24 +1,32 @@
 module DelegateServer.Contract.Commit
-  ( commitCollateral
+  ( CommitCollateralError
+      ( CommitCollateral_CommitRequestFailed
+      )
+  , CommitStandingBidError
+      ( CommitBid_CouldNotFindStandingBidUtxo
+      , CommitBid_CouldNotBuildCommit
+      , CommitBid_CommitRequestFailed
+      )
+  , commitCollateral
   , commitStandingBid
   ) where
 
 import Contract.Prelude
 
-import Contract.Monad (Contract)
 import Contract.Transaction
   ( BalancedSignedTransaction(BalancedSignedTransaction)
-  , _vkeys
-  , _witnessSet
+  , TransactionHash
   , signTransaction
   , submit
   )
+import Control.Error.Util ((!?), (??))
+import Control.Monad.Except (ExceptT(ExceptT), withExceptT)
 import Data.Argonaut (encodeJson)
-import Data.Lens ((.~))
-import Data.Lens.Common (simple)
-import Data.Lens.Iso.Newtype (_Newtype)
+import Data.Generic.Rep (class Generic)
 import Data.Newtype (unwrap)
-import DelegateServer.App (runContract)
+import Data.Show.Generic (genericShow)
+import Data.Tuple.Nested (type (/\), (/\))
+import DelegateServer.App (runContract, runContractLift)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.HydraNodeApi.Types.Commit
   ( CommitUtxoMap
@@ -26,47 +34,71 @@ import DelegateServer.HydraNodeApi.Types.Commit
   , mkStandingBidCommit
   )
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
+import DelegateServer.Lib.Transaction (reSignTransaction)
 import DelegateServer.Lib.Wallet (withWallet)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
+import DelegateServer.Types.ServiceError (ServiceError)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
+import HydraAuctionOffchain.Contract.Types (StandingBidState)
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
 import HydraAuctionOffchain.Lib.Json (printJson)
 import Type.Proxy (Proxy(Proxy))
 
-commitStandingBid :: forall m. AppInit m => m Unit
+data CommitStandingBidError
+  = CommitBid_CouldNotFindStandingBidUtxo
+  | CommitBid_CouldNotBuildCommit
+  | CommitBid_CommitRequestFailed ServiceError
+
+derive instance Generic CommitStandingBidError _
+
+instance Show CommitStandingBidError where
+  show = genericShow
+
+commitStandingBid
+  :: forall m
+   . AppInit m
+  => ExceptT CommitStandingBidError m
+       (StandingBidState /\ TransactionHash)
 commitStandingBid = do
   auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
   collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
-  standingBidValidator <- runContract $ mkStandingBidValidator auctionInfo.auctionId
-    auctionInfo.auctionTerms
-  bidUtxo <- runContract $ queryStandingBidUtxo auctionInfo
-  case bidUtxo of
-    Just (utxo /\ _) | Just bidCommit <- mkStandingBidCommit utxo standingBidValidator -> do
-      liftEffect $ log $ "Ready to commit standing bid: " <>
-        printJson (encodeJson bidCommit)
-      commitUtxos $ bidCommit <> mkCollateralCommit collateralUtxo
-    _ -> pure unit
+  standingBidValidator <-
+    runContractLift $
+      mkStandingBidValidator auctionInfo.auctionId auctionInfo.auctionTerms
+  bidUtxo /\ standingBid <- runContract (queryStandingBidUtxo auctionInfo)
+    !? CommitBid_CouldNotFindStandingBidUtxo
+  bidCommit <- mkStandingBidCommit bidUtxo standingBidValidator
+    ?? CommitBid_CouldNotBuildCommit
+  liftEffect $ log $ "Ready to commit standing bid: "
+    <> printJson (encodeJson bidCommit)
+  txHash <-
+    withExceptT CommitBid_CommitRequestFailed
+      (commitUtxos $ bidCommit <> mkCollateralCommit collateralUtxo)
+  pure $ standingBid /\ txHash
 
-commitCollateral :: forall m. AppInit m => m Unit
-commitCollateral =
-  (commitUtxos <<< mkCollateralCommit)
-    =<< readAppState (Proxy :: _ "collateralUtxo")
+data CommitCollateralError = CommitCollateral_CommitRequestFailed ServiceError
 
-commitUtxos :: forall m. AppBase m => CommitUtxoMap -> m Unit
+derive instance Generic CommitCollateralError _
+
+instance Show CommitCollateralError where
+  show = genericShow
+
+commitCollateral :: forall m. AppInit m => ExceptT CommitCollateralError m TransactionHash
+commitCollateral = do
+  collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
+  withExceptT CommitCollateral_CommitRequestFailed
+    (commitUtxos $ mkCollateralCommit collateralUtxo)
+
+commitUtxos :: forall m. AppBase m => CommitUtxoMap -> ExceptT ServiceError m TransactionHash
 commitUtxos utxos = do
   { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
-  commitRes <- liftAff $ commit serverConfig utxos
-  case commitRes of
-    Left err -> liftEffect $ log $ show err
-    Right draftCommitTx ->
-      runContract do
-        let commitTx = BalancedSignedTransaction draftCommitTx.cborHex
-        signedTx <- (withWallet cardanoSk <<< signTransaction) =<< reSignTransaction commitTx
-        txHash <- submit signedTx
-        liftEffect $ log $ "Submitted commit tx: " <> show txHash <> "."
-
-reSignTransaction :: BalancedSignedTransaction -> Contract BalancedSignedTransaction
-reSignTransaction tx =
-  signTransaction
-    (tx # simple _Newtype <<< _witnessSet <<< _vkeys .~ Nothing)
+  draftCommitTx <- ExceptT $ liftAff $ commit serverConfig utxos
+  runContractLift do
+    let commitTx = BalancedSignedTransaction draftCommitTx.cborHex
+    signedTx <-
+      (withWallet cardanoSk <<< signTransaction)
+        =<< reSignTransaction commitTx
+    txHash <- submit signedTx
+    liftEffect $ log $ "Submitted commit tx: " <> show txHash <> "."
+    pure txHash

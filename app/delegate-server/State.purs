@@ -8,24 +8,25 @@ module DelegateServer.State
   , ContractEnvWrapper(ContractEnvWrapper)
   , access
   , accessRec
-  , becomeCommitLeader
   , readAppState
   , setAuctionInfo
   , setCollateralUtxo
+  , setCommitStatus
   , setHeadStatus
   , setSnapshot
-  , whenCommitLeader
   ) where
 
 import Prelude
 
 import Contract.Monad (ContractEnv)
 import Control.Monad.Error.Class (class MonadThrow)
+import Control.Monad.Trans.Class (class MonadTrans, lift)
 import Data.Newtype (class Newtype)
 import Data.Set (Set)
 import Data.Symbol (class IsSymbol)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
+import DelegateServer.Types.CommitStatus (CommitStatus)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot)
 import Effect.Aff.AVar (AVar)
@@ -45,6 +46,9 @@ derive instance Newtype ContractEnvWrapper _
 class MonadAccess :: (Type -> Type) -> Symbol -> Type -> Constraint
 class (Monad m) <= MonadAccess m l a | m l -> a where
   access :: Proxy l -> m a
+
+instance (MonadTrans t, Monad (t m), MonadAccess m l a) => MonadAccess (t m) l a where
+  access = lift <<< access
 
 class AccessRec :: (Type -> Type) -> List' Symbol -> Row Type -> Constraint
 class AccessRec m ls r | m ls -> r where
@@ -86,7 +90,7 @@ class
 class
   ( AppBase m
   , MonadAccess m "collateralUtxo" (AVar Utxo)
-  , MonadAccess m "isCommitLeader" (AVar Boolean)
+  , MonadAccess m "commitStatus" (AVar CommitStatus)
   ) <=
   AppInit m
 
@@ -168,20 +172,10 @@ setSnapshot
   -> m Unit
 setSnapshot = updAppState (Proxy :: _ "snapshot")
 
-becomeCommitLeader
+setCommitStatus
   :: forall m
-   . MonadAccess m "isCommitLeader" (AVar Boolean)
+   . MonadAccess m "commitStatus" (AVar CommitStatus)
   => MonadAff m
-  => m Unit
-becomeCommitLeader = updAppState (Proxy :: _ "isCommitLeader") true
-
-whenCommitLeader
-  :: forall m
-   . MonadAccess m "isCommitLeader" (AVar Boolean)
-  => MonadAff m
-  => m Unit
+  => CommitStatus
   -> m Unit
-whenCommitLeader action = do
-  avar <- access (Proxy :: _ "isCommitLeader")
-  commitLeader <- liftAff $ AVar.read avar
-  when commitLeader action
+setCommitStatus = updAppState (Proxy :: _ "commitStatus")
