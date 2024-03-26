@@ -74,7 +74,7 @@ import Test.DelegateServer.PlaceBid.Fixtures
 import Test.Spec.Assertions (fail, shouldEqual)
 
 suite :: TestPlanM ContractTest Unit
-suite = do
+suite =
   group "place-bid" do
     test "valid transition from empty standing bid" do
       runTest commitUtxoMapFixture0 bidFixture0

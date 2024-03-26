@@ -15,7 +15,12 @@ import Data.UInt (fromInt) as UInt
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
 import Mote (group)
-import Test.DelegateServer.PlaceBid.Suite (suite) as PlaceBid
+import Test.Contract.AnnounceAuction (suite) as AnnounceAuction
+import Test.Contract.AuthorizeBidders (suite) as AuthorizeBidders
+import Test.Contract.EnterAuction (suite) as EnterAuction
+import Test.Contract.PlaceBid (suite) as PlaceBid
+import Test.Contract.StartBidding (suite) as StartBidding
+-- import Test.DelegateServer.PlaceBid.Suite (suite) as PlaceBidL2
 
 main :: Effect Unit
 main = do
@@ -24,9 +29,15 @@ main = do
 
 suite :: TestPlanM (Aff Unit) Unit
 suite =
-  group "delegate-server" do
+  group "contracts" do
     testPlutipContracts plutipConfig do
+      AnnounceAuction.suite
+      StartBidding.suite
+      EnterAuction.suite
+      AuthorizeBidders.suite
       PlaceBid.suite
+
+-- PlaceBidL2.suite
 
 plutipConfig :: PlutipConfig
 plutipConfig =
@@ -46,10 +57,10 @@ plutipConfig =
       , path: Nothing
       }
   , suppressLogs: true
-  , customLogger: Just $ \_ _ -> pure unit
+  , customLogger: Nothing
   , hooks: emptyHooks
   , clusterConfig:
-      { slotLength: Seconds one
+      { slotLength: Seconds 0.1
       , epochSize: Just $ UInt.fromInt 4320000
       , maxTxSize: Just $ UInt.fromInt 16384
       , raiseExUnitsToMax: true

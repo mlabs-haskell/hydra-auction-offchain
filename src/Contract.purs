@@ -39,6 +39,7 @@ import HydraAuctionOffchain.Contract.AuthorizeBidders
       )
   , AuthBiddersContractParams(AuthBiddersContractParams)
   , authorizeBiddersContract
+  , mkAuthorizeBiddersContractWithErrors
   ) as ExportAuthorizeBidders
 
 import HydraAuctionOffchain.Contract.ClaimAuctionLotBidder
@@ -89,6 +90,7 @@ import HydraAuctionOffchain.Contract.DiscoverSellerSignature
       )
   , DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
   , discoverSellerSignature
+  , discoverSellerSignatureWithErrors
   ) as ExportDiscoverSellerSignature
 
 import HydraAuctionOffchain.Contract.EnterAuction
@@ -101,6 +103,7 @@ import HydraAuctionOffchain.Contract.EnterAuction
       )
   , EnterAuctionContractParams(EnterAuctionContractParams)
   , enterAuctionContract
+  , mkEnterAuctionContractWithErrors
   ) as ExportEnterAuction
 
 import HydraAuctionOffchain.Contract.MintTokens
@@ -122,6 +125,7 @@ import HydraAuctionOffchain.Contract.PlaceBid
       , PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
       )
   , PlaceBidContractParams(PlaceBidContractParams)
+  , mkPlaceBidContractWithErrors
   , placeBidContract
   ) as ExportPlaceBid
 

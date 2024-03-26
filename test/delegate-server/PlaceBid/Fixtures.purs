@@ -8,19 +8,16 @@ module Test.DelegateServer.PlaceBid.Fixtures
 
 import Prelude
 
-import Contract.Address (Address, Bech32String, PubKeyHash, scriptHashAddress)
+import Contract.Address (scriptHashAddress)
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (OutputDatum(NoOutputDatum, OutputDatum), toData)
-import Contract.Prim.ByteArray (hexToByteArray, hexToByteArrayUnsafe)
+import Contract.Prim.ByteArray (hexToByteArrayUnsafe)
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTime)
 import Contract.Transaction (TransactionInput, TransactionOutput)
-import Contract.Value (CurrencySymbol, TokenName, mkCurrencySymbol, mkTokenName)
+import Contract.Value (CurrencySymbol)
 import Contract.Value (lovelaceValueOf, singleton) as Value
 import Control.Monad.Except (runExceptT)
-import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
-import Ctl.Internal.Serialization.Address (addressFromBech32)
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Time.Duration (Days(Days))
@@ -33,13 +30,19 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTerms
   , BidTerms
   , StandingBidState(StandingBidState)
-  , VerificationKey
-  , vkeyFromBytes
   )
 import HydraAuctionOffchain.Contract.Validators (mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (fromJustWithErr, mkPosixTimeUnsafe)
+import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
+import Test.Helpers
+  ( mkAddressUnsafe
+  , mkCurrencySymbolUnsafe
+  , mkOrefUnsafe
+  , mkPubKeyHashUnsafe
+  , mkTokenNameUnsafe
+  , mkVerificationKeyUnsafe
+  )
 
 bidFixture1 :: BidTerms
 bidFixture1 = wrap
@@ -206,29 +209,3 @@ auctionTermsFixture nowTime = wrap
   , minBidIncrement: BigInt.fromInt 1_000_000
   , minDepositAmount: BigInt.fromInt 3_000_000
   }
-
-mkAddressUnsafe :: Bech32String -> Address
-mkAddressUnsafe addr = fromJustWithErr "mkAddressUnsafe" $
-  toPlutusAddress =<< addressFromBech32 addr
-
-mkVerificationKeyUnsafe :: String -> VerificationKey
-mkVerificationKeyUnsafe vk = fromJustWithErr "mkVerificationKeyUnsafe" $
-  vkeyFromBytes =<< hexToByteArray vk
-
-mkPubKeyHashUnsafe :: String -> PubKeyHash
-mkPubKeyHashUnsafe pkh =
-  fromJustWithErr "mkPubKeyHashUnsafe" $
-    (map wrap <<< ed25519KeyHashFromBytes) =<< hexToByteArray pkh
-
-mkCurrencySymbolUnsafe :: String -> CurrencySymbol
-mkCurrencySymbolUnsafe cs = fromJustWithErr "mkCurrencySymbolUnsafe" $
-  mkCurrencySymbol =<< hexToByteArray cs
-
-mkTokenNameUnsafe :: String -> TokenName
-mkTokenNameUnsafe tn = fromJustWithErr "mkTokenNameUnsafe" $
-  mkTokenName =<< hexToByteArray tn
-
-mkOrefUnsafe :: String -> TransactionInput
-mkOrefUnsafe txHash =
-  fromJustWithErr "mkOrefUnsafe" $
-    (wrap <<< { transactionId: _, index: zero } <<< wrap) <$> hexToByteArray txHash

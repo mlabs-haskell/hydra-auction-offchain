@@ -6,6 +6,7 @@ module HydraAuctionOffchain.Contract.AuthorizeBidders
       )
   , AuthBiddersContractParams(AuthBiddersContractParams)
   , authorizeBiddersContract
+  , mkAuthorizeBiddersContractWithErrors
   ) where
 
 import Contract.Prelude
