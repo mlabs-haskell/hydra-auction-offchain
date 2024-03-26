@@ -50,7 +50,7 @@ routerCors ws { body, method: Post, path: [ "placeBid" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   placeBidHandler ws bodyStr
 
-routerCors ws { method: Get, path: [ "queryBid" ] } =
+routerCors _ { method: Get, path: [ "queryBid" ] } =
   queryBidHandler
 
 routerCors _ _ = HTTPure.notFound
