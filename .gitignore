@@ -11,3 +11,7 @@
 /demo/index.js
 /demo/node_modules/
 /plutip-env/payment.skey
+/*.sk
+/*.vk
+/*.addr
+/hydra-persist/

@@ -10,7 +10,6 @@ import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
 import Contract.Value (valueToCoin') as Value
 import Data.Array (mapMaybe) as Array
-import Data.BigInt (BigInt)
 import Data.Codec.Argonaut (JsonCodec, boolean, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Generic.Rep (class Generic)
@@ -25,6 +24,7 @@ import HydraAuctionOffchain.Contract.Types
   , bidderInfoCodec
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
+import JS.BigInt (BigInt)
 
 newtype BidderInfoCandidate = BidderInfoCandidate
   { bidderInfo :: BidderInfo

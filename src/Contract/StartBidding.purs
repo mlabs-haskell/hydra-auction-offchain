@@ -38,7 +38,6 @@ import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (singleton) as Map
@@ -70,6 +69,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import JS.BigInt (fromInt) as BigInt
 import Partial.Unsafe (unsafePartial)
 
 newtype StartBiddingContractParams = StartBiddingContractParams
@@ -175,7 +175,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     sellerPkh :: PaymentPubKeyHash
     sellerPkh = wrap $ unsafePartial fromJust $ toPubKeyHash auctionTermsRec.sellerAddress
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ -- Spend auction escrow utxo:
         Constraints.mustSpendScriptOutput auctionEscrowOref auctionEscrowRedeemer
@@ -198,7 +198,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
         Constraints.mustValidateIn txValidRange
       ]
 
-    lookups :: ScriptLookups Void
+    lookups :: ScriptLookups
     lookups = mconcat
       [ Lookups.unspentOutputs $ Map.singleton auctionEscrowOref $ snd auctionEscrowUtxo
       , Lookups.validator (unwrap validators).auctionEscrow

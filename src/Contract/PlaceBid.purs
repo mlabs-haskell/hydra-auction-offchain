@@ -50,8 +50,6 @@ import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.BigInt (BigInt)
-import Data.BigInt (fromInt) as BigInt
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (fromFoldable) as Map
@@ -84,6 +82,8 @@ import HydraAuctionOffchain.Contract.Types
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
+import JS.BigInt (BigInt)
+import JS.BigInt (fromInt) as BigInt
 
 newtype PlaceBidContractParams = PlaceBidContractParams
   { auctionInfo :: AuctionInfoExtended
@@ -201,7 +201,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
       mkFiniteInterval nowTime
         (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ -- Spend standing bid utxo with old standing bid datum: 
         Constraints.mustSpendScriptOutputUsingScriptRef standingBidOref standingBidRedeemer
@@ -219,7 +219,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
         Constraints.mustValidateIn txValidRange
       ]
 
-    lookups :: ScriptLookups Void
+    lookups :: ScriptLookups
     lookups = Lookups.unspentOutputs $ Map.fromFoldable [ standingBidUtxo ]
 
   lift $ submitTxReturningContractResult {} $ emptySubmitTxData

@@ -2,8 +2,10 @@ module HydraAuctionOffchain.Config
   ( HostPort
   , config
   , demoServerConfig
+  , hostPortCodec
   , mkContractParams
   , plutipConfig
+  , printHostPort
   , readHostPort
   ) where
 
@@ -25,13 +27,14 @@ import Contract.Config
   )
 import Contract.Test.Plutip (PlutipConfig)
 import Control.Error.Util (bool)
+import Data.Codec.Argonaut (JsonCodec, prismaticCodec, string) as CA
 import Data.Maybe (Maybe(Just, Nothing), fromJust)
 import Data.String (Pattern(Pattern))
 import Data.String (split) as String
 import Data.Time.Duration (Seconds(Seconds))
 import Data.Traversable (traverse)
 import Data.UInt (UInt)
-import Data.UInt (fromInt, fromString) as UInt
+import Data.UInt (fromInt, fromString, toString) as UInt
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.WalletApp (WalletApp(Plutip), walletSpecFromWalletApp)
 import Partial.Unsafe (unsafePartial)
@@ -49,6 +52,12 @@ type Config =
   }
 
 type HostPort = { host :: String, port :: UInt }
+
+hostPortCodec :: CA.JsonCodec HostPort
+hostPortCodec = CA.prismaticCodec "HostPort" readHostPort printHostPort CA.string
+
+printHostPort :: HostPort -> String
+printHostPort { host, port } = host <> ":" <> UInt.toString port
 
 readHostPort :: String -> Maybe HostPort
 readHostPort str =

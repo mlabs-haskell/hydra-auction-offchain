@@ -29,7 +29,7 @@ mkPersonalOracle :: PaymentPubKeyHash -> PersonalOracle
 mkPersonalOracle pkh =
   { assetClass:
       mkAssetClass
-        (unsafePartial fromJust $ scriptCurrencySymbol $ NativeMintingPolicy script)
+        (scriptCurrencySymbol $ NativeMintingPolicy script)
         ( unsafePartial fromJust
             (mkTokenName =<< byteArrayFromAscii "PERSONAL_ORACLE")
         )

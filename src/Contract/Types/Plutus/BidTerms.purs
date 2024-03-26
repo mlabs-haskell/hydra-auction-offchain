@@ -17,7 +17,6 @@ import Contract.Prim.ByteArray (ByteArray, byteLength, hexToByteArrayUnsafe)
 import Contract.Value (CurrencySymbol)
 import Data.Array (fold)
 import Data.Array (replicate) as Array
-import Data.BigInt (BigInt)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
@@ -36,6 +35,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidder
 import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
 import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
 import HydraAuctionOffchain.Lib.Crypto (verifySignature)
+import JS.BigInt (BigInt)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidTerms = BidTerms

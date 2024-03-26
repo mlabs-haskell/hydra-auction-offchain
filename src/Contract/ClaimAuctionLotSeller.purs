@@ -189,7 +189,7 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
     totalAuctionFeesValue :: Value
     totalAuctionFeesValue = Value.lovelaceValueOf $ totalAuctionFees auctionTerms
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ -- Spend auction escrow utxo:
         Constraints.mustSpendScriptOutput auctionEscrowOref auctionEscrowRedeemer
@@ -222,7 +222,7 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
         Constraints.mustValidateIn $ from nowTime
       ]
 
-    lookups :: ScriptLookups Void
+    lookups :: ScriptLookups
     lookups = mconcat
       [ Lookups.unspentOutputs $ Map.fromFoldable
           ( [ auctionEscrowUtxo, standingBidUtxo ]

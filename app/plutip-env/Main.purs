@@ -8,7 +8,6 @@ import Contract.Test.Plutip (InitialUTxOs, withPlutipContractEnv)
 import Contract.Wallet (KeyWallet)
 import Contract.Wallet.Key (keyWalletPrivatePaymentKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
-import Data.BigInt (fromInt) as BigInt
 import Effect (Effect)
 import Effect.AVar (tryPut) as AVar
 import Effect.Aff (Aff, launchAff_)
@@ -16,6 +15,7 @@ import Effect.Aff.AVar (empty, take) as AVar
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Config (plutipConfig)
+import JS.BigInt (fromInt) as BigInt
 import Node.Encoding (Encoding(UTF8))
 import Node.Process (stdin)
 import Node.Stream (destroy, onDataString)

@@ -46,8 +46,10 @@ import HydraAuctionOffchain.Contract.Types.ContractResult
   , ContractResult'
   , ContractResultRow
   , SubmitTxData
+  , buildTx
   , emptySubmitTxData
   , getTotalExUnits
+  , submitTx
   , submitTxReturningContractResult
   ) as ExportContractResult
 

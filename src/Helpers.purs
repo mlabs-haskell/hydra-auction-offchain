@@ -1,9 +1,13 @@
 module HydraAuctionOffchain.Helpers
-  ( errV
+  ( dateTimeFromPosixTimeUnsafe
+  , errV
   , exceptNoteE
+  , fromJustWithErr
   , getInlineDatum
   , getTxOutsAt
   , liftEitherShow
+  , mkPosixTimeUnsafe
+  , nowPosix
   , tokenNameFromAsciiUnsafe
   , withEmptyPlutusV2Script
   , withoutRefScript
@@ -16,6 +20,7 @@ import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, Datum(Datum), OutputDatum(OutputDatum), fromData)
 import Contract.Prim.ByteArray (byteArrayFromAscii)
 import Contract.Scripts (PlutusScript(PlutusScript))
+import Contract.Time (POSIXTime)
 import Contract.Transaction
   ( Language(PlutusV2)
   , ScriptRef(PlutusScriptRef)
@@ -29,15 +34,30 @@ import Control.Monad.Error.Class (class MonadError, class MonadThrow, liftEither
 import Control.Monad.Except (ExceptT)
 import Ctl.Internal.Plutus.Types.Address (class PlutusAddress)
 import Data.Bifunctor (lmap)
+import Data.DateTime (DateTime)
+import Data.DateTime.Instant (instant, toDateTime, unInstant)
 import Data.Either (Either)
 import Data.Map (toUnfoldable) as Map
-import Data.Maybe (Maybe(Just, Nothing), fromJust)
+import Data.Maybe (Maybe(Just, Nothing), fromJust, fromMaybe')
 import Data.Newtype (unwrap, wrap)
+import Data.Time.Duration (class Duration, fromDuration)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Data.Validation.Semigroup (V, invalid)
+import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
-import Partial.Unsafe (unsafePartial)
+import Effect.Now (now)
+import JS.BigInt (fromNumber, toNumber) as BigInt
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
+
+dateTimeFromPosixTimeUnsafe :: POSIXTime -> DateTime
+dateTimeFromPosixTimeUnsafe =
+  toDateTime
+    <<< fromJustWithErr "dateTimeFromPosixTimeUnsafe"
+    <<< instant
+    <<< wrap
+    <<< BigInt.toNumber
+    <<< unwrap
 
 tokenNameFromAsciiUnsafe :: String -> TokenName
 tokenNameFromAsciiUnsafe tokenName =
@@ -50,6 +70,9 @@ exceptNoteE :: forall a e e' m. MonadError e' m => m a -> e -> ExceptT e m a
 exceptNoteE action err = (hush <$> try action) !? err
 
 infixl 9 exceptNoteE as !*
+
+fromJustWithErr :: forall a. String -> Maybe a -> a
+fromJustWithErr message = fromMaybe' (\_ -> unsafeCrashWith $ "fromJust: " <> message)
 
 errV :: forall e. Boolean -> e -> V (Array e) Unit
 errV x error = if x then pure unit else invalid [ error ]
@@ -64,6 +87,14 @@ getTxOutsAt :: forall addr. PlutusAddress addr => addr -> Contract (Array Transa
 getTxOutsAt =
   map (map (_.output <<< unwrap <<< snd) <<< Map.toUnfoldable)
     <<< utxosAt
+
+mkPosixTimeUnsafe :: forall (a :: Type). Duration a => a -> POSIXTime
+mkPosixTimeUnsafe dur =
+  fromJustWithErr "mkPosixTimeUnsafe"
+    (map wrap $ BigInt.fromNumber $ unwrap $ fromDuration dur)
+
+nowPosix :: forall (m :: Type -> Type). MonadEffect m => m POSIXTime
+nowPosix = liftEffect $ now <#> mkPosixTimeUnsafe <<< unInstant
 
 withoutRefScript :: TransactionOutput -> TransactionOutputWithRefScript
 withoutRefScript output = wrap

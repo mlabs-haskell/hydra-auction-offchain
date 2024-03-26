@@ -11,8 +11,6 @@ let additions =
           , "argonaut-core"
           , "arrays"
           , "bifunctors"
-          , "bigints"
-          , "bignumber"
           , "const"
           , "control"
           , "effect"
@@ -21,6 +19,7 @@ let additions =
           , "foldable-traversable"
           , "foreign-object"
           , "integers"
+          , "js-bigints"
           , "lists"
           , "maybe"
           , "mote"
@@ -38,8 +37,8 @@ let additions =
           , "uint"
           , "untagged-union"
           ]
-        , repo = "https://github.com/errfrom/purescript-aeson.git"
-        , version = "f614a840036aabb059017d03cf365f4199b9547b"
+        , repo = "https://github.com/mlabs-haskell/purescript-aeson.git"
+        , version = "v2.0.0"
         }
       , bignumber =
         { dependencies =
@@ -53,8 +52,8 @@ let additions =
           , "prelude"
           , "tuples"
           ]
-        , repo = "https://github.com/errfrom/purescript-bignumber"
-        , version = "9b3179ad07428d189e42a7a205aab9c7c4849d4a"
+        , repo = "https://github.com/mlabs-haskell/purescript-bignumber"
+        , version = "760d11b41ece31b8cdd3c53349c5c2fd48d3ff89"
         }
       , properties =
         { dependencies = [ "prelude", "console" ]
@@ -71,52 +70,7 @@ let additions =
         , repo = "https://github.com/garyb/purescript-mote"
         , version = "v1.1.0"
         }
-      , medea =
-        { dependencies =
-          [ "aff"
-          , "argonaut"
-          , "arrays"
-          , "bifunctors"
-          , "control"
-          , "effect"
-          , "either"
-          , "enums"
-          , "exceptions"
-          , "foldable-traversable"
-          , "foreign-object"
-          , "free"
-          , "integers"
-          , "lists"
-          , "maybe"
-          , "mote"
-          , "naturals"
-          , "newtype"
-          , "node-buffer"
-          , "node-fs-aff"
-          , "node-path"
-          , "nonempty"
-          , "ordered-collections"
-          , "parsing"
-          , "partial"
-          , "prelude"
-          , "psci-support"
-          , "quickcheck"
-          , "quickcheck-combinators"
-          , "safely"
-          , "spec"
-          , "strings"
-          , "these"
-          , "transformers"
-          , "typelevel"
-          , "tuples"
-          , "unicode"
-          , "unordered-collections"
-          , "unsafe-coerce"
-          ]
-        , repo = "https://github.com/errfrom/medea-ps.git"
-        , version = "00981e4ce7249808413a6db8d88d849bbe85245a"
-        }
-      , purescript-toppokki =
+      , toppokki =
         { dependencies =
           [ "prelude"
           , "record"
@@ -127,7 +81,7 @@ let additions =
           , "node-fs-aff"
           ]
         , repo = "https://github.com/mlabs-haskell/purescript-toppokki"
-        , version = "f90f92f0ddf0eecc73705c1675db37918d18cbcb"
+        , version = "5992e93396a734c980ef61c74df5b6ab46108920"
         }
       , noble-secp256k1 =
         { dependencies =
@@ -143,6 +97,11 @@ let additions =
             "https://github.com/mlabs-haskell/purescript-noble-secp256k1.git"
         , version = "a3c0f67e9fdb0086016d7aebfad35d09a08b4ecd"
         }
+      , js-bigints =
+        { dependencies = [ "integers", "maybe", "prelude" ]
+        , repo = "https://github.com/purescript-contrib/purescript-js-bigints"
+        , version = "36a7d8ac75a7230043ae511f3145f9ed130954a9"
+        }      
       , cardano-transaction-lib =
         { dependencies =
           [ "aeson"
@@ -150,13 +109,14 @@ let additions =
           , "aff-promise"
           , "aff-retry"
           , "affjax"
+          , "ansi"
           , "argonaut"
           , "argonaut-codecs"
           , "arraybuffer-types"
           , "arrays"
           , "avar"
           , "bifunctors"
-          , "bigints"
+          , "js-bigints"
           , "bignumber"
           , "checked-exceptions"
           , "console"
@@ -183,7 +143,6 @@ let additions =
           , "lattice"
           , "lists"
           , "maybe"
-          , "medea"
           , "media-types"
           , "monad-logger"
           , "mote"
@@ -209,7 +168,7 @@ let additions =
           , "prelude"
           , "profunctor"
           , "profunctor-lenses"
-          , "purescript-toppokki"
+          , "toppokki"
           , "quickcheck"
           , "quickcheck-combinators"
           , "quickcheck-laws"
@@ -234,9 +193,9 @@ let additions =
           , "variant"
           , "web-html"
           , "web-storage"
-          ]
+          ]       
         , repo = "https://github.com/Plutonomicon/cardano-transaction-lib.git"
-        , version = "5a560eb9ac1bef94d718b90f5ac2a541515127dd"
+        , version = "5cef4dea87d917327161ac09d493824928d9fe80"
         }
       , errors =
         { dependencies =

@@ -3,6 +3,7 @@ module HydraAuctionOffchain.Codec
   , addressCodec
   , addressWithNetworkTagCodec
   , bigIntCodec
+  , bigIntCodecNum
   , byteArrayCodec
   , currencySymbolCodec
   , fromJs
@@ -12,6 +13,7 @@ module HydraAuctionOffchain.Codec
   , orefCodec
   , posixTimeCodec
   , pubKeyHashCodec
+  , sysStartCodec
   , toJs
   , tokenNameCodec
   , transactionHashCodec
@@ -29,7 +31,7 @@ import Contract.Address
   )
 import Contract.Config (NetworkId)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
-import Contract.Time (POSIXTime(POSIXTime))
+import Contract.Time (POSIXTime(POSIXTime), SystemStart)
 import Contract.Transaction
   ( TransactionHash(TransactionHash)
   , TransactionInput(TransactionInput)
@@ -47,8 +49,6 @@ import Contract.Value (flattenValue, singleton) as Value
 import Control.Promise (Promise, fromAff)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes, ed25519KeyHashToBytes)
 import Data.Argonaut (Json)
-import Data.BigInt (BigInt)
-import Data.BigInt (fromString, toString) as BigInt
 import Data.Codec.Argonaut
   ( JsonCodec
   , array
@@ -64,8 +64,9 @@ import Data.Codec.Argonaut
   ) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Either (fromRight)
+import Data.Either (hush)
 import Data.Foldable (foldMap)
+import Data.Formatter.DateTime (formatDateTime, unformatDateTime)
 import Data.Maybe (Maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Profunctor (dimap, wrapIso)
@@ -73,8 +74,10 @@ import Data.Tuple.Nested ((/\))
 import Data.UInt (fromString, toString) as UInt
 import Effect (Effect)
 import Effect.Aff (Aff)
+import HydraAuctionOffchain.Helpers (fromJustWithErr)
+import JS.BigInt (BigInt)
+import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
 import Type.Proxy (Proxy(Proxy))
-import Undefined (undefined)
 
 addressCodec :: NetworkId -> CA.JsonCodec Address
 addressCodec network =
@@ -94,8 +97,21 @@ currencySymbolCodec =
 bigIntCodec :: CA.JsonCodec BigInt
 bigIntCodec = CA.prismaticCodec "BigInt" BigInt.fromString BigInt.toString CA.string
 
+bigIntCodecNum :: CA.JsonCodec BigInt
+bigIntCodecNum = CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber CA.number
+
 byteArrayCodec :: CA.JsonCodec ByteArray
 byteArrayCodec = CA.prismaticCodec "ByteArray" hexToByteArray byteArrayToHex CA.string
+
+sysStartCodec :: CA.JsonCodec SystemStart
+sysStartCodec =
+  CA.prismaticCodec "SystemStart"
+    (map wrap <<< hush <<< unformatDateTime formatter)
+    (fromJustWithErr "sysStartCodec" <<< hush <<< formatDateTime formatter <<< unwrap)
+    CA.string
+  where
+  formatter :: String
+  formatter = "YYYY-MM-DDTHH:mm:ssZ"
 
 orefCodec :: CA.JsonCodec TransactionInput
 orefCodec =
@@ -153,7 +169,7 @@ toJs :: forall (a :: Type). HasJson a => a -> Json
 toJs = CA.encode (jsonCodec (Proxy :: Proxy a))
 
 fromJs :: forall (a :: Type). HasJson a => Json -> a
-fromJs = fromRight undefined <<< CA.decode (jsonCodec (Proxy :: Proxy a))
+fromJs = fromJustWithErr "fromJs" <<< hush <<< CA.decode (jsonCodec (Proxy :: Proxy a))
 
 liftAff1
   :: forall (a :: Type) (b :: Type)
