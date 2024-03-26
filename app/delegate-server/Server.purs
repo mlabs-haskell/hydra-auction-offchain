@@ -9,6 +9,7 @@ import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppState, AppM, runApp)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
+import DelegateServer.Handlers.QueryBid (queryBidHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import Effect.Aff.Class (liftAff)
 import Effect.Console (log)
@@ -24,7 +25,7 @@ import HTTPure
   , serve
   , toString
   ) as HTTPure
-import HTTPure (Method(Options, Post), (!?), (!@))
+import HTTPure (Method(Get, Options, Post), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
 import URI.Port (toInt) as Port
 
@@ -48,6 +49,9 @@ routerCors ws { method: Post, path: [ "moveBid" ] } =
 routerCors ws { body, method: Post, path: [ "placeBid" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   placeBidHandler ws bodyStr
+
+routerCors ws { method: Get, path: [ "queryBid" ] } =
+  queryBidHandler
 
 routerCors _ _ = HTTPure.notFound
 

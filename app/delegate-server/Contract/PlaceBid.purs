@@ -46,7 +46,7 @@ import Contract.Value (Value)
 import Contract.Value (adaSymbol, singleton, symbols) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?), (??))
-import Control.Monad.Except (ExceptT, throwError, withExceptT)
+import Control.Monad.Except (ExceptT, mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.BalanceTx.CoinSelection (SelectionStrategy(SelectionStrategyMinimal))
 import Data.Array (find) as Array
@@ -66,36 +66,34 @@ import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
   , BidTerms
-  , ContractOutput(ContractOutputError, ContractOutputResult)
   , StandingBidRedeemer(NewBidRedeemer)
   , Utxo
   , AuctionInfoRec
   , buildTx
-  , contractErrorCodec
   , emptySubmitTxData
-  , mkContractOutput
   , validateNewBid
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import JS.BigInt (fromInt) as BigInt
 import Node.Path (FilePath)
 import Type.Proxy (Proxy(Proxy))
 
-placeBidL2 :: forall m. AppOpen m => HydraNodeApiWebSocket -> BidTerms -> m Unit
+placeBidL2
+  :: forall m
+   . AppOpen m
+  => HydraNodeApiWebSocket
+  -> BidTerms
+  -> ExceptT PlaceBidL2ContractError m Unit
 placeBidL2 ws bidTerms = do
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
-  utxos <- readAppState (Proxy :: _ "snapshot") <#> toUtxoMapWithoutRefScripts <<< _.utxo <<<
-    unwrap
+  utxos <-
+    readAppState (Proxy :: _ "snapshot")
+      <#> toUtxoMapWithoutRefScripts
+      <<< _.utxo
+      <<< unwrap
   { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
-  res <- runContractNullCosts do
-    mkContractOutput identity $
-      placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
-  case res of
-    ContractOutputError err ->
-      liftEffect $ log $ "Failed to place bid on L2: " <> caEncodeString contractErrorCodec err
-    ContractOutputResult _ ->
-      pure unit
+  mapExceptT runContractNullCosts $
+    placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
 
 placeBidL2'
   :: forall (r :: Row Type)

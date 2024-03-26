@@ -54,6 +54,7 @@
   , "strings"
   , "transformers"
   , "tuples"
+  , "typelevel"
   , "typelevel-lists"
   , "uint"
   , "uri"

@@ -19,7 +19,8 @@ import DelegateServer.App (AppM, runAppEff)
 import DelegateServer.Config (AppConfig(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.HydraNodeApi.Types.Message
-  ( GreetingsMessage
+  ( CommittedMessage
+  , GreetingsMessage
   , HeadClosedMessage
   , HeadOpenMessage
   , HydraNodeApi_InMessage
@@ -134,8 +135,8 @@ messageHandler ws = case _ of
     msgPeerDisconnectedHandler msg
   In_HeadIsInitializing ->
     msgHeadIsInitializingHandler
-  In_Committed ->
-    msgCommittedHandler
+  In_Committed msg ->
+    msgCommittedHandler msg
   In_HeadIsAborted ->
     msgHeadAbortedHandler
   In_HeadIsOpen msg ->
@@ -201,8 +202,8 @@ msgHeadIsInitializingHandler = do
         )
         (const (pure unit))
 
-msgCommittedHandler :: forall m. AppInit m => m Unit
-msgCommittedHandler =
+msgCommittedHandler :: forall m. AppInit m => CommittedMessage -> m Unit
+msgCommittedHandler _ =
   runExceptT commitCollateral >>=
     either
       (\err -> liftEffect $ log $ "Could not commit collateral, error: " <> show err <> ".")

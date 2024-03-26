@@ -1,5 +1,6 @@
 module DelegateServer.HydraNodeApi.Types.Message
-  ( GreetingsMessage
+  ( CommittedMessage
+  , GreetingsMessage
   , HeadClosedMessage
   , HeadFinalizedMessage
   , HeadOpenMessage
@@ -28,6 +29,7 @@ module DelegateServer.HydraNodeApi.Types.Message
   , NewTxMessage
   , PeerConnMessage
   , SnapshotConfirmedMessage
+  , committedMessageCodec
   , hydraNodeApiInMessageCodec
   , hydraNodeApiOutMessageCodec
   ) where
@@ -56,7 +58,7 @@ data HydraNodeApi_InMessage
   | In_PeerConnected PeerConnMessage
   | In_PeerDisconnected PeerConnMessage
   | In_HeadIsInitializing
-  | In_Committed
+  | In_Committed CommittedMessage
   | In_HeadIsAborted
   | In_HeadIsOpen HeadOpenMessage
   | In_SnapshotConfirmed SnapshotConfirmedMessage
@@ -74,7 +76,7 @@ hydraNodeApiInMessageCodec =
           , "PeerConnected": Right peerConnMessageCodec
           , "PeerDisconnected": Right peerConnMessageCodec
           , "HeadIsInitializing": Left unit
-          , "Committed": Left unit
+          , "Committed": Right committedMessageCodec
           , "HeadIsAborted": Left unit
           , "HeadIsOpen": Right headOpenMessageCodec
           , "SnapshotConfirmed": Right snapshotConfirmedMessageCodec
@@ -94,8 +96,8 @@ hydraNodeApiInMessageCodec =
       Variant.inj (Proxy :: Proxy "PeerDisconnected") rec
     In_HeadIsInitializing ->
       Variant.inj (Proxy :: Proxy "HeadIsInitializing") unit
-    In_Committed ->
-      Variant.inj (Proxy :: Proxy "Committed") unit
+    In_Committed rec ->
+      Variant.inj (Proxy :: Proxy "Committed") rec
     In_HeadIsAborted ->
       Variant.inj (Proxy :: Proxy "HeadIsAborted") unit
     In_HeadIsOpen rec ->
@@ -116,7 +118,7 @@ hydraNodeApiInMessageCodec =
     , "PeerConnected": In_PeerConnected
     , "PeerDisconnected": In_PeerDisconnected
     , "HeadIsInitializing": const In_HeadIsInitializing
-    , "Committed": const In_Committed
+    , "Committed": In_Committed
     , "HeadIsAborted": const In_HeadIsAborted
     , "HeadIsOpen": In_HeadIsOpen
     , "SnapshotConfirmed": In_SnapshotConfirmed
@@ -146,6 +148,16 @@ greetingsMessageCodec =
   CA.object "GreetingsMessage" $ CAR.record
     { headStatus: headStatusCodec
     , snapshotUtxo: CAR.optional hydraUtxoMapCodec
+    }
+
+type CommittedMessage =
+  { utxo :: HydraUtxoMap
+  }
+
+committedMessageCodec :: CA.JsonCodec CommittedMessage
+committedMessageCodec =
+  CA.object "CommittedMessage" $ CAR.record
+    { utxo: hydraUtxoMapCodec
     }
 
 type HeadOpenMessage =
