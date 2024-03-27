@@ -13,6 +13,7 @@ module HydraAuctionOffchain.Contract.PlaceBid
       , PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
       )
   , PlaceBidContractParams(PlaceBidContractParams)
+  , mkPlaceBidContractWithErrors
   , placeBidContract
   ) where
 

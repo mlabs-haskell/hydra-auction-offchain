@@ -1,4 +1,4 @@
-.PHONY: build bundle serve repl format check plutip-test plutip-env delegate-server1 delegate-server2
+.PHONY: build bundle serve repl format check plutip-test plutip-env delegate-server-help delegate-server1 delegate-server2
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 
@@ -21,14 +21,17 @@ check:
 	@nix build .#checks.x86_64-linux.all
 
 plutip-test:
-	spago run --main Test.Plutip
+	CARDANO_NETWORK=mainnet spago run --main Test.Plutip
 
 plutip-env:
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
 
+delegate-server-help:
+	spago run --main DelegateServer.Main --exec-args '--help'
+
 delegate-server1:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref 721e982e42e7d918825464964238f36783656d6b7ead22a332cd9bfb456d7a60#0 \
+		--auction-metadata-oref 8532cdf6ba5477b523d026ac35545cefda3e484085da0588297d0fa1600f4cb0#0 \
 		--server-port :7010 \
 		--hydra-node-id A \
 		--hydra-node 127.0.0.1:7000 \
@@ -37,13 +40,15 @@ delegate-server1:
 		--hydra-sk hydra.sk \
 		--cardano-sk cardano.sk \
 		--wallet-sk wallet.sk \
-		--node-socket-preprod ~/state-node-preprod/node.socket \
+		--node-socket ~/state-node-preprod/node.socket \
+		--testnet-magic 1 \
+		--blockfrost-config https://cardano-preprod.blockfrost.io:443/api/v0 \
 		--blockfrost-api-key ${BLOCKFROST_API_KEY} \
 		--peer '{ \"hydraNode\": \"127.0.0.1:7002\", \"hydraVk\": \"hydra2.vk\", \"cardanoVk\": \"cardano2.vk\" }'"
 
 delegate-server2:
 	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref 721e982e42e7d918825464964238f36783656d6b7ead22a332cd9bfb456d7a60#0  \
+		--auction-metadata-oref 8532cdf6ba5477b523d026ac35545cefda3e484085da0588297d0fa1600f4cb0#0  \
 		--server-port :7011 \
 		--hydra-node-id B \
 		--hydra-node 127.0.0.1:7002 \
@@ -52,6 +57,8 @@ delegate-server2:
 		--hydra-sk hydra2.sk \
 		--cardano-sk cardano2.sk \
 		--wallet-sk wallet2.sk \
-		--node-socket-preprod ~/state-node-preprod/node.socket \
+		--node-socket ~/state-node-preprod/node.socket \
+		--testnet-magic 1 \
+		--blockfrost-config https://cardano-preprod.blockfrost.io:443/api/v0 \
 		--blockfrost-api-key ${BLOCKFROST_API_KEY} \
 		--peer '{ \"hydraNode\": \"127.0.0.1:7000\", \"hydraVk\": \"hydra.vk\", \"cardanoVk\": \"cardano.vk\" }'"

@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Contract.DiscoverSellerSignature
       )
   , DiscoverSellerSigContractParams(DiscoverSellerSigContractParams)
   , discoverSellerSignature
+  , discoverSellerSignatureWithErrors
   ) where
 
 import Contract.Prelude

@@ -8,6 +8,7 @@ module HydraAuctionOffchain.Contract.EnterAuction
       )
   , EnterAuctionContractParams(EnterAuctionContractParams)
   , enterAuctionContract
+  , mkEnterAuctionContractWithErrors
   ) where
 
 import Contract.Prelude
