@@ -20,6 +20,7 @@ import Test.Contract.AuthorizeBidders (suite) as AuthorizeBidders
 import Test.Contract.EnterAuction (suite) as EnterAuction
 import Test.Contract.PlaceBid (suite) as PlaceBid
 import Test.Contract.StartBidding (suite) as StartBidding
+
 -- import Test.DelegateServer.PlaceBid.Suite (suite) as PlaceBidL2
 
 main :: Effect Unit

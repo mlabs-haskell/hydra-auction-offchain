@@ -15,15 +15,12 @@ import Prelude
 import Contract.Config
   ( ContractParams
   , LogLevel(Trace)
-  , NetworkId(TestnetId)
+  , NetworkId(TestnetId, MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
   , WalletSpec(UseKeys)
-  , blockfrostPublicPreprodServerConfig
-  , defaultConfirmTxDelay
   , defaultTimeParams
   , disabledSynchronizationParams
   , emptyHooks
-  , mkBlockfrostBackendParams
   )
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
 import Control.Monad.Error.Class (class MonadThrow)
@@ -33,7 +30,7 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig)
+import DelegateServer.Config (AppConfig, Network(Testnet, Mainnet))
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -174,13 +171,11 @@ initApp config = do
 
 mkContractParams :: AppConfig -> ContractParams
 mkContractParams config =
-  { backendParams:
-      mkBlockfrostBackendParams
-        { blockfrostConfig: blockfrostPublicPreprodServerConfig
-        , blockfrostApiKey: Just (unwrap config).blockfrostApiKey
-        , confirmTxDelay: defaultConfirmTxDelay
-        }
-  , networkId: TestnetId
+  { backendParams: (unwrap config).queryBackend
+  , networkId:
+      case (unwrap config).network of
+        Testnet _ -> TestnetId
+        Mainnet -> MainnetId
   , logLevel: Trace
   , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile (unwrap config).walletSk) Nothing
   , customLogger: Nothing

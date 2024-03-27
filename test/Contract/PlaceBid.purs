@@ -10,8 +10,15 @@ import Contract.Test (ContractTest, withKeyWallet, withWallets)
 import Contract.Test.Mote (TestPlanM)
 import Contract.Transaction (awaitTxConfirmed)
 import Control.Monad.Except (runExceptT)
-import HydraAuctionOffchain.Contract (discoverBidders, discoverSellerSignatureWithErrors, mkPlaceBidContractWithErrors)
-import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended(AuctionInfoExtended), ContractResult)
+import HydraAuctionOffchain.Contract
+  ( discoverBidders
+  , discoverSellerSignatureWithErrors
+  , mkPlaceBidContractWithErrors
+  )
+import HydraAuctionOffchain.Contract.Types
+  ( AuctionInfoExtended(AuctionInfoExtended)
+  , ContractResult
+  )
 import Mote (group, test)
 import Test.Contract.AnnounceAuction (announceAuction)
 import Test.Contract.AuthorizeBidders (authorizeBidders)

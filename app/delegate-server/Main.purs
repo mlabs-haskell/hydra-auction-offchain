@@ -1,5 +1,6 @@
 module DelegateServer.Main
   ( main
+  , startDelegateServer
   ) where
 
 import Prelude
@@ -10,6 +11,7 @@ import Contract.Monad (ContractEnv, stopContractEnv)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Reader (ask)
 import Data.Foldable (foldMap)
+import Data.Int (decimal, toStringAs) as Int
 import Data.Maybe (maybe)
 import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
@@ -26,7 +28,7 @@ import DelegateServer.App
   , runContract
   , runContractExitOnErr
   )
-import DelegateServer.Config (AppConfig(AppConfig), configParser)
+import DelegateServer.Config (AppConfig(AppConfig), Network(Testnet, Mainnet), configParser)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
@@ -68,25 +70,7 @@ import Type.Proxy (Proxy(Proxy))
 main :: Effect Unit
 main = launchAff_ do
   appConfig <- liftEffect $ Optparse.execParser opts
-  appState <- initApp appConfig
-  runApp appState $ setAuction *> prepareCollateralUtxo
-
-  -- Start services:
-  hydraNodeProcess <- startHydraNode appConfig
-  ws <- initHydraApiWsConn appState
-  closeServer <- liftEffect $ server appState ws
-
-  runApp appState $ initHeadAtBiddingStart ws *> closeHeadAtBiddingEnd ws
-
-  -- Handle process events, perform cleanup of allocated resources:
-  cleanupSem <- AVar.new unit
-  let
-    cleanupHandler' = do
-      AVarSync.tryTake cleanupSem >>=
-        maybe (pure unit)
-          ( const
-              (cleanupHandler hydraNodeProcess ws closeServer (unwrap appState.contractEnv))
-          )
+  cleanupHandler' <- startDelegateServer appConfig
   liftEffect do
     onUncaughtException \err -> do
       log $ withGraphics (foreground Red) $ message err
@@ -97,6 +81,27 @@ opts :: Optparse.ParserInfo AppConfig
 opts =
   Optparse.info (configParser <**> Optparse.helper) $ Optparse.fullDesc
     <> Optparse.header "delegate-server"
+
+startDelegateServer :: AppConfig -> Aff (Effect Unit)
+startDelegateServer appConfig = do
+  appState <- initApp appConfig
+  runApp appState $ setAuction *> prepareCollateralUtxo
+
+  hydraNodeProcess <- startHydraNode appConfig
+  ws <- initHydraApiWsConn appState
+  closeServer <- liftEffect $ server appState ws
+
+  runApp appState $ initHeadAtBiddingStart ws *> closeHeadAtBiddingEnd ws
+
+  cleanupSem <- AVar.new unit
+  let
+    cleanupHandler' =
+      AVarSync.tryTake cleanupSem >>=
+        maybe (pure unit)
+          ( const
+              (cleanupHandler hydraNodeProcess ws closeServer (unwrap appState.contractEnv))
+          )
+  pure cleanupHandler'
 
 cleanupHandler
   :: ChildProcess
@@ -204,9 +209,20 @@ startHydraNode (AppConfig appConfig) = do
       , peer.cardanoVk
       ]
 
+  networkArgs :: Array String
+  networkArgs =
+    case appConfig.network of
+      Testnet magic ->
+        [ "--testnet-magic"
+        , Int.toStringAs Int.decimal magic
+        ]
+      Mainnet ->
+        [ "--mainnet"
+        ]
+
   hydraNodeArgs :: Array String
   hydraNodeArgs =
-    peerArgs <>
+    peerArgs <> networkArgs <>
       [ "--node-id"
       , appConfig.hydraNodeId
       , "--host"
@@ -224,9 +240,7 @@ startHydraNode (AppConfig appConfig) = do
       , "--cardano-signing-key"
       , appConfig.cardanoSk
       , "--node-socket"
-      , appConfig.nodeSocketPreprod
-      , "--testnet-magic"
-      , appConst.testnetMagic
+      , appConfig.nodeSocket
       , "--ledger-protocol-parameters"
       , appConst.protocolParams
       , "--hydra-scripts-tx-id"
