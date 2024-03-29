@@ -101,7 +101,42 @@ let additions =
         { dependencies = [ "integers", "maybe", "prelude" ]
         , repo = "https://github.com/purescript-contrib/purescript-js-bigints"
         , version = "36a7d8ac75a7230043ae511f3145f9ed130954a9"
-        }      
+        }
+      , cip30 =
+        { dependencies =
+          [ "aff"
+          , "aff-promise"
+          , "arrays"
+          , "console"
+          , "effect"
+          , "literals"
+          , "maybe"
+          , "newtype"
+          , "nullable"
+          , "prelude"
+          , "untagged-union"
+          ]
+        , repo = "https://github.com/mlabs-haskell/purescript-cip30"
+        , version = "8f1b34b48825fcec5e9c67f33e255770b1e0bc45"
+        }
+      , cip30-typesafe =
+        { dependencies =
+          [ "aff"
+          , "bifunctors"
+          , "cip30"
+          , "control"
+          , "effect"
+          , "either"
+          , "exceptions"
+          , "maybe"
+          , "prelude"
+          , "spec"
+          , "transformers"
+          , "variant"
+          ]
+        , repo = "https://github.com/mlabs-haskell/purescript-cip30-typesafe"
+        , version = "d72e51fbc0255eb3246c9132d295de7f65e16a99"
+        }
       , cardano-transaction-lib =
         { dependencies =
           [ "aeson"
@@ -116,9 +151,10 @@ let additions =
           , "arrays"
           , "avar"
           , "bifunctors"
-          , "js-bigints"
           , "bignumber"
           , "checked-exceptions"
+          , "cip30"
+          , "cip30-typesafe"
           , "console"
           , "control"
           , "crypto"
@@ -139,6 +175,7 @@ let additions =
           , "http-methods"
           , "identity"
           , "integers"
+          , "js-bigints"
           , "js-date"
           , "lattice"
           , "lists"
@@ -168,7 +205,6 @@ let additions =
           , "prelude"
           , "profunctor"
           , "profunctor-lenses"
-          , "toppokki"
           , "quickcheck"
           , "quickcheck-combinators"
           , "quickcheck-laws"
@@ -183,6 +219,7 @@ let additions =
           , "stringutils"
           , "tailrec"
           , "these"
+          , "toppokki"
           , "transformers"
           , "tuples"
           , "typelevel"
@@ -193,9 +230,9 @@ let additions =
           , "variant"
           , "web-html"
           , "web-storage"
-          ]       
+          ]
         , repo = "https://github.com/Plutonomicon/cardano-transaction-lib.git"
-        , version = "5cef4dea87d917327161ac09d493824928d9fe80"
+        , version = "63485e328b6008b5bea336269b9d6036d04c7c7b"
         }
       , errors =
         { dependencies =

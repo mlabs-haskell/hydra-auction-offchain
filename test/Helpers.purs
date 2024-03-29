@@ -1,5 +1,7 @@
 module Test.Helpers
-  ( defDistribution
+  ( chunksOf2
+  , defDistribution
+  , localhost
   , mkAddressUnsafe
   , mkCurrencySymbolUnsafe
   , mkOrefUnsafe
@@ -7,28 +9,44 @@ module Test.Helpers
   , mkTokenNameUnsafe
   , mkTokenNameAsciiUnsafe
   , mkVerificationKeyUnsafe
+  , mkdirIfNotExists
+  , publicPaymentKeyToFile
+  , randomElem
   , waitUntil
   ) where
 
 import Prelude
 
+import Aeson (encodeAeson)
 import Contract.Address (Address, PubKeyHash, Bech32String)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.Prim.ByteArray (byteArrayFromAscii, hexToByteArray)
+import Contract.Prim.ByteArray (byteArrayFromAscii, hexToByteArray, rawBytesToHex)
 import Contract.Test (InitialUTxOs)
 import Contract.Time (POSIXTime)
-import Contract.Transaction (TransactionInput)
+import Contract.Transaction (PublicKey, TransactionInput)
 import Contract.Value (CurrencySymbol, TokenName, mkCurrencySymbol, mkTokenName)
+import Ctl.Internal.Cardano.Types.Transaction (convertPubKey)
 import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
 import Ctl.Internal.Serialization.Address (addressFromBech32)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
+import Ctl.Internal.Serialization.Keys (bytesFromPublicKey)
+import Data.Array (cons, drop, take, unsafeIndex)
+import Data.Foldable (length)
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
+import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Aff (delay)
 import Effect.Aff.Class (liftAff)
+import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Random (randomInt)
 import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyFromBytes)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (fromInt, toNumber) as BigInt
+import Node.Encoding (Encoding(UTF8)) as Encoding
+import Node.FS.Sync (exists, mkdir, writeTextFile) as FSSync
+import Node.Path (FilePath)
+import Partial.Unsafe (unsafePartial)
 
 defDistribution :: InitialUTxOs
 defDistribution =
@@ -73,3 +91,46 @@ waitUntil futureTime = do
   when (nowTime < futureTime) do
     liftAff $ delay $ wrap $
       (BigInt.toNumber $ unwrap $ futureTime - nowTime) + 3000.0
+
+randomElem :: forall m a. MonadEffect m => Array a -> m a
+randomElem xs =
+  liftEffect $ unsafePartial $
+    unsafeIndex xs <$> randomInt zero (length xs - one)
+
+chunksOf2 :: forall a. Array a -> Maybe (Array (a /\ a))
+chunksOf2 xs =
+  case take 2 xs of
+    [ x, y ] -> cons (x /\ y) <$> chunksOf2 (drop 2 xs)
+    [] -> Just []
+    _ -> Nothing
+
+publicPaymentKeyToFile :: forall m. MonadEffect m => FilePath -> PublicKey -> m Unit
+publicPaymentKeyToFile fp =
+  liftEffect
+    <<< FSSync.writeTextFile Encoding.UTF8 fp
+    <<< formatPublicPaymentKey
+
+formatPublicPaymentKey :: PublicKey -> String
+formatPublicPaymentKey key =
+  show $ encodeAeson
+    { "type": "PaymentVerificationKeyShelley_ed25519"
+    , description: "Payment Verification Key"
+    , cborHex: keyToCbor key
+    }
+
+keyToCbor :: PublicKey -> String
+keyToCbor =
+  (magicPrefix <> _) <<< rawBytesToHex <<< bytesFromPublicKey
+    <<< convertPubKey
+
+magicPrefix :: String
+magicPrefix = "5820"
+
+mkdirIfNotExists :: forall m. MonadEffect m => FilePath -> m Unit
+mkdirIfNotExists dir =
+  liftEffect do
+    dirExists <- FSSync.exists dir
+    unless dirExists $ FSSync.mkdir dir
+
+localhost :: String
+localhost = "127.0.0.1"

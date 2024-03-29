@@ -1,5 +1,6 @@
 module DelegateServer.Main
-  ( main
+  ( AppHandle
+  , main
   , startDelegateServer
   ) where
 
@@ -12,12 +13,13 @@ import Control.Monad.Error.Class (throwError)
 import Control.Monad.Reader (ask)
 import Data.Foldable (foldMap)
 import Data.Int (decimal, toStringAs) as Int
-import Data.Maybe (maybe)
+import Data.Maybe (Maybe, maybe)
 import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
 import Data.Time.Duration (Milliseconds(Milliseconds))
+import Data.Traversable (for_, sequence, traverse_)
 import Data.UInt (toString) as UInt
 import DelegateServer.App
   ( AppM
@@ -49,13 +51,16 @@ import DelegateServer.Types.HydraHeadStatus
   , printHeadStatus
   )
 import Effect (Effect)
-import Effect.AVar (tryPut, tryTake) as AVarSync
+import Effect.AVar (AVar)
+import Effect.AVar (take, tryPut, tryTake) as AVarSync
 import Effect.Aff (Aff, delay, launchAff_, runAff_)
 import Effect.Aff.AVar (empty, new, take, tryPut) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error, message)
+import Effect.Timer (TimeoutId)
+import Effect.Timer (clearTimeout) as Timer
 import HydraAuctionOffchain.Config (printHostPort)
 import HydraAuctionOffchain.Contract.Types (auctionInfoExtendedCodec)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
@@ -70,19 +75,26 @@ import Type.Proxy (Proxy(Proxy))
 main :: Effect Unit
 main = launchAff_ do
   appConfig <- liftEffect $ Optparse.execParser opts
-  cleanupHandler' <- startDelegateServer appConfig
+  appHandle <- startDelegateServer appConfig
   liftEffect do
     onUncaughtException \err -> do
       log $ withGraphics (foreground Red) $ message err
-      cleanupHandler'
-    onSignal SIGINT cleanupHandler' *> onSignal SIGTERM cleanupHandler'
+      appHandle.cleanupHandler
+    onSignal SIGINT appHandle.cleanupHandler
+    onSignal SIGTERM appHandle.cleanupHandler
 
 opts :: Optparse.ParserInfo AppConfig
 opts =
   Optparse.info (configParser <**> Optparse.helper) $ Optparse.fullDesc
     <> Optparse.header "delegate-server"
 
-startDelegateServer :: AppConfig -> Aff (Effect Unit)
+type AppHandle =
+  { cleanupHandler :: Effect Unit
+  , appState :: AppState
+  , ws :: HydraNodeApiWebSocket
+  }
+
+startDelegateServer :: AppConfig -> Aff AppHandle
 startDelegateServer appConfig = do
   appState <- initApp appConfig
   runApp appState $ setAuction *> prepareCollateralUtxo
@@ -91,7 +103,9 @@ startDelegateServer appConfig = do
   ws <- initHydraApiWsConn appState
   closeServer <- liftEffect $ server appState ws
 
-  runApp appState $ initHeadAtBiddingStart ws *> closeHeadAtBiddingEnd ws
+  timers <- runApp appState $
+    sequence
+      [ initHeadAtBiddingStart ws, closeHeadAtBiddingEnd ws ]
 
   cleanupSem <- AVar.new unit
   let
@@ -99,18 +113,29 @@ startDelegateServer appConfig = do
       AVarSync.tryTake cleanupSem >>=
         maybe (pure unit)
           ( const
-              (cleanupHandler hydraNodeProcess ws closeServer (unwrap appState.contractEnv))
+              ( cleanupHandler hydraNodeProcess ws closeServer (unwrap appState.contractEnv)
+                  timers
+              )
           )
-  pure cleanupHandler'
+  pure
+    { cleanupHandler: cleanupHandler'
+    , appState
+    , ws
+    }
 
 cleanupHandler
   :: ChildProcess
   -> HydraNodeApiWebSocket
   -> (Effect Unit -> Effect Unit)
   -> ContractEnv
+  -> Array (AVar (Maybe TimeoutId))
   -> Effect Unit
-cleanupHandler hydraNodeProcess ws closeServer contractEnv = do
-  log "\nStopping http server."
+cleanupHandler hydraNodeProcess ws closeServer contractEnv timers = do
+  log "\nCancelling timers."
+  for_ timers \timer ->
+    AVarSync.take timer \timeout -> do
+      traverse_ (traverse_ Timer.clearTimeout) timeout
+  log "Stopping http server."
   closeServer do
     log "Closing hydra-node-api ws connection."
     ws.baseWs.close
@@ -134,7 +159,7 @@ prepareCollateralUtxo = do
   setCollateralUtxo utxo
   liftEffect $ log $ "Prepared collateral utxo: " <> show utxo
 
-initHeadAtBiddingStart :: HydraNodeApiWebSocket -> AppM Unit
+initHeadAtBiddingStart :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
 initHeadAtBiddingStart ws = do
   appState <- ask
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
@@ -149,7 +174,7 @@ initHeadAtBiddingStart ws = do
       _ ->
         pure unit
 
-closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM Unit
+closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
 closeHeadAtBiddingEnd ws = do
   appState <- ask
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
@@ -244,5 +269,5 @@ startHydraNode (AppConfig appConfig) = do
       , "--ledger-protocol-parameters"
       , appConst.protocolParams
       , "--hydra-scripts-tx-id"
-      , appConst.hydraScriptsTxHash
+      , appConfig.hydraScriptsTxHash
       ]

@@ -51,6 +51,7 @@ newtype AppConfig = AppConfig
   , nodeSocket :: FilePath
   , network :: Network
   , queryBackend :: QueryBackendParams
+  , hydraScriptsTxHash :: String
   }
 
 derive instance Newtype AppConfig _
@@ -139,6 +140,16 @@ configParser = ado
     ]
   network <- networkParser
   queryBackend <- queryBackendParser
+  hydraScriptsTxHash <- Optparse.strOption $ fold
+    [ Optparse.long "hydra-scripts-tx-id"
+    , Optparse.metavar "TXID"
+    , Optparse.help
+        "The transaction which is expected to have published Hydra \
+        \scripts as reference scripts in its outputs. See hydra-node \
+        \release notes for pre-published versions. You can use the \
+        \'publish-scripts' sub-command of hydra-node to publish them \
+        \yourself."
+    ]
   in
     wrap
       { auctionMetadataOref
@@ -154,6 +165,7 @@ configParser = ado
       , nodeSocket
       , network
       , queryBackend
+      , hydraScriptsTxHash
       }
 
 queryBackendParser :: Optparse.Parser QueryBackendParams

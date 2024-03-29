@@ -17,8 +17,10 @@ import Contract.TxConstraints (mustMintValue) as Constraints
 import Contract.Value (CurrencySymbol, Value)
 import Contract.Value (scriptCurrencySymbol, singleton) as Value
 import Control.Monad.Except (runExceptT)
+import Control.Monad.Rec.Class (untilJust)
 import Data.Newtype (wrap)
-import Data.Time.Duration (Seconds(Seconds))
+import Data.Time.Duration (Seconds(Seconds), fromDuration)
+import Effect.Aff (delay)
 import HydraAuctionOffchain.Contract
   ( AnnounceAuctionContractResult
   , mkAnnounceAuctionContractWithErrors
@@ -28,15 +30,29 @@ import HydraAuctionOffchain.Contract.Types (emptySubmitTxData, submitTxReturning
 import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe)
 import Mote (group, test)
 import Test.Contract.Fixtures (auctionLotTokenNameFixture, auctionTermsInputFixture)
+import Test.DelegateServer.Cluster (withWallets')
 import Test.Helpers (defDistribution)
+import Test.Spec.Assertions (shouldEqual)
 
 suite :: TestPlanM ContractTest Unit
 suite =
   group "announce-auction" do
-    test "seller successfully announces an auction" do
+    test "seller announces an auction" do
       withWallets defDistribution \seller ->
         withKeyWallet seller do
           void announceAuction
+
+    test "delegates set announced auction as active auction" do
+      withWallets' defDistribution
+        \seller withDelegateServerCluster -> do
+          { txHash, auctionInfo } <- withKeyWallet seller announceAuction
+          awaitTxConfirmed txHash
+
+          withDelegateServerCluster auctionInfo \appHandle ->
+            shouldEqual auctionInfo =<<
+              untilJust do
+                delay $ fromDuration $ Seconds one
+                appHandle.getActiveAuction
 
 announceAuction :: Contract AnnounceAuctionContractResult
 announceAuction = do
