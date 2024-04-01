@@ -6,14 +6,14 @@ import Prelude
 
 import Affjax (Error, Response, URL, defaultRequest) as Affjax
 import Affjax.RequestBody (RequestBody(Json)) as Affjax
-import Affjax.ResponseFormat (json) as Affjax.ResponseFormat
+import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
 import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
 import Contract.Config (ServerConfig)
 import Ctl.Internal.Affjax (request) as Affjax
 import Ctl.Internal.ServerConfig (mkHttpUrl)
 import Data.Argonaut (Json, encodeJson)
 import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (JsonCodec, decode) as CA
+import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (Either(Left, Right))
 import Data.HTTP.Method (Method(POST))
 import Data.Maybe (Maybe(Just))
@@ -24,6 +24,7 @@ import DelegateServer.Types.ServiceError
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
   )
 import Effect.Aff (Aff)
+import HydraAuctionOffchain.Lib.Json (caDecodeString)
 
 commit :: ServerConfig -> CommitUtxoMap -> Aff (Either ServiceError DraftCommitTx)
 commit serverConfig utxos = do
@@ -31,19 +32,19 @@ commit serverConfig utxos = do
   handleResponse draftCommitTxCodec <$>
     postRequest endpoint (Just $ encodeJson utxos)
 
-postRequest :: Affjax.URL -> Maybe Json -> Aff (Either Affjax.Error (Affjax.Response Json))
+postRequest :: Affjax.URL -> Maybe Json -> Aff (Either Affjax.Error (Affjax.Response String))
 postRequest endpoint mPayload =
   Affjax.request $ Affjax.defaultRequest
     { method = Left POST
     , url = endpoint
     , content = Affjax.Json <$> mPayload
-    , responseFormat = Affjax.ResponseFormat.json
+    , responseFormat = Affjax.ResponseFormat.string
     }
 
 handleResponse
   :: forall (a :: Type)
    . CA.JsonCodec a
-  -> Either Affjax.Error (Affjax.Response Json)
+  -> Either Affjax.Error (Affjax.Response String)
   -> Either ServiceError a
 handleResponse codec = case _ of
   Left affjaxError ->
@@ -51,7 +52,7 @@ handleResponse codec = case _ of
   Right { status, body } ->
     case status of
       Affjax.StatusCode statusCode | statusCode < 200 || statusCode > 299 ->
-        Left $ ServiceHttpResponseError status $ wrap body
+        Left $ ServiceHttpResponseError status body
       _ ->
-        CA.decode codec body
-          # lmap (ServiceDecodeJsonError (wrap body))
+        caDecodeString codec body
+          # lmap (ServiceDecodeJsonError body)

@@ -1,5 +1,6 @@
 module Test.Contract.PlaceBid
-  ( suite
+  ( discoverSellerSignature
+  , suite
   ) where
 
 import Contract.Prelude
@@ -31,11 +32,11 @@ import Test.Spec.Assertions (shouldEqual)
 suite :: TestPlanM ContractTest Unit
 suite =
   group "place-bid" do
-    test "bidder successfully places a starting bid" do
+    test "bidder places a starting bid" do
       withWallets (defDistribution /\ defDistribution) \(seller /\ bidder) -> do
         { txHash: announceTxHash, auctionInfo } <-
           withKeyWallet seller do
-            announceAuction
+            announceAuction Nothing
         awaitTxConfirmed announceTxHash
 
         { txHash: enterTxHash } <-

@@ -22,10 +22,10 @@ import Test.Helpers (defDistribution, waitUntil)
 suite :: TestPlanM ContractTest Unit
 suite =
   group "start-bidding" do
-    test "seller successfully enables bidding at the auction" do
+    test "seller enables bidding at the auction" do
       withWallets defDistribution \seller ->
         withKeyWallet seller do
-          { txHash, auctionInfo } <- announceAuction
+          { txHash, auctionInfo } <- announceAuction Nothing
           awaitTxConfirmed txHash
           void $ startBidding auctionInfo
 

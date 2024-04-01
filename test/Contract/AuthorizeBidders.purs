@@ -32,12 +32,12 @@ import Test.Spec.Assertions (shouldEqual)
 suite :: TestPlanM ContractTest Unit
 suite =
   group "authorize-bidders" do
-    test "seller successfully authorizes bidders" do
+    test "seller authorizes bidders" do
       withWallets (defDistribution /\ defDistribution /\ defDistribution)
         \(seller /\ bidder0 /\ bidder1) -> do
           { txHash: announceTxHash, auctionInfo } <-
             withKeyWallet seller do
-              announceAuction
+              announceAuction Nothing
           awaitTxConfirmed announceTxHash
 
           { txHash: enterTxHash0 } <-

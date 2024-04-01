@@ -28,12 +28,12 @@ plutipConfig =
       , path: Nothing
       }
   , suppressLogs: true
-  , customLogger: Nothing
+  , customLogger: Just $ \_ _ -> pure unit
   , hooks: emptyHooks
   , clusterConfig:
       { slotLength: Seconds 0.1
       , epochSize: Just $ UInt.fromInt 4320000
       , maxTxSize: Just $ UInt.fromInt 16384
-      , raiseExUnitsToMax: true
+      , raiseExUnitsToMax: false
       }
   }

@@ -24,17 +24,17 @@ import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne)
 suite :: TestPlanM ContractTest Unit
 suite =
   group "enter-auction" do
-    test "bidder successfully enters the auction with valid deposit" do
+    test "bidder enters the auction with valid deposit" do
       withWallets (defDistribution /\ defDistribution) \(seller /\ bidder) -> do
-        { txHash, auctionInfo } <- withKeyWallet seller announceAuction
+        { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction Nothing
         awaitTxConfirmed txHash
         depositAmount <- liftEffect $ randomSampleOne $ genValidBidderDeposit auctionInfo
         withKeyWallet bidder do
           void $ enterAuction auctionInfo depositAmount
 
-    test "bidder successfully enters the auction with invalid deposit" do
+    test "bidder enters the auction with invalid deposit" do
       withWallets (defDistribution /\ defDistribution) \(seller /\ bidder) -> do
-        { txHash, auctionInfo } <- withKeyWallet seller announceAuction
+        { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction Nothing
         awaitTxConfirmed txHash
         depositAmount <- liftEffect $ randomSampleOne $ genInvalidBidderDeposit auctionInfo
         withKeyWallet bidder do

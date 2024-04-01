@@ -24,7 +24,7 @@ import Contract.Config
   )
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Reader (class MonadAsk, ReaderT, asks, runReaderT)
+import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
@@ -81,6 +81,7 @@ derive newtype instance Monad AppM
 derive newtype instance MonadEffect AppM
 derive newtype instance MonadAff AppM
 derive newtype instance MonadAsk AppState AppM
+derive newtype instance MonadReader AppState AppM
 derive newtype instance MonadThrow Error AppM
 
 runApp :: forall a. AppState -> AppM a -> Aff a

@@ -5,19 +5,23 @@ module Test.DelegateServer.Cluster
 
 import Prelude
 
-import Contract.Config (mkCtlBackendParams)
-import Contract.Monad (Contract, liftContractM)
+import Contract.Address (PubKeyHash)
+import Contract.Config (NetworkId(MainnetId), mkCtlBackendParams)
+import Contract.Hashing (publicKeyHash)
+import Contract.Monad (Contract, ContractEnv, liftContractM, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
 import Contract.Test.Plutip (PlutipConfig)
 import Contract.Transaction (TransactionInput)
 import Contract.Wallet (PrivatePaymentKey)
 import Contract.Wallet.Key (publicKeyFromPrivateKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
-import Control.Monad.Except (ExceptT, mapExceptT, throwError)
+import Control.Monad.Except (throwError)
+import Control.Monad.Reader (ask, local)
 import Control.Parallel (parTraverse, parTraverse_)
 import Ctl.Internal.Helpers (concatPaths, (<</>>))
 import Ctl.Internal.Plutip.Types (ClusterStartupParameters)
 import Ctl.Internal.Plutip.Utils (tmpdir)
+import Ctl.Internal.Wallet.Key (KeyWallet(KeyWallet))
 import Data.Array (concat, deleteAt, replicate)
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty (fromArray, head, toArray) as NEArray
@@ -30,11 +34,14 @@ import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
-import DelegateServer.App (runApp)
+import DelegateServer.App (runApp, runContract)
 import DelegateServer.Config (AppConfig, Network(Mainnet))
-import DelegateServer.Contract.PlaceBid (PlaceBidL2ContractError, placeBidL2)
+import DelegateServer.Contract.StandingBid (queryStandingBidL2)
+import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
+import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
 import DelegateServer.Main (AppHandle, startDelegateServer)
-import DelegateServer.State (access)
+import DelegateServer.State (access, readAppState)
+import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import Effect (Effect)
 import Effect.Aff (Aff, bracket)
 import Effect.Aff.AVar (tryRead) as AVar
@@ -43,13 +50,20 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
 import Effect.Unsafe (unsafePerformEffect)
-import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, BidTerms)
+import HydraAuctionOffchain.Contract.Types
+  ( AuctionInfoExtended
+  , BidTerms
+  , StandingBidState
+  , bidTermsCodec
+  )
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
+import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import Node.Buffer (toString) as Buffer
 import Node.ChildProcess (defaultExecSyncOptions, execSync)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (rm') as FSSync
 import Node.Path (FilePath)
+import Test.DelegateServer.PlaceBid.Suite (patchContractEnv)
 import Test.Helpers
   ( chunksOf2
   , defDistribution
@@ -64,8 +78,11 @@ import Type.Proxy (Proxy(Proxy))
 import URI.Port (unsafeFromInt) as Port
 
 type TestAppHandle =
-  { placeBidL2 :: BidTerms -> ExceptT PlaceBidL2ContractError Aff Unit
-  , getActiveAuction :: Aff (Maybe AuctionInfoExtended)
+  { getActiveAuction :: Contract (Maybe AuctionInfoExtended)
+  , getHeadStatus :: Contract HydraHeadStatus
+  , moveBidToL2 :: Contract MoveBidResponse
+  , queryStandingBidL2 :: Contract (Maybe StandingBidState)
+  , placeBidL2 :: BidTerms -> Contract PlaceBidResponse
   }
 
 withWallets'
@@ -73,7 +90,8 @@ withWallets'
    . UtxoDistribution distr wallets
   => distr
   -> ( wallets
-       -> (AuctionInfoExtended -> (TestAppHandle -> Aff Unit) -> Contract Unit)
+       -> Array PubKeyHash
+       -> (AuctionInfoExtended -> (TestAppHandle -> Contract Unit) -> Contract Unit)
        -> Contract Unit
      )
   -> ContractTest
@@ -81,18 +99,23 @@ withWallets' distr tests =
   ContractTest \h ->
     let
       numDelegates =
-        unsafePerformEffect $ randomSampleOne $ chooseInt 1 5
+        unsafePerformEffect $ randomSampleOne $ chooseInt 1 3
       distrDelegates =
         concat $ replicate numDelegates [ defDistribution, defDistribution ]
     in
       h (distr /\ distrDelegates) \mPlutipClusterParams (wallets /\ delegateWallets) -> do
+        contractEnv <- ask
         plutipClusterParams <-
           liftContractM "Could not get Plutip cluster params"
             mPlutipClusterParams
         delegateWalletsGrouped <-
           liftContractM "Expected even number of delegate wallets"
             (chunksOf2 delegateWallets)
-        tests wallets \auctionInfo action -> do
+        let
+          delegates =
+            delegateWalletsGrouped <#> \((KeyWallet kw) /\ _) ->
+              publicKeyHash $ publicKeyFromPrivateKey $ unwrap kw.paymentKey
+        tests wallets delegates \auctionInfo action -> do
           auctionMetadataOref <-
             liftContractM "Could not get auction metadata oref"
               (unwrap auctionInfo).metadataOref
@@ -108,31 +131,53 @@ withWallets' distr tests =
                   { cardanoSk: (unwrap cardanoKw).paymentKey
                   , walletSk: (unwrap walletKw).paymentKey
                   }
-          liftAff $ withDelegateServerCluster clusterConfig peers action
+          liftAff $ withDelegateServerCluster
+            contractEnv
+            clusterConfig
+            peers
+            action
 
 withDelegateServerCluster
-  :: DelegateServerClusterConfig
+  :: ContractEnv
+  -> DelegateServerClusterConfig
   -> NonEmptyArray DelegateServerPeer
-  -> (TestAppHandle -> Aff Unit)
+  -> (TestAppHandle -> Contract Unit)
   -> Aff Unit
-withDelegateServerCluster clusterConfig peers action =
+withDelegateServerCluster contractEnv clusterConfig peers action =
   bracket
     (startDelegateServerCluster clusterConfig peers)
     ( \(appHandles /\ workdirCleanupHandler) ->
         parTraverse_ (liftEffect <<< _.cleanupHandler) appHandles
           *> liftEffect workdirCleanupHandler
     )
-    ( \(apps /\ _) -> action
-        { placeBidL2:
-            \bidTerms -> do
+    ( \(apps /\ _) ->
+        runContractInEnv contractEnv $ action
+          { getActiveAuction: liftAff do
               appHandle <- randomElem apps
-              mapExceptT (runApp appHandle.appState) $ placeBidL2 appHandle.ws bidTerms
+              runApp appHandle.appState $
+                liftAff <<< AVar.tryRead =<< access (Proxy :: _ "auctionInfo")
 
-        , getActiveAuction: do
-            appHandle <- randomElem apps
-            runApp appHandle.appState $
-              liftAff <<< AVar.tryRead =<< access (Proxy :: _ "auctionInfo")
-        }
+          , getHeadStatus: liftAff do
+              appHandle <- randomElem apps
+              runApp appHandle.appState $
+                readAppState (Proxy :: _ "headStatus")
+
+          , moveBidToL2: liftAff do
+              appHandle <- randomElem apps
+              runApp appHandle.appState $ moveBidHandlerImpl appHandle.ws
+
+          , queryStandingBidL2: liftAff do
+              appHandle <- randomElem apps
+              runApp appHandle.appState $ map snd <$> queryStandingBidL2
+
+          , placeBidL2:
+              \bidTerms -> liftAff do
+                appHandle <- randomElem apps
+                let body = caEncodeString bidTermsCodec bidTerms
+                runApp appHandle.appState do
+                  env <- wrap <$> runContract (patchContractEnv MainnetId)
+                  local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
+          }
     )
 
 type DelegateServerPeer =

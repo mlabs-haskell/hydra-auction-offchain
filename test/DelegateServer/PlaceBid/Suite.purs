@@ -1,5 +1,6 @@
 module Test.DelegateServer.PlaceBid.Suite
-  ( suite
+  ( patchContractEnv
+  , suite
   ) where
 
 import Prelude
@@ -114,7 +115,7 @@ runTest
   -> (BidTerms -> TestResult -> Aff Unit)
   -> ContractTest
 runTest mkCommitUtxoMap bidTerms callback =
-  noWallet $ withWallet appConfig.walletSk $ patchContractEnv do
+  noWallet $ withWallet appConfig.walletSk $ patchContractEnv' do
     nowTime <- nowPosix
     auctionInfo <- auctionInfoFixture nowTime
     let initUtxoMap = mkCommitUtxoMap auctionInfo
@@ -298,11 +299,16 @@ messageHandler params ws = case _ of
 ----------------------------------------------------------------------
 -- ContractEnv
 
-patchContractEnv :: forall (a :: Type). Contract a -> Contract a
-patchContractEnv contract = do
+patchContractEnv' :: forall (a :: Type). Contract a -> Contract a
+patchContractEnv' contract = do
+  contractEnv <- patchContractEnv TestnetId
+  local (const contractEnv) contract
+
+patchContractEnv :: forall (a :: Type). NetworkId -> Contract ContractEnv
+patchContractEnv network = do
   pparams <- pparamsSlice
-  contract # local \env -> env
-    { networkId = TestnetId
+  ask <#> \env -> env
+    { networkId = network
     , ledgerConstants =
         env.ledgerConstants
           { pparams =

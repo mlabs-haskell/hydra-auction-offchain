@@ -5,6 +5,7 @@ module Test.Contract.AnnounceAuction
 
 import Contract.Prelude
 
+import Contract.Address (PubKeyHash)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract, liftedE)
 import Contract.ScriptLookups (ScriptLookups)
@@ -19,17 +20,20 @@ import Contract.Value (scriptCurrencySymbol, singleton) as Value
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (untilJust)
 import Data.Newtype (wrap)
-import Data.Time.Duration (Seconds(Seconds), fromDuration)
-import Effect.Aff (delay)
+import Data.Time.Duration (Seconds(Seconds))
 import HydraAuctionOffchain.Contract
   ( AnnounceAuctionContractResult
   , mkAnnounceAuctionContractWithErrors
   )
 import HydraAuctionOffchain.Contract.MintingPolicies (mkAlwaysMintsPolicy)
 import HydraAuctionOffchain.Contract.Types (emptySubmitTxData, submitTxReturningContractResult)
-import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe)
+import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, waitSeconds)
 import Mote (group, test)
-import Test.Contract.Fixtures (auctionLotTokenNameFixture, auctionTermsInputFixture)
+import Test.Contract.Fixtures
+  ( auctionLotTokenNameFixture
+  , auctionTermsInputFixture
+  , delegatePkhFixture
+  )
 import Test.DelegateServer.Cluster (withWallets')
 import Test.Helpers (defDistribution)
 import Test.Spec.Assertions (shouldEqual)
@@ -40,28 +44,29 @@ suite =
     test "seller announces an auction" do
       withWallets defDistribution \seller ->
         withKeyWallet seller do
-          void announceAuction
+          void $ announceAuction Nothing
 
     test "delegates set announced auction as active auction" do
       withWallets' defDistribution
-        \seller withDelegateServerCluster -> do
-          { txHash, auctionInfo } <- withKeyWallet seller announceAuction
+        \seller delegates withDelegateServerCluster -> do
+          { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction $ Just delegates
           awaitTxConfirmed txHash
 
           withDelegateServerCluster auctionInfo \appHandle ->
             shouldEqual auctionInfo =<<
               untilJust do
-                delay $ fromDuration $ Seconds one
+                waitSeconds one
                 appHandle.getActiveAuction
 
-announceAuction :: Contract AnnounceAuctionContractResult
-announceAuction = do
+announceAuction :: Maybe (Array PubKeyHash) -> Contract AnnounceAuctionContractResult
+announceAuction delegates = do
   auctionLotValue <- mintAuctionLot
   biddingStart <-
     currentTime <#>
       add (mkPosixTimeUnsafe $ Seconds 5.0)
   let
-    auctionTerms = auctionTermsInputFixture auctionLotValue biddingStart
+    delegates' = fromMaybe [ delegatePkhFixture ] delegates
+    auctionTerms = auctionTermsInputFixture auctionLotValue biddingStart delegates'
     params = wrap
       { auctionTerms
       , additionalAuctionLotOrefs: mempty

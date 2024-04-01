@@ -12,6 +12,7 @@ module Test.Helpers
   , mkdirIfNotExists
   , publicPaymentKeyToFile
   , randomElem
+  , untilM
   , waitUntil
   ) where
 
@@ -26,6 +27,8 @@ import Contract.Test (InitialUTxOs)
 import Contract.Time (POSIXTime)
 import Contract.Transaction (PublicKey, TransactionInput)
 import Contract.Value (CurrencySymbol, TokenName, mkCurrencySymbol, mkTokenName)
+import Control.Error.Util (bool)
+import Control.Monad.Rec.Class (class MonadRec, untilJust)
 import Ctl.Internal.Cardano.Types.Transaction (convertPubKey)
 import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
 import Ctl.Internal.Serialization.Address (addressFromBech32)
@@ -37,11 +40,11 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Aff (delay)
-import Effect.Aff.Class (liftAff)
+import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Random (randomInt)
 import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyFromBytes)
-import HydraAuctionOffchain.Helpers (fromJustWithErr)
+import HydraAuctionOffchain.Helpers (fromJustWithErr, waitSeconds)
 import JS.BigInt (fromInt, toNumber) as BigInt
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (exists, mkdir, writeTextFile) as FSSync
@@ -91,6 +94,13 @@ waitUntil futureTime = do
   when (nowTime < futureTime) do
     liftAff $ delay $ wrap $
       (BigInt.toNumber $ unwrap $ futureTime - nowTime) + 3000.0
+
+untilM :: forall m a. MonadRec m => MonadAff m => (a -> Boolean) -> m a -> m Unit
+untilM p action =
+  void $ untilJust do
+    res <- action <#> bool Nothing (Just unit) <<< p
+    waitSeconds one
+    pure res
 
 randomElem :: forall m a. MonadEffect m => Array a -> m a
 randomElem xs =
