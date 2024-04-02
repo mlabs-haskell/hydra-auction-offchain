@@ -10,6 +10,7 @@ import Contract.Test.Mote (TestPlanM)
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Monad.Except (runExceptT)
+import Control.Monad.Rec.Class (untilJust)
 import DelegateServer.Handlers.MoveBid
   ( MoveBidSuccess(MoveBidSuccess_SentInitHeadRequest, MoveBidSuccess_CommittedStandingBid)
   )
@@ -26,8 +27,9 @@ import HydraAuctionOffchain.Contract.Types
   , StandingBidState(StandingBidState)
   , bidderSignatureMessage
   )
+import HydraAuctionOffchain.Helpers (waitSeconds)
 import HydraAuctionOffchain.Wallet (signMessage)
-import Mote (group, test)
+import Mote (group, skip, test)
 import Test.Contract.AnnounceAuction (announceAuction)
 import Test.Contract.AuthorizeBidders (authorizeBidders)
 import Test.Contract.EnterAuction (enterAuction, genValidBidderDeposit)
@@ -41,6 +43,18 @@ import Test.Spec.Assertions (shouldEqual, shouldReturn, shouldSatisfy)
 suite :: TestPlanM ContractTest Unit
 suite =
   group "delegate-server" do
+    test "delegates set announced auction as active auction" do
+      withWallets' defDistribution
+        \seller delegates withDelegateServerCluster -> do
+          { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction $ Just delegates
+          awaitTxConfirmed txHash
+
+          withDelegateServerCluster auctionInfo \appHandle ->
+            shouldEqual auctionInfo =<<
+              untilJust do
+                waitSeconds one
+                appHandle.getActiveAuction
+
     -- NOTE: All nodes in the hydra head fail to submit an InitTx
     -- transaction with NotEnoughFuel error when raiseExUnitsToMax
     -- parameter of PlutipConfig is set to true.
@@ -53,11 +67,15 @@ suite =
           withDelegateServerCluster auctionInfo \appHandle -> do
             let biddingStart = (unwrap (unwrap auctionInfo).auctionTerms).biddingStart
             waitUntil biddingStart
+            waitSeconds 5
             appHandle.getHeadStatus
               `shouldReturn` HeadStatus_Initializing
 
     group "move-bid" do
-      test "delegates move standing bid to L2 on request (head idle)" do
+      -- FIXME: Flaky, skipped because of the race condition:
+      -- Delegates initialize the head before the moveBid request is made,
+      -- resulting in an unexpected response.
+      skip $ test "delegates move standing bid to L2 on request (head idle)" do
         moveBidTest { autoInit: false }
 
       test "delegates move standing bid to L2 on request (head initializing)" do

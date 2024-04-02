@@ -18,7 +18,6 @@ import Contract.TxConstraints (mustMintValue) as Constraints
 import Contract.Value (CurrencySymbol, Value)
 import Contract.Value (scriptCurrencySymbol, singleton) as Value
 import Control.Monad.Except (runExceptT)
-import Control.Monad.Rec.Class (untilJust)
 import Data.Newtype (wrap)
 import Data.Time.Duration (Seconds(Seconds))
 import HydraAuctionOffchain.Contract
@@ -27,16 +26,14 @@ import HydraAuctionOffchain.Contract
   )
 import HydraAuctionOffchain.Contract.MintingPolicies (mkAlwaysMintsPolicy)
 import HydraAuctionOffchain.Contract.Types (emptySubmitTxData, submitTxReturningContractResult)
-import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, waitSeconds)
+import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe)
 import Mote (group, test)
 import Test.Contract.Fixtures
   ( auctionLotTokenNameFixture
   , auctionTermsInputFixture
   , delegatePkhFixture
   )
-import Test.DelegateServer.Cluster (withWallets')
 import Test.Helpers (defDistribution)
-import Test.Spec.Assertions (shouldEqual)
 
 suite :: TestPlanM ContractTest Unit
 suite =
@@ -45,18 +42,6 @@ suite =
       withWallets defDistribution \seller ->
         withKeyWallet seller do
           void $ announceAuction Nothing
-
-    test "delegates set announced auction as active auction" do
-      withWallets' defDistribution
-        \seller delegates withDelegateServerCluster -> do
-          { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction $ Just delegates
-          awaitTxConfirmed txHash
-
-          withDelegateServerCluster auctionInfo \appHandle ->
-            shouldEqual auctionInfo =<<
-              untilJust do
-                waitSeconds one
-                appHandle.getActiveAuction
 
 announceAuction :: Maybe (Array PubKeyHash) -> Contract AnnounceAuctionContractResult
 announceAuction delegates = do

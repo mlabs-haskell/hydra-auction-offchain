@@ -18,7 +18,6 @@ import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
-import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Traversable (for_, sequence, traverse_)
 import Data.UInt (toString) as UInt
 import DelegateServer.App
@@ -58,7 +57,7 @@ import DelegateServer.Types.HydraHeadStatus
 import Effect (Effect)
 import Effect.AVar (AVar)
 import Effect.AVar (take, tryPut, tryTake) as AVarSync
-import Effect.Aff (Aff, delay, launchAff_, runAff_)
+import Effect.Aff (Aff, launchAff_, runAff_)
 import Effect.Aff.AVar (empty, new, take, tryPut) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -175,15 +174,15 @@ initHeadAtBiddingStart ws = do
       runAppEff appState do
         headStatus <- readAppState (Proxy :: _ "headStatus")
         case headStatus of
-          HeadStatus_Idle ->
-            liftEffect do
-              log "Bidding period active, initializing the head."
-              ws.initHead
           HeadStatus_Unknown -> do
             liftEffect $ log
               "Bidding period active but head status is unknown - retrying in 5 seconds."
             waitSeconds 5
             liftEffect action
+          HeadStatus_Idle ->
+            liftEffect do
+              log "Bidding period active, initializing the head."
+              ws.initHead
           _ ->
             pure unit
   liftEffect $ scheduleAt biddingStart action
@@ -192,27 +191,34 @@ closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
 closeHeadAtBiddingEnd ws = do
   appState <- ask
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
-  let biddingEnd = (unwrap (unwrap auctionInfo).auctionTerms).biddingEnd
-  liftEffect $ scheduleAt biddingEnd $ runAppEff appState do
-    liftAff $ delay $ Milliseconds 5000.0
-    headStatus <- readAppState (Proxy :: _ "headStatus")
-    case headStatus of
-      HeadStatus_Initializing ->
-        liftEffect do
-          log "Bidding time expired, aborting the head."
-          ws.abortHead
-      HeadStatus_Open ->
-        liftEffect do
-          log "Bidding time expired, closing the head."
-          ws.closeHead
-      _ | isHeadClosed headStatus ->
-        -- No-op if the head is already closed.
-        pure unit
-      _ ->
-        -- Terminate with an error if the head is neither open nor closed.
-        throwError $ error $ "Bidding time expired, unexpected head status: "
-          <> printHeadStatus headStatus
-          <> "."
+  let
+    biddingEnd = (unwrap (unwrap auctionInfo).auctionTerms).biddingEnd
+    action =
+      runAppEff appState do
+        headStatus <- readAppState (Proxy :: _ "headStatus")
+        case headStatus of
+          HeadStatus_Unknown -> do
+            liftEffect $ log
+              "Bidding time expired but head status is unknown - retrying in 5 seconds."
+            waitSeconds 5
+            liftEffect action
+          HeadStatus_Initializing ->
+            liftEffect do
+              log "Bidding time expired, aborting the head."
+              ws.abortHead
+          HeadStatus_Open ->
+            liftEffect do
+              log "Bidding time expired, closing the head."
+              ws.closeHead
+          _ | isHeadClosed headStatus ->
+            -- No-op if the head is already closed.
+            pure unit
+          _ ->
+            -- Terminate with an error if the head is neither open nor closed.
+            throwError $ error $ "Bidding time expired, unexpected head status: "
+              <> printHeadStatus headStatus
+              <> "."
+  liftEffect $ scheduleAt biddingEnd action
 
 initHydraApiWsConn :: AppState -> Aff HydraNodeApiWebSocket
 initHydraApiWsConn appState = do
