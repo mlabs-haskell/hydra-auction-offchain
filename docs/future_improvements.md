@@ -22,22 +22,54 @@ On L2, this scheme runs into problems when the flow between the user's wallet on
 
 Increasing bids on L2 requires incremental commit/decommit, a feature which has recently been rolled out by the Hydra team. Unfortunately, according to our analysis, that feature is not yet mature enough for integration into our development timeline. As such, we have decided to leave Fully-Backed Bids un-implemented.
 
-There are two ways this could be implemented when incremental commits:
+### Auction Flow
+
+The auction logic itself greatly simplifies when designing for fully backed bids by including the amount of ada specified in the bid in the standing bid utxo, and enforcing the refunding of the previous bidder when submitting a tx with the `NewBid` redeemer.
+
+With these changes we are able to do without deposits, the reclaim period, or any extra cleanup transactions, and able to discard the many various datum fields and redeemers associated with them.
+
+The simplified auction flow looks like this:
+
+```mermaid
+stateDiagram-v2
+  [*]           -->   Announced:     AnnounceAuction [P0]
+  Announced     -->   BiddingOnL1:   StartBidding [P2]
+  BiddingOnL1   -->   BiddingOnL2:   CommitStandingBid [P2]
+  BiddingOnL1   -->   Purchase:      [P3]
+  BiddingOnL2   -->   BiddingOnL1:   FanoutStandingBid [P2]
+  BiddingOnL2   -->   Purchase:      FanoutStandingBid [P3]
+  Purchase      -->   [*]:           Conclude [P4]
+```
+
+There are two changed state transitions:
+
+<table><tr><td>
+
+</td></tr><tr></tr><tr><td>
+
+`CommitStandingBid [P2]`. During the bidding period the standing bid can be moved to the
+ Hydra Head, allowing bidders to place bids in the auction via L2 transactions (but no longer 
+ via L1). This is no longer dependent on the Head Initializing (HI) state, as the commit can be made with the head still running.
+
+</td></tr><tr></tr><tr><td>
+
+`Resolve [P4]`. During the purchase period, anyone can spend the standing bid utxo, sending the lot to the winning bidder and the deposit to the seller, while also recovering the min 2 ADA inside it.
+
+</td></tr></table>
+
+The complications for fully-backed bids come with including the bid-backing assets on L2. We have considered two ways this might be implemented with incremental commits:
 
 ### Granular Commit
 
-Each user is granted permission to move funds into L2 at any time. This provides the best user experience by best satisfying the speed and constancy requirements. Potential drawbacks and problems may occur around network over-utilization due to the volume of requests from individual users.
+With Granular Commit each user is granted permission to move funds into L2 at any time. This provides the best user experience by best satisfying the speed and constancy requirements. Potential drawbacks and problems may occur around network over-utilization due to the volume of requests from individual users.
 
-#### L1 Changes
+Once the Hydra head has been initialized, bidders can move utxos to & from the L2 on demand.
 
 ```
 Endpoints
  - SendToL2
  - SendToL1
-
 ```
-
-#### L2 Changes
 
 ### Batch Commits
 
@@ -45,7 +77,23 @@ If throughput between L1/L2 is limited or inconsistent, it may make more sense t
 
 #### L1 Changes
 
+Permissioned bidders may send funds to and from a new `LiquidityQueue` validator, with datum(s) tracking the ownership of the funds stored there. The funds may then be committed to the L2 as needed.
+```
+Endpoints
+ - QueueLiquidity
+ - WithdrawLiquidity
+ - SendToL2
+```
+
 #### L2 Changes
+
+When returning funds back to the L1, they can be similarly queued before being decommitted. It's quite possible that such batching is unnecessary on the return trip, as demand will likely be lower for withdrawal from the L2.
+```
+Endpoints
+ - QueueLiquidity
+ - WithdrawLiquidity
+ - SendToL1
+```
 
 ## Alternative Solutions
 
