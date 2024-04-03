@@ -2,6 +2,8 @@ module Test.Contract.Fixtures
   ( auctionLotTokenNameFixture
   , auctionTermsInputFixture
   , delegatePkhFixture
+  , minBidIncrementFixture
+  , startingBidFixture
   ) where
 
 import Prelude
@@ -32,8 +34,8 @@ auctionTermsInputFixture auctionLot biddingStart delegates =
   , purchaseDeadline
   , cleanup
   , auctionFeePerDelegate: fromInt 3_000_000
-  , startingBid: fromInt 20_000_000
-  , minBidIncrement: fromInt 5_000_000
+  , startingBid: fromInt startingBidFixture
+  , minBidIncrement: fromInt minBidIncrementFixture
   , minDepositAmount: fromInt 3_000_000
   }
   where
@@ -41,3 +43,9 @@ auctionTermsInputFixture auctionLot biddingStart delegates =
   biddingEnd = biddingStart + defaultPeriod
   purchaseDeadline = biddingEnd + defaultPeriod
   cleanup = purchaseDeadline + defaultPeriod
+
+startingBidFixture :: Int
+startingBidFixture = 20_000_000
+
+minBidIncrementFixture :: Int
+minBidIncrementFixture = 5_000_000

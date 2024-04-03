@@ -28,8 +28,8 @@ main = do
 
 suite :: TestPlanM (Aff Unit) Unit
 suite =
-  group "contracts" do
-    testPlutipContracts plutipConfig do
+  testPlutipContracts plutipConfig do
+    group "contracts" do
       AnnounceAuction.suite
       StartBidding.suite
       EnterAuction.suite
