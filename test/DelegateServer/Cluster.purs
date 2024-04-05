@@ -34,7 +34,7 @@ import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
-import DelegateServer.App (runApp, runContract)
+import DelegateServer.App (AppM, runApp, runContract)
 import DelegateServer.Config (AppConfig, Network(Mainnet))
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
@@ -153,38 +153,46 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
           *> liftEffect workdirCleanupHandler
     )
     ( \(apps /\ _) ->
-        runContractInEnv contractEnv $ action
-          { getActiveAuction: liftAff do
+        let
+          withRandomAppHandle :: forall a. (AppHandle -> AppM a) -> Contract a
+          withRandomAppHandle f =
+            liftAff do
               appHandle <- randomElem apps
-              runApp appHandle.appState $
-                liftAff <<< AVar.tryRead =<< access (Proxy :: _ "auctionInfo")
+              runApp appHandle.appState $ f appHandle
 
-          , getHeadStatus: liftAff do
-              appHandle <- randomElem apps
-              runApp appHandle.appState $
-                readAppState (Proxy :: _ "headStatus")
+          withRandomAppHandle_ :: forall a. AppM a -> Contract a
+          withRandomAppHandle_ =
+            withRandomAppHandle
+              <<< const
+        in
+          runContractInEnv contractEnv $ action
+            { getActiveAuction:
+                withRandomAppHandle_ do
+                  liftAff <<< AVar.tryRead =<< access (Proxy :: _ "auctionInfo")
 
-          , moveBidToL2: liftAff do
-              appHandle <- randomElem apps
-              runApp appHandle.appState $ moveBidHandlerImpl appHandle.ws
+            , getHeadStatus:
+                withRandomAppHandle_ do
+                  readAppState (Proxy :: _ "headStatus")
 
-          , queryStandingBidL2: liftAff do
-              appHandle <- randomElem apps
-              runApp appHandle.appState $ map snd <$> queryStandingBidL2
+            , moveBidToL2:
+                withRandomAppHandle \appHandle ->
+                  moveBidHandlerImpl appHandle.ws
 
-          , placeBidL2:
-              \bidTerms -> liftAff do
-                appHandle <- randomElem apps
-                let body = caEncodeString bidTermsCodec bidTerms
-                runApp appHandle.appState do
-                  env <- wrap <$> runContract (patchContractEnv MainnetId)
-                  local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
+            , queryStandingBidL2:
+                withRandomAppHandle_ do
+                  map snd <$> queryStandingBidL2
 
-          , getAppExitReason: liftAff do
-              appHandle <- randomElem apps
-              runApp appHandle.appState $
-                liftAff <<< AVar.tryRead =<< access (Proxy :: _ "exitSem")
-          }
+            , placeBidL2:
+                \bidTerms ->
+                  withRandomAppHandle \appHandle -> do
+                    env <- wrap <$> runContract (patchContractEnv MainnetId)
+                    let body = caEncodeString bidTermsCodec bidTerms
+                    local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
+
+            , getAppExitReason:
+                withRandomAppHandle_ do
+                  liftAff <<< AVar.tryRead =<< access (Proxy :: _ "exitSem")
+            }
     )
 
 type DelegateServerPeer =
