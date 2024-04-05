@@ -52,6 +52,7 @@ newtype AppConfig = AppConfig
   , network :: Network
   , queryBackend :: QueryBackendParams
   , hydraScriptsTxHash :: String
+  , hydraContestPeriod :: Int
   }
 
 derive instance Newtype AppConfig _
@@ -150,6 +151,18 @@ configParser = ado
         \'publish-scripts' sub-command of hydra-node to publish them \
         \yourself."
     ]
+  hydraContestPeriod <- Optparse.option Optparse.int $ fold
+    [ Optparse.long "hydra-contestation-period"
+    , Optparse.metavar "SECONDS"
+    , Optparse.showDefault
+    , Optparse.value 60
+    , Optparse.help
+        "Contestation period for close transaction in seconds. If \
+        \this value is not in sync with other participants \
+        \hydra-node will ignore the initial tx. Additionally, this \
+        \value needs to make sense compared to the current network \
+        \we are running."
+    ]
   in
     wrap
       { auctionMetadataOref
@@ -166,6 +179,7 @@ configParser = ado
       , network
       , queryBackend
       , hydraScriptsTxHash
+      , hydraContestPeriod
       }
 
 queryBackendParser :: Optparse.Parser QueryBackendParams

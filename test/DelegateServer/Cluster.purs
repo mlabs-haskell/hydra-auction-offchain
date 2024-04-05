@@ -41,6 +41,7 @@ import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
 import DelegateServer.Main (AppHandle, startDelegateServer)
 import DelegateServer.State (access, readAppState)
+import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import Effect (Effect)
 import Effect.Aff (Aff, bracket)
@@ -83,6 +84,7 @@ type TestAppHandle =
   , moveBidToL2 :: Contract MoveBidResponse
   , queryStandingBidL2 :: Contract (Maybe StandingBidState)
   , placeBidL2 :: BidTerms -> Contract PlaceBidResponse
+  , getAppExitReason :: Contract (Maybe AppExitReason)
   }
 
 withWallets'
@@ -177,6 +179,11 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
                 runApp appHandle.appState do
                   env <- wrap <$> runContract (patchContractEnv MainnetId)
                   local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
+
+          , getAppExitReason: liftAff do
+              appHandle <- randomElem apps
+              runApp appHandle.appState $
+                liftAff <<< AVar.tryRead =<< access (Proxy :: _ "exitSem")
           }
     )
 
@@ -269,6 +276,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
                 clusterConfig.plutipConfig.kupoConfig
             }
       , hydraScriptsTxHash
+      , hydraContestPeriod: 5
       }
 
   createWorkdirsStoreKeys :: Aff (NonEmptyArray (Int /\ FilePath))

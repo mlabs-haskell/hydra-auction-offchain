@@ -1,11 +1,12 @@
 module Test.Contract.AnnounceAuction
-  ( announceAuction
+  ( AuctionTermsMutator
+  , announceAuction
+  , announceAuctionFix
   , suite
   ) where
 
 import Contract.Prelude
 
-import Contract.Address (PubKeyHash)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract, liftedE)
 import Contract.ScriptLookups (ScriptLookups)
@@ -25,14 +26,14 @@ import HydraAuctionOffchain.Contract
   , mkAnnounceAuctionContractWithErrors
   )
 import HydraAuctionOffchain.Contract.MintingPolicies (mkAlwaysMintsPolicy)
-import HydraAuctionOffchain.Contract.Types (emptySubmitTxData, submitTxReturningContractResult)
+import HydraAuctionOffchain.Contract.Types
+  ( AuctionTermsInput
+  , emptySubmitTxData
+  , submitTxReturningContractResult
+  )
 import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe)
 import Mote (group, test)
-import Test.Contract.Fixtures
-  ( auctionLotTokenNameFixture
-  , auctionTermsInputFixture
-  , delegatePkhFixture
-  )
+import Test.Contract.Fixtures (auctionLotTokenNameFixture, auctionTermsInputFixture)
 import Test.Helpers (defDistribution)
 
 suite :: TestPlanM ContractTest Unit
@@ -41,17 +42,23 @@ suite =
     test "seller announces an auction" do
       withWallets defDistribution \seller ->
         withKeyWallet seller do
-          void $ announceAuction Nothing
+          void announceAuction
 
-announceAuction :: Maybe (Array PubKeyHash) -> Contract AnnounceAuctionContractResult
-announceAuction delegates = do
+type AuctionTermsMutator = AuctionTermsInput -> AuctionTermsInput
+
+announceAuction :: Contract AnnounceAuctionContractResult
+announceAuction = announceAuctionFix identity
+
+announceAuctionFix :: AuctionTermsMutator -> Contract AnnounceAuctionContractResult
+announceAuctionFix fixAuctionTerms = do
   auctionLotValue <- mintAuctionLot
   biddingStart <-
     currentTime <#>
       add (mkPosixTimeUnsafe $ Seconds 5.0)
   let
-    delegates' = fromMaybe [ delegatePkhFixture ] delegates
-    auctionTerms = auctionTermsInputFixture auctionLotValue biddingStart delegates'
+    auctionTerms =
+      fixAuctionTerms $
+        auctionTermsInputFixture auctionLotValue biddingStart
     params = wrap
       { auctionTerms
       , additionalAuctionLotOrefs: mempty

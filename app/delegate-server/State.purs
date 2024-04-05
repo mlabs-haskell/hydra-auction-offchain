@@ -8,6 +8,7 @@ module DelegateServer.State
   , ContractEnvWrapper(ContractEnvWrapper)
   , access
   , accessRec
+  , exitWithReason
   , readAppState
   , setAuctionInfo
   , setCollateralUtxo
@@ -26,6 +27,7 @@ import Data.Set (Set)
 import Data.Symbol (class IsSymbol)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
+import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.CommitStatus (CommitStatus)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot)
@@ -83,6 +85,7 @@ class
   , MonadAccess m "auctionInfo" (AVar AuctionInfoExtended)
   , MonadAccess m "headStatus" (AVar HydraHeadStatus)
   , MonadAccess m "livePeers" (AVar (Set String))
+  , MonadAccess m "exitSem" (AVar AppExitReason)
   ) <=
   AppBase m
 
@@ -179,3 +182,11 @@ setCommitStatus
   => CommitStatus
   -> m Unit
 setCommitStatus = updAppState (Proxy :: _ "commitStatus")
+
+exitWithReason
+  :: forall m
+   . MonadAccess m "exitSem" (AVar AppExitReason)
+  => MonadAff m
+  => AppExitReason
+  -> m Unit
+exitWithReason = putAppState (Proxy :: _ "exitSem")

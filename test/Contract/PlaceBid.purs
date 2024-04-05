@@ -36,7 +36,7 @@ suite =
       withWallets (defDistribution /\ defDistribution) \(seller /\ bidder) -> do
         { txHash: announceTxHash, auctionInfo } <-
           withKeyWallet seller do
-            announceAuction Nothing
+            announceAuction
         awaitTxConfirmed announceTxHash
 
         { txHash: enterTxHash } <-

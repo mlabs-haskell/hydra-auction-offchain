@@ -25,7 +25,7 @@ suite =
     test "seller enables bidding at the auction" do
       withWallets defDistribution \seller ->
         withKeyWallet seller do
-          { txHash, auctionInfo } <- announceAuction Nothing
+          { txHash, auctionInfo } <- announceAuction
           awaitTxConfirmed txHash
           void $ startBidding auctionInfo
 

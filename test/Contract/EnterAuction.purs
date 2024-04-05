@@ -26,7 +26,7 @@ suite =
   group "enter-auction" do
     test "bidder enters the auction with valid deposit" do
       withWallets (defDistribution /\ defDistribution) \(seller /\ bidder) -> do
-        { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction Nothing
+        { txHash, auctionInfo } <- withKeyWallet seller announceAuction
         awaitTxConfirmed txHash
         depositAmount <- liftEffect $ randomSampleOne $ genValidBidderDeposit auctionInfo
         withKeyWallet bidder do
@@ -34,7 +34,7 @@ suite =
 
     test "bidder enters the auction with invalid deposit" do
       withWallets (defDistribution /\ defDistribution) \(seller /\ bidder) -> do
-        { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction Nothing
+        { txHash, auctionInfo } <- withKeyWallet seller announceAuction
         awaitTxConfirmed txHash
         depositAmount <- liftEffect $ randomSampleOne $ genInvalidBidderDeposit auctionInfo
         withKeyWallet bidder do

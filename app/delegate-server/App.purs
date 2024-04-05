@@ -41,6 +41,7 @@ import DelegateServer.State
   , ContractEnvWrapper
   , access
   )
+import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.CommitStatus (CommitStatus(ShouldCommitCollateral))
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, emptySnapshot)
@@ -121,6 +122,7 @@ type AppState =
   , auctionInfo :: AVar AuctionInfoExtended
   , headStatus :: AVar HydraHeadStatus
   , livePeers :: AVar (Set String)
+  , exitSem :: AVar AppExitReason
   , collateralUtxo :: AVar Utxo
   , commitStatus :: AVar CommitStatus
   , snapshot :: AVar HydraSnapshot
@@ -141,6 +143,9 @@ instance MonadAccess AppM "headStatus" (AVar HydraHeadStatus) where
 instance MonadAccess AppM "livePeers" (AVar (Set String)) where
   access _ = asks _.livePeers
 
+instance MonadAccess AppM "exitSem" (AVar AppExitReason) where
+  access _ = asks _.exitSem
+
 instance MonadAccess AppM "collateralUtxo" (AVar Utxo) where
   access _ = asks _.collateralUtxo
 
@@ -156,6 +161,7 @@ initApp config = do
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeers <- AVar.new Set.empty
+  exitSem <- AVar.empty
   collateralUtxo <- AVar.empty
   commitStatus <- AVar.new ShouldCommitCollateral
   snapshot <- AVar.new emptySnapshot
@@ -165,6 +171,7 @@ initApp config = do
     , auctionInfo
     , headStatus
     , livePeers
+    , exitSem
     , collateralUtxo
     , commitStatus
     , snapshot

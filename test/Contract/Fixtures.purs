@@ -25,10 +25,10 @@ delegatePkhFixture =
   mkPubKeyHashUnsafe
     "ac55de689702d745e77050ce83b77ff9619383bb802e40fb90aa3be4"
 
-auctionTermsInputFixture :: Value -> POSIXTime -> Array PubKeyHash -> AuctionTermsInput
-auctionTermsInputFixture auctionLot biddingStart delegates =
+auctionTermsInputFixture :: Value -> POSIXTime -> AuctionTermsInput
+auctionTermsInputFixture auctionLot biddingStart =
   { auctionLot
-  , delegates
+  , delegates: [ delegatePkhFixture ]
   , biddingStart
   , biddingEnd
   , purchaseDeadline

@@ -87,6 +87,10 @@ main = launchAff_ do
       appHandle.cleanupHandler
     onSignal SIGINT appHandle.cleanupHandler
     onSignal SIGTERM appHandle.cleanupHandler
+  exitReason <- AVar.take appHandle.appState.exitSem
+  liftEffect do
+    log $ withGraphics (foreground Red) $ show exitReason
+    appHandle.cleanupHandler
 
 opts :: Optparse.ParserInfo AppConfig
 opts =
@@ -290,4 +294,6 @@ startHydraNode (AppConfig appConfig) = do
       , appConst.protocolParams
       , "--hydra-scripts-tx-id"
       , appConfig.hydraScriptsTxHash
+      , "--contestation-period"
+      , Int.toStringAs Int.decimal appConfig.hydraContestPeriod
       ]

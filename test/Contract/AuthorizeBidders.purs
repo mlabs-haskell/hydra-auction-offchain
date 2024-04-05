@@ -37,7 +37,7 @@ suite =
         \(seller /\ bidder0 /\ bidder1) -> do
           { txHash: announceTxHash, auctionInfo } <-
             withKeyWallet seller do
-              announceAuction Nothing
+              announceAuction
           awaitTxConfirmed announceTxHash
 
           { txHash: enterTxHash0 } <-

@@ -13,6 +13,7 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (untilJust)
 import Control.Parallel (parTraverse_)
 import Data.Array (foldRecM, last, replicate, singleton, snoc) as Array
+import Data.Time.Duration (Seconds(Seconds))
 import DelegateServer.Contract.PlaceBid
   ( PlaceBidL2ContractError(PlaceBidL2_Error_InvalidBidStateTransition)
   )
@@ -23,13 +24,20 @@ import DelegateServer.Handlers.PlaceBid
   ( PlaceBidError(PlaceBidError_ContractError)
   , PlaceBidSuccess(PlaceBidSuccess_SubmittedTransaction)
   )
+import DelegateServer.Types.AppExitReason (AppExitReason(AppExitReason_HeadFinalized))
 import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus(HeadStatus_Idle, HeadStatus_Initializing, HeadStatus_Open)
+  ( HydraHeadStatus
+      ( HeadStatus_Idle
+      , HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Closed
+      )
   )
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   )
 import HydraAuctionOffchain.Contract (discoverBidders)
+import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended
   , BidTerms(BidTerms)
@@ -37,12 +45,12 @@ import HydraAuctionOffchain.Contract.Types
   , StandingBidState(StandingBidState)
   , bidderSignatureMessage
   )
-import HydraAuctionOffchain.Helpers (waitSeconds)
+import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, waitSeconds)
 import HydraAuctionOffchain.Wallet (signMessage)
 import JS.BigInt (BigInt, fromInt)
 import Mote (group, skip, test)
 import Partial.Unsafe (unsafePartial)
-import Test.Contract.AnnounceAuction (announceAuction)
+import Test.Contract.AnnounceAuction (AuctionTermsMutator, announceAuctionFix)
 import Test.Contract.AuthorizeBidders (authorizeBidders)
 import Test.Contract.EnterAuction (enterAuction, genValidBidderDeposit)
 import Test.Contract.Fixtures (minBidIncrementFixture, startingBidFixture)
@@ -59,7 +67,9 @@ suite =
     test "delegates set announced auction as active auction" do
       withWallets' defDistribution
         \seller delegates withDelegateServerCluster -> do
-          { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction $ Just delegates
+          { txHash, auctionInfo } <-
+            withKeyWallet seller $
+              announceAuctionFix (_ { delegates = delegates })
           awaitTxConfirmed txHash
 
           withDelegateServerCluster auctionInfo \appHandle ->
@@ -71,10 +81,12 @@ suite =
     -- NOTE: All nodes in the hydra head fail to submit an InitTx
     -- transaction with NotEnoughFuel error when raiseExUnitsToMax
     -- parameter of PlutipConfig is set to true.
-    test "delegates initialize a hydra head at bidding start time" do
+    test "delegates initialize head at bidding start time" do
       withWallets' defDistribution
         \seller delegates withDelegateServerCluster -> do
-          { txHash, auctionInfo } <- withKeyWallet seller $ announceAuction $ Just delegates
+          { txHash, auctionInfo } <-
+            withKeyWallet seller $
+              announceAuctionFix (_ { delegates = delegates })
           awaitTxConfirmed txHash
 
           withDelegateServerCluster auctionInfo \appHandle -> do
@@ -83,6 +95,23 @@ suite =
             waitSeconds 5
             appHandle.getHeadStatus
               `shouldReturn` HeadStatus_Initializing
+
+    test "delegates close head at bidding end time" do
+      placeL2Bids (validBids { maxNumBids: 2 }) shortBiddingPeriod \rec -> do
+        let biddingEnd = (unwrap (unwrap rec.auctionInfo).auctionTerms).biddingEnd
+        waitUntil biddingEnd
+        untilM (eq HeadStatus_Closed)
+          rec.appHandle.getHeadStatus
+
+    test "delegates move bid back to L1 after contestation period" do
+      placeL2Bids (validBids { maxNumBids: 2 }) shortBiddingPeriod \rec -> do
+        let biddingEnd = (unwrap (unwrap rec.auctionInfo).auctionTerms).biddingEnd
+        waitUntil biddingEnd
+        untilM (eq (Just AppExitReason_HeadFinalized))
+          rec.appHandle.getAppExitReason
+        let lastBid = Array.last rec.bids <#> StandingBidState <<< Just
+        untilM (eq lastBid <<< map snd) do
+          queryStandingBidUtxo (unwrap rec.auctionInfo)
 
     group "move-bid" do
       -- FIXME: Flaky, skipped because of the race condition:
@@ -96,22 +125,7 @@ suite =
 
     group "place-bid-l2" do
       test "bidders place multiple valid bids on L2" do
-        placeBidTest
-          { numBidders: 10
-          , genBids: do
-              numBids <- chooseInt 1 10
-              let lastUnsafe = unsafePartial fromJust <<< Array.last
-              Array.foldRecM
-                ( \bids _ -> do
-                    bidIncr <- chooseInt minBidIncrementFixture (2 * minBidIncrementFixture)
-                    pure $ Array.snoc bids
-                      { bidAmount: (lastUnsafe bids).bidAmount + bidIncr
-                      , valid: true
-                      }
-                )
-                (Array.singleton { bidAmount: startingBidFixture, valid: true })
-                (Array.replicate (numBids - 1) unit)
-          }
+        placeBidTest $ validBids { maxNumBids: 10 }
 
       test "bidder cannot place bid below starting bid" do
         placeBidTest
@@ -140,6 +154,13 @@ suite =
                 ]
           }
 
+shortBiddingPeriod :: AuctionTermsMutator
+shortBiddingPeriod auctionTerms =
+  auctionTerms
+    { biddingEnd =
+        auctionTerms.biddingStart + mkPosixTimeUnsafe (Seconds 20.0)
+    }
+
 openHead :: TestAppHandle -> { autoInit :: Boolean } -> Contract Unit
 openHead appHandle { autoInit } = do
   if autoInit then do
@@ -162,7 +183,8 @@ moveBidTest { autoInit } =
   withWallets' defDistribution
     \seller delegates withDelegateServerCluster -> do
       auctionInfo <- withKeyWallet seller do
-        { txHash: announceTxHash, auctionInfo } <- announceAuction $ Just delegates
+        { txHash: announceTxHash, auctionInfo } <-
+          announceAuctionFix (_ { delegates = delegates })
         awaitTxConfirmed announceTxHash
         { txHash: startBiddingTxHash } <- startBidding auctionInfo
         awaitTxConfirmed startBiddingTxHash
@@ -191,13 +213,44 @@ type PlaceBidTestParams =
   , genBids :: Gen (Array { bidAmount :: Int, valid :: Boolean })
   }
 
+type L2TestContData =
+  { auctionInfo :: AuctionInfoExtended
+  , appHandle :: TestAppHandle
+  , bids :: Array BidTerms
+  }
+
+validBids :: { maxNumBids :: Int } -> PlaceBidTestParams
+validBids { maxNumBids } =
+  { numBidders: maxNumBids
+  , genBids: do
+      numBids <- chooseInt one maxNumBids
+      let lastUnsafe = unsafePartial fromJust <<< Array.last
+      Array.foldRecM
+        ( \bids _ -> do
+            bidIncr <- chooseInt minBidIncrementFixture (2 * minBidIncrementFixture)
+            pure $ Array.snoc bids
+              { bidAmount: (lastUnsafe bids).bidAmount + bidIncr
+              , valid: true
+              }
+        )
+        (Array.singleton { bidAmount: startingBidFixture, valid: true })
+        (Array.replicate (numBids - 1) unit)
+  }
+
 placeBidTest :: PlaceBidTestParams -> ContractTest
-placeBidTest params =
+placeBidTest params = placeL2Bids params identity (const (pure unit))
+
+placeL2Bids
+  :: PlaceBidTestParams
+  -> AuctionTermsMutator
+  -> (L2TestContData -> Contract Unit)
+  -> ContractTest
+placeL2Bids params fixAuctionTerms cont =
   withWallets' (defDistribution /\ Array.replicate params.numBidders defDistribution)
     \(seller /\ bidderKws) delegates withDelegateServerCluster -> do
       auctionInfo <-
         withKeyWallet seller do
-          res <- announceAuction $ Just delegates
+          res <- announceAuctionFix (_ { delegates = delegates } <<< fixAuctionTerms)
           awaitTxConfirmed res.txHash
           pure res.auctionInfo
 
@@ -224,7 +277,7 @@ placeBidTest params =
           appHandle.queryStandingBidL2
 
         bids <- liftEffect $ randomSampleOne params.genBids
-        traverse_
+        bidTermsList <- traverse
           ( \{ bidAmount, valid } -> do
               bidder <- randomElem bidderKws
               withKeyWallet bidder do
@@ -238,5 +291,11 @@ placeBidTest params =
                   appHandle.placeBidL2 bidTerms `shouldReturn`
                     ServerResponseError
                       (PlaceBidError_ContractError PlaceBidL2_Error_InvalidBidStateTransition)
+                pure bidTerms
           )
           bids
+        cont
+          { auctionInfo
+          , appHandle
+          , bids: bidTermsList
+          }
