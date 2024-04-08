@@ -35,7 +35,7 @@ import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket, mkHydraNodeApiWebSocket)
 import DelegateServer.Lib.Timer (scheduleAt)
-import DelegateServer.Server (server)
+import DelegateServer.Server (httpServer)
 import DelegateServer.State
   ( class AppBase
   , class AppInit
@@ -54,6 +54,7 @@ import DelegateServer.Types.HydraHeadStatus
   , isHeadClosed
   , printHeadStatus
   )
+import DelegateServer.WsServer (DelegateWebSocketServer, wsServer)
 import Effect (Effect)
 import Effect.AVar (AVar)
 import Effect.AVar (take, tryPut, tryTake) as AVarSync
@@ -109,12 +110,13 @@ startDelegateServer appConfig = do
   runApp appState $ setAuction *> prepareCollateralUtxo
 
   hydraNodeProcess <- startHydraNode appConfig
-  ws <- initHydraApiWsConn appState
-  closeServer <- liftEffect $ server appState ws
+  wsServer' <- liftEffect $ wsServer appConfig
+  hydraApiWs <- initHydraApiWsConn appState wsServer'
+  closeServer <- liftEffect $ httpServer appState hydraApiWs
 
   timers <- runApp appState $
     sequence
-      [ initHeadAtBiddingStart ws, closeHeadAtBiddingEnd ws ]
+      [ initHeadAtBiddingStart hydraApiWs, closeHeadAtBiddingEnd hydraApiWs ]
 
   cleanupSem <- AVar.new unit
   let
@@ -122,24 +124,26 @@ startDelegateServer appConfig = do
       AVarSync.tryTake cleanupSem >>=
         maybe (pure unit)
           ( const
-              ( cleanupHandler hydraNodeProcess ws closeServer (unwrap appState.contractEnv)
+              ( cleanupHandler hydraNodeProcess hydraApiWs wsServer' closeServer
+                  (unwrap appState.contractEnv)
                   timers
               )
           )
   pure
     { cleanupHandler: cleanupHandler'
     , appState
-    , ws
+    , ws: hydraApiWs
     }
 
 cleanupHandler
   :: ChildProcess
   -> HydraNodeApiWebSocket
+  -> DelegateWebSocketServer
   -> (Effect Unit -> Effect Unit)
   -> ContractEnv
   -> Array (AVar (Maybe TimeoutId))
   -> Effect Unit
-cleanupHandler hydraNodeProcess ws closeServer contractEnv timers = do
+cleanupHandler hydraNodeProcess ws wsServer closeServer contractEnv timers = do
   log "\nCancelling timers."
   for_ timers \timer ->
     AVarSync.take timer \timeout -> do
@@ -150,8 +154,8 @@ cleanupHandler hydraNodeProcess ws closeServer contractEnv timers = do
     ws.baseWs.close
     log "Killing hydra-node."
     kill SIGINT hydraNodeProcess
-    log "Finalizing Contract environment."
-    flip runAff_ (stopContractEnv contractEnv) $
+    log "Finalizing Contract environment, stopping ws server."
+    flip runAff_ (wsServer.close <* stopContractEnv contractEnv) $
       const (log "Successfully completed all cleanup actions -> exiting.")
 
 setAuction :: forall m. AppBase m => m Unit
@@ -224,10 +228,10 @@ closeHeadAtBiddingEnd ws = do
               <> "."
   liftEffect $ scheduleAt biddingEnd action
 
-initHydraApiWsConn :: AppState -> Aff HydraNodeApiWebSocket
-initHydraApiWsConn appState = do
+initHydraApiWsConn :: AppState -> DelegateWebSocketServer -> Aff HydraNodeApiWebSocket
+initHydraApiWsConn appState wsServer = do
   wsAVar <- AVar.empty
-  runApp appState $ mkHydraNodeApiWebSocket \ws ->
+  runApp appState $ mkHydraNodeApiWebSocket wsServer \ws ->
     liftAff $ void $ AVar.tryPut ws wsAVar
   AVar.take wsAVar
 

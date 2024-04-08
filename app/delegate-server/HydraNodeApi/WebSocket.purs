@@ -14,10 +14,13 @@ import Data.Either (either)
 import Data.Maybe (fromMaybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Set (delete, insert, member, size) as Set
+import Data.Traversable (traverse_)
+import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runAppEff)
 import DelegateServer.Config (AppConfig(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
+import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.HydraNodeApi.Types.Message
   ( CommittedMessage
   , GreetingsMessage
@@ -73,6 +76,7 @@ import DelegateServer.Types.HydraHeadStatus
   )
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.WebSocket (WebSocket, mkWebSocket)
+import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -92,8 +96,9 @@ type HydraNodeApiWebSocket =
   , fanout :: Effect Unit
   }
 
-mkHydraNodeApiWebSocket :: (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
-mkHydraNodeApiWebSocket onConnect =
+mkHydraNodeApiWebSocket
+  :: DelegateWebSocketServer -> (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
+mkHydraNodeApiWebSocket wsServer onConnect =
   ask >>= \appState -> liftEffect do
     ws /\ wsUrl <- mkWebSocket
       { hostPort: (unwrap appState.config).hydraNodeApi
@@ -113,7 +118,7 @@ mkHydraNodeApiWebSocket onConnect =
         , fanout: ws.send Out_Fanout
         }
     ws.onConnect $ liftEffect (connectHandler wsUrl) *> onConnect hydraNodeApiWs
-    ws.onMessage (messageHandler hydraNodeApiWs)
+    ws.onMessage (messageHandler hydraNodeApiWs wsServer)
     ws.onError (liftEffect <<< errorHandler)
 
 ----------------------------------------------------------------------
@@ -127,37 +132,36 @@ errorHandler = log <<< append "hydra-node-api ws error: "
 
 --
 
-messageHandler :: forall m. App m => HydraNodeApiWebSocket -> HydraNodeApi_InMessage -> m Unit
-messageHandler ws = case _ of
-  In_Greetings msg ->
-    msgGreetingsHandler msg
-  In_PeerConnected msg ->
-    msgPeerConnectedHandler msg
-  In_PeerDisconnected msg ->
-    msgPeerDisconnectedHandler msg
-  In_HeadIsInitializing ->
-    msgHeadIsInitializingHandler
-  In_Committed msg ->
-    msgCommittedHandler msg
-  In_HeadIsAborted ->
-    msgHeadAbortedHandler
-  In_HeadIsOpen msg ->
-    msgHeadOpenHandler msg
-  In_SnapshotConfirmed msg ->
-    msgSnapshotConfirmedHandler msg
-  In_TxInvalid ->
-    pure unit
-  In_HeadIsClosed msg ->
-    msgHeadClosedHandler ws msg
-  In_ReadyToFanout ->
-    msgReadyToFanoutHandler ws
-  In_HeadIsFinalized msg ->
-    msgHeadFinalizedHandler msg
+messageHandler
+  :: forall m
+   . App m
+  => HydraNodeApiWebSocket
+  -> DelegateWebSocketServer
+  -> HydraNodeApi_InMessage
+  -> m Unit
+messageHandler ws wsServer = case _ of
+  In_Greetings msg -> msgGreetingsHandler wsServer msg
+  In_PeerConnected msg -> msgPeerConnectedHandler msg
+  In_PeerDisconnected msg -> msgPeerDisconnectedHandler msg
+  In_HeadIsInitializing -> msgHeadIsInitializingHandler
+  In_Committed msg -> msgCommittedHandler msg
+  In_HeadIsAborted -> msgHeadAbortedHandler
+  In_HeadIsOpen msg -> msgHeadOpenHandler wsServer msg
+  In_SnapshotConfirmed msg -> msgSnapshotConfirmedHandler wsServer msg
+  In_TxInvalid -> pure unit
+  In_HeadIsClosed msg -> msgHeadClosedHandler ws msg
+  In_ReadyToFanout -> msgReadyToFanoutHandler ws
+  In_HeadIsFinalized msg -> msgHeadFinalizedHandler msg
 
-msgGreetingsHandler :: forall m. AppOpen m => GreetingsMessage -> m Unit
-msgGreetingsHandler { headStatus, snapshotUtxo } = do
+msgGreetingsHandler
+  :: forall m
+   . AppOpen m
+  => DelegateWebSocketServer
+  -> GreetingsMessage
+  -> m Unit
+msgGreetingsHandler wsServer { headStatus, snapshotUtxo } = do
   setHeadStatus' headStatus
-  setSnapshot' $ wrap
+  setSnapshot' wsServer $ wrap
     { snapshotNumber: zero -- FIXME: hydra-node: `Greetings` message should include snapshot number.
     , utxo: fromMaybe mempty snapshotUtxo
     }
@@ -216,16 +220,27 @@ msgHeadAbortedHandler = do
   setHeadStatus' HeadStatus_Final
   throwError $ error $ "Head is finalized, stopping delegate-server."
 
-msgHeadOpenHandler :: forall m. AppOpen m => HeadOpenMessage -> m Unit
-msgHeadOpenHandler { utxo } = do
+msgHeadOpenHandler
+  :: forall m
+   . AppOpen m
+  => DelegateWebSocketServer
+  -> HeadOpenMessage
+  -> m Unit
+msgHeadOpenHandler wsServer { utxo } = do
   setHeadStatus' HeadStatus_Open
-  setSnapshot' $ wrap
+  setSnapshot' wsServer $ wrap
     { snapshotNumber: zero
     , utxo
     }
 
-msgSnapshotConfirmedHandler :: forall m. AppOpen m => SnapshotConfirmedMessage -> m Unit
-msgSnapshotConfirmedHandler = setSnapshot' <<< _.snapshot
+msgSnapshotConfirmedHandler
+  :: forall m
+   . AppOpen m
+  => DelegateWebSocketServer
+  -> SnapshotConfirmedMessage
+  -> m Unit
+msgSnapshotConfirmedHandler wsServer =
+  setSnapshot' wsServer <<< _.snapshot
 
 msgHeadClosedHandler
   :: forall m
@@ -256,8 +271,10 @@ setHeadStatus' status = do
   setHeadStatus status
   liftEffect $ log $ "New head status: " <> printHeadStatus status <> "."
 
-setSnapshot' :: forall m. AppOpen m => HydraSnapshot -> m Unit
-setSnapshot' snapshot = do
+setSnapshot' :: forall m. AppOpen m => DelegateWebSocketServer -> HydraSnapshot -> m Unit
+setSnapshot' wsServer snapshot = do
   setSnapshot snapshot
   liftEffect $ log $ "New confirmed snapshot: " <> printJsonUsingCodec hydraSnapshotCodec
     snapshot
+  standingBid <- map snd <$> queryStandingBidL2
+  liftEffect $ traverse_ wsServer.broadcast standingBid

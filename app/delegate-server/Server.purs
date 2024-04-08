@@ -1,5 +1,5 @@
 module DelegateServer.Server
-  ( server
+  ( httpServer
   ) where
 
 import Prelude
@@ -29,8 +29,8 @@ import HTTPure (Method(Get, Options, Post), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
 import URI.Port (toInt) as Port
 
-server :: AppState -> HydraNodeApiWebSocket -> HTTPure.ServerM
-server appState ws = do
+httpServer :: AppState -> HydraNodeApiWebSocket -> HTTPure.ServerM
+httpServer appState ws = do
   let port = Port.toInt (unwrap appState.config).serverPort
   HTTPure.serve port (runApp appState <<< router ws) do
     log $ "Http server now accepts connections on port " <> show port <> "."

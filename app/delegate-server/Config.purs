@@ -40,6 +40,7 @@ import URI.Port (parser, toInt) as Port
 newtype AppConfig = AppConfig
   { auctionMetadataOref :: TransactionInput
   , serverPort :: Port
+  , wsServerPort :: Port
   , hydraNodeId :: String
   , hydraNode :: HostPort
   , hydraNodeApi :: HostPort
@@ -72,6 +73,13 @@ configParser = ado
     , Optparse.metavar "PORT"
     , Optparse.help
         "Listen port for incoming client connections to this \
+        \delegate server."
+    ]
+  wsServerPort <- Optparse.option parsePort $ fold
+    [ Optparse.long "ws-server-port"
+    , Optparse.metavar "PORT"
+    , Optparse.help
+        "Listen port for incoming WebSocket connections to this \
         \delegate server."
     ]
   hydraNodeId <- Optparse.strOption $ fold
@@ -167,6 +175,7 @@ configParser = ado
     wrap
       { auctionMetadataOref
       , serverPort
+      , wsServerPort
       , hydraNodeId
       , hydraNode
       , hydraNodeApi

@@ -244,8 +244,9 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   where
   ops =
     { mkServerPort: \idx -> Port.unsafeFromInt (7040 + idx)
+    , mkWsServerPort: \idx -> Port.unsafeFromInt (7050 + idx)
     , mkHydraNode: \idx -> { host: localhost, port: UInt.fromInt (7060 + idx) }
-    , mkHydraNodeApi: \idx -> { host: localhost, port: UInt.fromInt (7080 + idx) }
+    , mkHydraNodeApi: \idx -> { host: localhost, port: UInt.fromInt (7070 + idx) }
     , mkPersistDir: flip concatPaths "persist-dir"
     , mkHydra: flip concatPaths "hydra"
     , mkHydraSk: flip concatPaths "hydra.sk"
@@ -260,6 +261,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
     peers' <#> \(idx /\ workdir) -> wrap
       { auctionMetadataOref: clusterConfig.auctionMetadataOref
       , serverPort: ops.mkServerPort idx
+      , wsServerPort: ops.mkWsServerPort idx
       , hydraNodeId: toStringAs decimal idx
       , hydraNode: ops.mkHydraNode idx
       , hydraNodeApi: ops.mkHydraNodeApi idx
