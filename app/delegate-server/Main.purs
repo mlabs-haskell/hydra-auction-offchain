@@ -8,9 +8,8 @@ import Prelude
 
 import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
+import Contract.Log (logInfo', logTrace', logWarn')
 import Contract.Monad (ContractEnv, stopContractEnv)
-import Control.Monad.Error.Class (throwError)
-import Control.Monad.Reader (ask)
 import Data.Foldable (foldMap)
 import Data.Int (decimal, toStringAs) as Int
 import Data.Maybe (Maybe, maybe)
@@ -21,11 +20,13 @@ import Data.String (contains) as String
 import Data.Traversable (for_, sequence, traverse_)
 import Data.UInt (toString) as UInt
 import DelegateServer.App
-  ( AppM
+  ( AppLogger
+  , AppM
   , AppState
+  , appLoggerDefault
+  , getAppEffRunner
   , initApp
   , runApp
-  , runAppEff
   , runContract
   , runContractExitOnErr
   )
@@ -40,9 +41,13 @@ import DelegateServer.State
   ( class AppBase
   , class AppInit
   , access
+  , exitWithReason
   , readAppState
   , setAuctionInfo
   , setCollateralUtxo
+  )
+import DelegateServer.Types.AppExitReason
+  ( AppExitReason(AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus)
   )
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus
@@ -52,7 +57,6 @@ import DelegateServer.Types.HydraHeadStatus
       , HeadStatus_Open
       )
   , isHeadClosed
-  , printHeadStatus
   )
 import DelegateServer.WsServer (DelegateWebSocketServer, wsServer)
 import Effect (Effect)
@@ -63,7 +67,7 @@ import Effect.Aff.AVar (empty, new, take, tryPut) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
-import Effect.Exception (error, message)
+import Effect.Exception (message)
 import Effect.Timer (TimeoutId)
 import Effect.Timer (clearTimeout) as Timer
 import HydraAuctionOffchain.Config (printHostPort)
@@ -101,39 +105,45 @@ opts =
 type AppHandle =
   { cleanupHandler :: Effect Unit
   , appState :: AppState
+  , appLogger :: AppLogger
   , ws :: HydraNodeApiWebSocket
   }
 
 startDelegateServer :: AppConfig -> Aff AppHandle
 startDelegateServer appConfig = do
   appState <- initApp appConfig
-  runApp appState $ setAuction *> prepareCollateralUtxo
+  let appLogger = appLoggerDefault
 
-  hydraNodeProcess <- startHydraNode appConfig
-  wsServer' <- liftEffect $ wsServer appConfig
-  hydraApiWs <- initHydraApiWsConn appState wsServer'
-  closeServer <- liftEffect $ httpServer appState hydraApiWs
+  runApp appState appLogger do
+    setAuction *> prepareCollateralUtxo
+    hydraNodeProcess <- startHydraNode appConfig
+    wsServer' <- liftEffect $ wsServer appConfig
+    hydraApiWs <- initHydraApiWsConn wsServer'
+    closeServer <- liftEffect $ httpServer appState appLogger hydraApiWs
 
-  timers <- runApp appState $
-    sequence
-      [ initHeadAtBiddingStart hydraApiWs, closeHeadAtBiddingEnd hydraApiWs ]
+    timers <-
+      sequence
+        [ initHeadAtBiddingStart hydraApiWs
+        , closeHeadAtBiddingEnd hydraApiWs
+        ]
 
-  cleanupSem <- AVar.new unit
-  let
-    cleanupHandler' =
-      AVarSync.tryTake cleanupSem >>=
-        maybe (pure unit)
-          ( const
-              ( cleanupHandler hydraNodeProcess hydraApiWs wsServer' closeServer
-                  (unwrap appState.contractEnv)
-                  timers
-              )
-          )
-  pure
-    { cleanupHandler: cleanupHandler'
-    , appState
-    , ws: hydraApiWs
-    }
+    cleanupSem <- liftAff $ AVar.new unit
+    let
+      cleanupHandler' =
+        AVarSync.tryTake cleanupSem >>=
+          maybe (pure unit)
+            ( const
+                ( cleanupHandler hydraNodeProcess hydraApiWs wsServer' closeServer
+                    (unwrap appState.contractEnv)
+                    timers
+                )
+            )
+    pure
+      { cleanupHandler: cleanupHandler'
+      , appState
+      , appLogger
+      , ws: hydraApiWs
+      }
 
 cleanupHandler
   :: ChildProcess
@@ -163,92 +173,87 @@ setAuction = do
   { auctionMetadataOref } <- unwrap <$> access (Proxy :: _ "config")
   auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
   setAuctionInfo auctionInfo
-  liftEffect $ log $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
+  logInfo' $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
     auctionInfo
 
 prepareCollateralUtxo :: forall m. AppInit m => m Unit
 prepareCollateralUtxo = do
   utxo <- runContract getCollateralUtxo
   setCollateralUtxo utxo
-  liftEffect $ log $ "Prepared collateral utxo: " <> show utxo
+  logInfo' $ "Prepared collateral utxo: " <> show utxo
 
 initHeadAtBiddingStart :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
 initHeadAtBiddingStart ws = do
-  appState <- ask
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
+  runAppEff' <- getAppEffRunner
   let
     biddingStart = (unwrap (unwrap auctionInfo).auctionTerms).biddingStart
     action =
-      runAppEff appState do
+      runAppEff' do
         headStatus <- readAppState (Proxy :: _ "headStatus")
         case headStatus of
           HeadStatus_Unknown -> do
-            liftEffect $ log
+            logInfo'
               "Bidding period active but head status is unknown - retrying in 5 seconds."
             waitSeconds 5
             liftEffect action
-          HeadStatus_Idle ->
-            liftEffect do
-              log "Bidding period active, initializing the head."
-              ws.initHead
+          HeadStatus_Idle -> do
+            logInfo' "Bidding period active, initializing the head."
+            liftEffect ws.initHead
           _ ->
             pure unit
   liftEffect $ scheduleAt biddingStart action
 
 closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
 closeHeadAtBiddingEnd ws = do
-  appState <- ask
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
+  runAppEff' <- getAppEffRunner
   let
     biddingEnd = (unwrap (unwrap auctionInfo).auctionTerms).biddingEnd
     action =
-      runAppEff appState do
+      runAppEff' do
         headStatus <- readAppState (Proxy :: _ "headStatus")
         case headStatus of
           HeadStatus_Unknown -> do
-            liftEffect $ log
-              "Bidding time expired but head status is unknown - retrying in 5 seconds."
+            logInfo' "Bidding time expired but head status is unknown - retrying in 5 seconds."
             waitSeconds 5
             liftEffect action
-          HeadStatus_Initializing ->
-            liftEffect do
-              log "Bidding time expired, aborting the head."
-              ws.abortHead
-          HeadStatus_Open ->
-            liftEffect do
-              log "Bidding time expired, closing the head."
-              ws.closeHead
+          HeadStatus_Initializing -> do
+            logInfo' "Bidding time expired, aborting the head."
+            liftEffect ws.abortHead
+          HeadStatus_Open -> do
+            logInfo' "Bidding time expired, closing the head."
+            liftEffect ws.closeHead
           _ | isHeadClosed headStatus ->
             -- No-op if the head is already closed.
             pure unit
           _ ->
-            -- Terminate with an error if the head is neither open nor closed.
-            throwError $ error $ "Bidding time expired, unexpected head status: "
-              <> printHeadStatus headStatus
-              <> "."
+            exitWithReason $
+              AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus
+                headStatus
   liftEffect $ scheduleAt biddingEnd action
 
-initHydraApiWsConn :: AppState -> DelegateWebSocketServer -> Aff HydraNodeApiWebSocket
-initHydraApiWsConn appState wsServer = do
-  wsAVar <- AVar.empty
-  runApp appState $ mkHydraNodeApiWebSocket wsServer \ws ->
-    liftAff $ void $ AVar.tryPut ws wsAVar
-  AVar.take wsAVar
+initHydraApiWsConn :: DelegateWebSocketServer -> AppM HydraNodeApiWebSocket
+initHydraApiWsConn wsServer = do
+  wsAVar <- liftAff AVar.empty
+  mkHydraNodeApiWebSocket wsServer (liftAff <<< void <<< flip AVar.tryPut wsAVar)
+  liftAff $ AVar.take wsAVar
 
-startHydraNode :: AppConfig -> Aff ChildProcess
+startHydraNode :: AppConfig -> AppM ChildProcess
 startHydraNode (AppConfig appConfig) = do
-  apiServerStartedSem <- AVar.empty
+  apiServerStartedSem <- liftAff AVar.empty
   hydraNodeProcess <- liftEffect $ spawn "hydra-node" hydraNodeArgs defaultSpawnOptions
 
+  runAppEff' <- getAppEffRunner
   liftEffect $ onDataString (stderr hydraNodeProcess) Encoding.UTF8 \str ->
-    log $ withGraphics (foreground Red) $ "[hydra-node:stderr] " <> str
+    runAppEff' $ logWarn' $ "[hydra-node:stderr] " <> str
 
   liftEffect $ onDataString (stdout hydraNodeProcess) Encoding.UTF8 \str -> do
-    -- log $ withGraphics dim $ "[hydra-node:stdout] " <> str
+    runAppEff' $ logTrace' $ "[hydra-node:stdout] " <> str
     when (String.contains (Pattern "APIServerStarted") str) do
       void $ AVarSync.tryPut unit apiServerStartedSem
 
-  AVar.take apiServerStartedSem
+  liftAff $ AVar.take apiServerStartedSem
   pure hydraNodeProcess
   where
   peerArgs :: Array String

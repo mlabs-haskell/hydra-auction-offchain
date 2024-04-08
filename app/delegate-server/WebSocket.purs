@@ -7,6 +7,8 @@ module DelegateServer.WebSocket
 
 import Prelude
 
+import Contract.Log (logTrace')
+import Control.Monad.Logger.Class (class MonadLogger)
 import Ctl.Internal.JsWebSocket
   ( _mkWebSocket
   , _onWsConnect
@@ -23,7 +25,6 @@ import Data.Tuple.Nested (type (/\))
 import Data.UInt (toString) as UInt
 import Effect (Effect)
 import Effect.Class (class MonadEffect)
-import Effect.Console (log)
 import HydraAuctionOffchain.Config (HostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString, caEncodeString)
 
@@ -39,12 +40,13 @@ type WebSocketBuilder (m :: Type -> Type) (in_ :: Type) (out :: Type) =
   { hostPort :: HostPort
   , inMsgCodec :: CA.JsonCodec in_
   , outMsgCodec :: CA.JsonCodec out
-  , runM :: forall (a :: Type). m a -> Effect Unit
+  , runM :: forall a. m a -> Effect Unit
   }
 
 mkWebSocket
   :: forall (m :: Type -> Type) (in_ :: Type) (out :: Type)
    . MonadEffect m
+  => MonadLogger m
   => WebSocketBuilder m in_ out
   -> Effect (WebSocket m in_ out /\ String)
 mkWebSocket builder = do
@@ -56,10 +58,11 @@ mkWebSocket builder = do
 
     , onMessage:
         \callback ->
-          _onWsMessage ws wsLogger \msgRaw -> do
-            log $ "onMessage raw: " <> msgRaw
-            either (log <<< append "onMessage decode error: ") (builder.runM <<< callback)
-              (caDecodeString builder.inMsgCodec msgRaw)
+          _onWsMessage ws wsLogger \msgRaw ->
+            builder.runM do
+              logTrace' $ "onMessage raw: " <> msgRaw
+              either (logTrace' <<< append "onMessage decode error: ") callback
+                (caDecodeString builder.inMsgCodec msgRaw)
 
     , onError:
         \callback ->

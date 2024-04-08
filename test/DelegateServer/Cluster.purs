@@ -27,6 +27,7 @@ import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty (fromArray, head, toArray) as NEArray
 import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
+import Data.Log.Level (LogLevel(Info))
 import Data.Maybe (Maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.TraversableWithIndex (traverseWithIndex)
@@ -158,7 +159,7 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
           withRandomAppHandle f =
             liftAff do
               appHandle <- randomElem apps
-              runApp appHandle.appState $ f appHandle
+              runApp appHandle.appState appHandle.appLogger $ f appHandle
 
           withRandomAppHandle_ :: forall a. AppM a -> Contract a
           withRandomAppHandle_ =
@@ -287,6 +288,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
             }
       , hydraScriptsTxHash
       , hydraContestPeriod: 5
+      , logLevel: Info
       }
 
   createWorkdirsStoreKeys :: Aff (NonEmptyArray (Int /\ FilePath))

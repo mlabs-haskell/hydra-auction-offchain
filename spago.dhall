@@ -27,6 +27,7 @@
   , "js-bigints"
   , "js-timers"
   , "maybe"
+  , "monad-logger"
   , "mote"
   , "newtype"
   , "node-buffer"

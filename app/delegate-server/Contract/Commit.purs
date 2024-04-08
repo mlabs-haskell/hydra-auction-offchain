@@ -13,6 +13,7 @@ module DelegateServer.Contract.Commit
 
 import Contract.Prelude
 
+import Contract.Log (logDebug', logInfo')
 import Contract.Transaction
   ( BalancedSignedTransaction(BalancedSignedTransaction)
   , TransactionHash
@@ -70,8 +71,7 @@ commitStandingBid = do
     !? CommitBid_CouldNotFindStandingBidUtxo
   bidCommit <- mkStandingBidCommit bidUtxo standingBidValidator
     ?? CommitBid_CouldNotBuildCommit
-  liftEffect $ log $ "Ready to commit standing bid: "
-    <> printJson (encodeJson bidCommit)
+  logDebug' $ "Ready to commit standing bid: " <> printJson (encodeJson bidCommit)
   txHash <-
     withExceptT CommitBid_CommitRequestFailed
       (commitUtxos $ bidCommit <> mkCollateralCommit collateralUtxo)
@@ -101,5 +101,5 @@ commitUtxos utxos = do
       (withWallet cardanoSk <<< signTransaction)
         =<< reSignTransaction commitTx
     txHash <- submit signedTx
-    liftEffect $ log $ "Submitted commit tx: " <> show txHash <> "."
+    logInfo' $ "Submitted commit tx: " <> show txHash <> "."
     pure txHash

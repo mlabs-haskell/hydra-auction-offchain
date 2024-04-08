@@ -5,10 +5,11 @@ module DelegateServer.HydraNodeApi.WebSocket
 
 import Prelude
 
+import Contract.Log (logInfo', logWarn')
 import Contract.Transaction (Transaction)
-import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExceptT)
-import Control.Monad.Reader (ask)
+import Control.Monad.Logger.Class (class MonadLogger)
+import Control.Monad.Reader (asks)
 import Data.Array (length) as Array
 import Data.Either (either)
 import Data.Maybe (fromMaybe)
@@ -17,7 +18,7 @@ import Data.Set (delete, insert, member, size) as Set
 import Data.Traversable (traverse_)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
-import DelegateServer.App (AppM, runAppEff)
+import DelegateServer.App (AppM, getAppEffRunner)
 import DelegateServer.Config (AppConfig(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
@@ -78,10 +79,7 @@ import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.WebSocket (WebSocket, mkWebSocket)
 import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect (Effect)
-import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Effect.Console (log)
-import Effect.Exception (error)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 import Type.Data.List (type (:>), Nil')
 import Type.Proxy (Proxy(Proxy))
@@ -98,13 +96,15 @@ type HydraNodeApiWebSocket =
 
 mkHydraNodeApiWebSocket
   :: DelegateWebSocketServer -> (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
-mkHydraNodeApiWebSocket wsServer onConnect =
-  ask >>= \appState -> liftEffect do
+mkHydraNodeApiWebSocket wsServer onConnect = do
+  config <- unwrap <$> asks _.config
+  runM <- getAppEffRunner
+  liftEffect do
     ws /\ wsUrl <- mkWebSocket
-      { hostPort: (unwrap appState.config).hydraNodeApi
+      { hostPort: config.hydraNodeApi
       , inMsgCodec: hydraNodeApiInMessageCodec
       , outMsgCodec: hydraNodeApiOutMessageCodec
-      , runM: runAppEff appState
+      , runM
       }
     let
       hydraNodeApiWs :: HydraNodeApiWebSocket
@@ -117,18 +117,18 @@ mkHydraNodeApiWebSocket wsServer onConnect =
         , challengeSnapshot: ws.send Out_Contest
         , fanout: ws.send Out_Fanout
         }
-    ws.onConnect $ liftEffect (connectHandler wsUrl) *> onConnect hydraNodeApiWs
+    ws.onConnect $ connectHandler wsUrl *> onConnect hydraNodeApiWs
     ws.onMessage (messageHandler hydraNodeApiWs wsServer)
-    ws.onError (liftEffect <<< errorHandler)
+    ws.onError errorHandler
 
 ----------------------------------------------------------------------
 -- Handlers
 
-connectHandler :: String -> Effect Unit
-connectHandler wsUrl = log $ "Connected to hydra-node-api ws server (" <> wsUrl <> ")."
+connectHandler :: forall m. MonadLogger m => String -> m Unit
+connectHandler wsUrl = logInfo' $ "Connected to hydra-node-api ws server (" <> wsUrl <> ")."
 
-errorHandler :: String -> Effect Unit
-errorHandler = log <<< append "hydra-node-api ws error: "
+errorHandler :: forall m. MonadLogger m => String -> m Unit
+errorHandler = logInfo' <<< append "hydra-node-api ws error: "
 
 --
 
@@ -170,11 +170,11 @@ msgPeerConnectedHandler :: forall m. AppBase m => PeerConnMessage -> m Unit
 msgPeerConnectedHandler { peer } = do
   { config: AppConfig config, livePeers: livePeersAVar } <- accessRec
     (Proxy :: _ ("config" :> "livePeers" :> Nil'))
-  liftAff $ modifyAVar_ livePeersAVar \livePeers ->
+  modifyAVar_ livePeersAVar \livePeers ->
     case Set.member peer livePeers, peer /= config.hydraNodeId of
       false, true -> do
         let livePeers' = Set.insert peer livePeers
-        liftEffect $ log $ "Peer connected (live peers " <> show (Set.size livePeers') <> "/"
+        logInfo' $ "Peer connected (live peers " <> show (Set.size livePeers') <> "/"
           <> show (Array.length config.peers)
           <> ")."
         pure livePeers'
@@ -184,11 +184,11 @@ msgPeerDisconnectedHandler :: forall m. AppBase m => PeerConnMessage -> m Unit
 msgPeerDisconnectedHandler { peer } = do
   { config: AppConfig config, livePeers: livePeersAVar } <- accessRec
     (Proxy :: _ ("config" :> "livePeers" :> Nil'))
-  liftAff $ modifyAVar_ livePeersAVar \livePeers ->
+  modifyAVar_ livePeersAVar \livePeers ->
     case Set.member peer livePeers, peer /= config.hydraNodeId of
       true, true -> do
         let livePeers' = Set.delete peer livePeers
-        liftEffect $ log $ "Peer disconnected (live peers " <> show (Set.size livePeers')
+        logInfo' $ "Peer disconnected (live peers " <> show (Set.size livePeers')
           <> "/"
           <> show (Array.length config.peers)
           <> ")."
@@ -203,7 +203,7 @@ msgHeadIsInitializingHandler = do
     runExceptT commitStandingBid >>=
       either
         ( \err ->
-            liftEffect (log $ "Could not commit standing bid, error: " <> show err <> ".")
+            logWarn' ("Could not commit standing bid, error: " <> show err <> ".")
               *> setCommitStatus ShouldCommitCollateral
         )
         (const (pure unit))
@@ -212,13 +212,13 @@ msgCommittedHandler :: forall m. AppInit m => CommittedMessage -> m Unit
 msgCommittedHandler _ =
   runExceptT commitCollateral >>=
     either
-      (\err -> liftEffect $ log $ "Could not commit collateral, error: " <> show err <> ".")
+      (\err -> logWarn' $ "Could not commit collateral, error: " <> show err <> ".")
       (const (pure unit))
 
 msgHeadAbortedHandler :: forall m. AppInit m => m Unit
 msgHeadAbortedHandler = do
   setHeadStatus' HeadStatus_Final
-  throwError $ error $ "Head is finalized, stopping delegate-server."
+  exitWithReason AppExitReason_HeadFinalized
 
 msgHeadOpenHandler
   :: forall m
@@ -269,12 +269,12 @@ msgHeadFinalizedHandler _ = do
 setHeadStatus' :: forall m. AppBase m => HydraHeadStatus -> m Unit
 setHeadStatus' status = do
   setHeadStatus status
-  liftEffect $ log $ "New head status: " <> printHeadStatus status <> "."
+  logInfo' $ "New head status: " <> printHeadStatus status <> "."
 
 setSnapshot' :: forall m. AppOpen m => DelegateWebSocketServer -> HydraSnapshot -> m Unit
 setSnapshot' wsServer snapshot = do
   setSnapshot snapshot
-  liftEffect $ log $ "New confirmed snapshot: " <> printJsonUsingCodec hydraSnapshotCodec
+  logInfo' $ "New confirmed snapshot: " <> printJsonUsingCodec hydraSnapshotCodec
     snapshot
   standingBid <- map snd <$> queryStandingBidL2
   liftEffect $ traverse_ wsServer.broadcast standingBid
