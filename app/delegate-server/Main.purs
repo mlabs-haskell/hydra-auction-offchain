@@ -117,7 +117,7 @@ startDelegateServer appConfig = do
   runApp appState appLogger do
     setAuction *> prepareCollateralUtxo
     hydraNodeProcess <- startHydraNode appConfig
-    wsServer' <- liftEffect $ wsServer appConfig
+    wsServer' <- wsServer appConfig
     hydraApiWs <- initHydraApiWsConn wsServer'
     closeServer <- liftEffect $ httpServer appState appLogger hydraApiWs
 

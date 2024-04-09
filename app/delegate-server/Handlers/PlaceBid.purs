@@ -14,8 +14,7 @@ module DelegateServer.Handlers.PlaceBid
 import Prelude
 
 import Control.Monad.Except (runExceptT)
-import Data.Argonaut (class EncodeJson)
-import Data.Codec.Argonaut (JsonCodec, encode, string) as CA
+import Data.Codec.Argonaut (JsonCodec, string) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
 import Data.Generic.Rep (class Generic)
@@ -34,6 +33,7 @@ import DelegateServer.Types.ServerResponse
   , respCreatedOrBadRequest
   )
 import HTTPure (Response) as HTTPure
+import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import Type.Proxy (Proxy(Proxy))
@@ -72,8 +72,8 @@ derive instance Eq PlaceBidSuccess
 instance Show PlaceBidSuccess where
   show = genericShow
 
-instance EncodeJson PlaceBidSuccess where
-  encodeJson = CA.encode placeBidSuccessCodec
+instance HasJson PlaceBidSuccess where
+  jsonCodec = const placeBidSuccessCodec
 
 placeBidSuccessCodec :: CA.JsonCodec PlaceBidSuccess
 placeBidSuccessCodec =
@@ -103,8 +103,8 @@ derive instance Eq PlaceBidError
 instance Show PlaceBidError where
   show = genericShow
 
-instance EncodeJson PlaceBidError where
-  encodeJson = CA.encode placeBidErrorCodec
+instance HasJson PlaceBidError where
+  jsonCodec = const placeBidErrorCodec
 
 placeBidErrorCodec :: CA.JsonCodec PlaceBidError
 placeBidErrorCodec =

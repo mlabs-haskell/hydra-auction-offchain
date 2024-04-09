@@ -16,8 +16,7 @@ import Prelude
 
 import Contract.Transaction (TransactionHash)
 import Control.Monad.Except (runExceptT)
-import Data.Argonaut (class EncodeJson)
-import Data.Codec.Argonaut (JsonCodec, encode, object) as CA
+import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
@@ -44,7 +43,7 @@ import DelegateServer.Types.ServerResponse
   )
 import Effect.Class (liftEffect)
 import HTTPure (Response) as HTTPure
-import HydraAuctionOffchain.Codec (transactionHashCodec)
+import HydraAuctionOffchain.Codec (class HasJson, transactionHashCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
 import Type.Proxy (Proxy(Proxy))
 
@@ -88,8 +87,8 @@ derive instance Eq MoveBidSuccess
 instance Show MoveBidSuccess where
   show = genericShow
 
-instance EncodeJson MoveBidSuccess where
-  encodeJson = CA.encode moveBidSuccessCodec
+instance HasJson MoveBidSuccess where
+  jsonCodec = const moveBidSuccessCodec
 
 moveBidSuccessCodec :: CA.JsonCodec MoveBidSuccess
 moveBidSuccessCodec =
@@ -127,8 +126,8 @@ derive instance Eq MoveBidError
 instance Show MoveBidError where
   show = genericShow
 
-instance EncodeJson MoveBidError where
-  encodeJson = CA.encode moveBidErrorCodec
+instance HasJson MoveBidError where
+  jsonCodec = const moveBidErrorCodec
 
 moveBidErrorCodec :: CA.JsonCodec MoveBidError
 moveBidErrorCodec =
