@@ -14,12 +14,19 @@ module DelegateServer.Handlers.PlaceBid
 import Prelude
 
 import Control.Monad.Except (runExceptT)
-import Data.Argonaut (class EncodeJson, encodeJson)
-import Data.Codec.Argonaut (encode) as CA
+import Data.Argonaut (class EncodeJson)
+import Data.Codec.Argonaut (JsonCodec, encode, string) as CA
+import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
 import Data.Generic.Rep (class Generic)
+import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
-import DelegateServer.Contract.PlaceBid (PlaceBidL2ContractError, placeBidL2)
+import Data.Variant (inj, match) as Variant
+import DelegateServer.Contract.PlaceBid
+  ( PlaceBidL2ContractError
+  , placeBidL2
+  , placeBidL2ContractErrorCodec
+  )
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (class AppOpen)
 import DelegateServer.Types.ServerResponse
@@ -27,47 +34,11 @@ import DelegateServer.Types.ServerResponse
   , respCreatedOrBadRequest
   )
 import HTTPure (Response) as HTTPure
-import HydraAuctionOffchain.Contract.Types (bidTermsCodec, contractErrorCodec, toContractError)
+import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import Type.Proxy (Proxy(Proxy))
 
 type PlaceBidResponse = ServerResponse PlaceBidSuccess PlaceBidError
-
-data PlaceBidSuccess = PlaceBidSuccess_SubmittedTransaction
-
-derive instance Generic PlaceBidSuccess _
-derive instance Eq PlaceBidSuccess
-
-instance Show PlaceBidSuccess where
-  show = genericShow
-
-instance EncodeJson PlaceBidSuccess where
-  encodeJson = case _ of
-    PlaceBidSuccess_SubmittedTransaction ->
-      encodeJson
-        { success: "Submitted PlaceBid L2 transaction."
-        }
-
-data PlaceBidError
-  = PlaceBidError_CouldNotDecodeBidTerms String
-  | PlaceBidError_ContractError PlaceBidL2ContractError
-
-derive instance Generic PlaceBidError _
-derive instance Eq PlaceBidError
-
-instance Show PlaceBidError where
-  show = genericShow
-
-instance EncodeJson PlaceBidError where
-  encodeJson = case _ of
-    PlaceBidError_CouldNotDecodeBidTerms err ->
-      encodeJson
-        { error: "Could not decode provided payload as BidTerms, error: " <> err
-        }
-    PlaceBidError_ContractError err ->
-      encodeJson
-        { error: "Could not place bid on L2 due to contract validation error."
-        , body: CA.encode contractErrorCodec $ toContractError err
-        }
 
 placeBidHandler :: forall m. AppOpen m => HydraNodeApiWebSocket -> String -> m HTTPure.Response
 placeBidHandler ws = respCreatedOrBadRequest <=< placeBidHandlerImpl ws
@@ -90,3 +61,67 @@ placeBidHandlerImpl ws bodyStr =
             PlaceBidError_ContractError contractErr
         Right _ ->
           ServerResponseSuccess PlaceBidSuccess_SubmittedTransaction
+
+-- PlaceBidSuccess ---------------------------------------------------
+
+data PlaceBidSuccess = PlaceBidSuccess_SubmittedTransaction
+
+derive instance Generic PlaceBidSuccess _
+derive instance Eq PlaceBidSuccess
+
+instance Show PlaceBidSuccess where
+  show = genericShow
+
+instance EncodeJson PlaceBidSuccess where
+  encodeJson = CA.encode placeBidSuccessCodec
+
+placeBidSuccessCodec :: CA.JsonCodec PlaceBidSuccess
+placeBidSuccessCodec =
+  dimap toVariant fromVariant
+    ( CAV.variantMatch
+        { "SubmittedTransaction": Left unit
+        }
+    )
+  where
+  toVariant = case _ of
+    PlaceBidSuccess_SubmittedTransaction ->
+      Variant.inj (Proxy :: _ "SubmittedTransaction") unit
+
+  fromVariant = Variant.match
+    { "SubmittedTransaction": const PlaceBidSuccess_SubmittedTransaction
+    }
+
+-- PlaceBidError -----------------------------------------------------
+
+data PlaceBidError
+  = PlaceBidError_CouldNotDecodeBidTerms String
+  | PlaceBidError_ContractError PlaceBidL2ContractError
+
+derive instance Generic PlaceBidError _
+derive instance Eq PlaceBidError
+
+instance Show PlaceBidError where
+  show = genericShow
+
+instance EncodeJson PlaceBidError where
+  encodeJson = CA.encode placeBidErrorCodec
+
+placeBidErrorCodec :: CA.JsonCodec PlaceBidError
+placeBidErrorCodec =
+  dimap toVariant fromVariant
+    ( CAV.variantMatch
+        { "CouldNotDecodeBidTerms": Right CA.string
+        , "ContractError": Right placeBidL2ContractErrorCodec
+        }
+    )
+  where
+  toVariant = case _ of
+    PlaceBidError_CouldNotDecodeBidTerms x ->
+      Variant.inj (Proxy :: _ "CouldNotDecodeBidTerms") x
+    PlaceBidError_ContractError x ->
+      Variant.inj (Proxy :: _ "ContractError") x
+
+  fromVariant = Variant.match
+    { "CouldNotDecodeBidTerms": PlaceBidError_CouldNotDecodeBidTerms
+    , "ContractError": PlaceBidError_ContractError
+    }

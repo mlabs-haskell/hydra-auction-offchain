@@ -9,6 +9,7 @@ module DelegateServer.Contract.Commit
       )
   , commitCollateral
   , commitStandingBid
+  , commitStandingBidErrorCodec
   ) where
 
 import Contract.Prelude
@@ -23,10 +24,14 @@ import Contract.Transaction
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT(ExceptT), withExceptT)
 import Data.Argonaut (encodeJson)
+import Data.Codec.Argonaut (JsonCodec, string) as CA
+import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (unwrap)
+import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple.Nested (type (/\), (/\))
+import Data.Variant (inj, match) as Variant
 import DelegateServer.App (runContract, runContractLift)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.HydraNodeApi.Types.Commit
@@ -48,13 +53,37 @@ import Type.Proxy (Proxy(Proxy))
 data CommitStandingBidError
   = CommitBid_CouldNotFindStandingBidUtxo
   | CommitBid_CouldNotBuildCommit
-  | CommitBid_CommitRequestFailed ServiceError
+  | CommitBid_CommitRequestFailed String
 
 derive instance Generic CommitStandingBidError _
 derive instance Eq CommitStandingBidError
 
 instance Show CommitStandingBidError where
   show = genericShow
+
+commitStandingBidErrorCodec :: CA.JsonCodec CommitStandingBidError
+commitStandingBidErrorCodec =
+  dimap toVariant fromVariant
+    ( CAV.variantMatch
+        { "CouldNotFindStandingBidUtxo": Left unit
+        , "CouldNotBuildCommit": Left unit
+        , "CommitRequestFailed": Right CA.string
+        }
+    )
+  where
+  toVariant = case _ of
+    CommitBid_CouldNotFindStandingBidUtxo ->
+      Variant.inj (Proxy :: _ "CouldNotFindStandingBidUtxo") unit
+    CommitBid_CouldNotBuildCommit ->
+      Variant.inj (Proxy :: _ "CouldNotBuildCommit") unit
+    CommitBid_CommitRequestFailed x ->
+      Variant.inj (Proxy :: _ "CommitRequestFailed") x
+
+  fromVariant = Variant.match
+    { "CouldNotFindStandingBidUtxo": const CommitBid_CouldNotFindStandingBidUtxo
+    , "CouldNotBuildCommit": const CommitBid_CouldNotBuildCommit
+    , "CommitRequestFailed": CommitBid_CommitRequestFailed
+    }
 
 commitStandingBid
   :: forall m
@@ -73,7 +102,7 @@ commitStandingBid = do
     ?? CommitBid_CouldNotBuildCommit
   logDebug' $ "Ready to commit standing bid: " <> printJson (encodeJson bidCommit)
   txHash <-
-    withExceptT CommitBid_CommitRequestFailed
+    withExceptT (CommitBid_CommitRequestFailed <<< show)
       (commitUtxos $ bidCommit <> mkCollateralCommit collateralUtxo)
   pure $ standingBid /\ txHash
 

@@ -9,6 +9,7 @@ module DelegateServer.Contract.PlaceBid
       )
   , placeBidL2
   , placeBidL2'
+  , placeBidL2ContractErrorCodec
   ) where
 
 import Contract.Prelude
@@ -50,8 +51,12 @@ import Control.Monad.Except (ExceptT, mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.BalanceTx.CoinSelection (SelectionStrategy(SelectionStrategyMinimal))
 import Data.Array (find) as Array
+import Data.Codec.Argonaut (JsonCodec) as CA
+import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Map (fromFoldable, toUnfoldable) as Map
 import Data.Newtype (modify, unwrap)
+import Data.Profunctor (dimap)
+import Data.Variant (inj, match) as Variant
 import DelegateServer.App (runContractNullCosts)
 import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
@@ -73,7 +78,11 @@ import HydraAuctionOffchain.Contract.Types
   , emptySubmitTxData
   , validateNewBid
   )
-import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import HydraAuctionOffchain.Contract.Validators
+  ( MkAuctionValidatorsError
+  , mkAuctionValidators
+  , mkAuctionValidatorsErrorCodec
+  )
 import JS.BigInt (fromInt) as BigInt
 import Node.Path (FilePath)
 import Type.Proxy (Proxy(Proxy))
@@ -271,3 +280,46 @@ instance ToContractError PlaceBidL2ContractError where
       { errorCode: "PlaceBidL206"
       , message: "Could not build auction validators, error: " <> show err <> "."
       }
+
+placeBidL2ContractErrorCodec :: CA.JsonCodec PlaceBidL2ContractError
+placeBidL2ContractErrorCodec =
+  dimap toVariant fromVariant
+    ( CAV.variantMatch
+        { "CurrentTimeBeforeBiddingStart": Left unit
+        , "CurrentTimeAfterBiddingEnd": Left unit
+        , "CouldNotFindCollateralUtxo": Left unit
+        , "CouldNotFindCurrentStandingBidUtxo": Left unit
+        , "InvalidBidStateTransition": Left unit
+        , "CouldNotBuildAuctionValidators": Right mkAuctionValidatorsErrorCodec
+        }
+    )
+  where
+  toVariant = case _ of
+    PlaceBidL2_Error_CurrentTimeBeforeBiddingStart ->
+      Variant.inj (Proxy :: _ "CurrentTimeBeforeBiddingStart") unit
+    PlaceBidL2_Error_CurrentTimeAfterBiddingEnd ->
+      Variant.inj (Proxy :: _ "CurrentTimeAfterBiddingEnd") unit
+    PlaceBidL2_Error_CouldNotFindCollateralUtxo ->
+      Variant.inj (Proxy :: _ "CouldNotFindCollateralUtxo") unit
+    PlaceBidL2_Error_CouldNotFindCurrentStandingBidUtxo ->
+      Variant.inj (Proxy :: _ "CouldNotFindCurrentStandingBidUtxo") unit
+    PlaceBidL2_Error_InvalidBidStateTransition ->
+      Variant.inj (Proxy :: _ "InvalidBidStateTransition") unit
+    PlaceBidL2_Error_CouldNotBuildAuctionValidators x ->
+      Variant.inj (Proxy :: _ "CouldNotBuildAuctionValidators") x
+
+  fromVariant = Variant.match
+    { "CurrentTimeBeforeBiddingStart":
+        const PlaceBidL2_Error_CurrentTimeBeforeBiddingStart
+    , "CurrentTimeAfterBiddingEnd":
+        const PlaceBidL2_Error_CurrentTimeAfterBiddingEnd
+    , "CouldNotFindCollateralUtxo":
+        const PlaceBidL2_Error_CouldNotFindCollateralUtxo
+    , "CouldNotFindCurrentStandingBidUtxo":
+        const PlaceBidL2_Error_CouldNotFindCurrentStandingBidUtxo
+    , "InvalidBidStateTransition":
+        const PlaceBidL2_Error_InvalidBidStateTransition
+    , "CouldNotBuildAuctionValidators":
+        PlaceBidL2_Error_CouldNotBuildAuctionValidators
+    }
+
