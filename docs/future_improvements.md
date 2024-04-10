@@ -1,3 +1,76 @@
+# Open Auctions
+
+The most widely valuable use case for auctions is the Open Auction, which allows anyone to participate in the auction as bidders.
+
+## Problem Statement (Persistent Deposit Sufficiency)
+
+The chief difficulty with running open auctions is ensuring the bidder deposit is sufficient and remains until the bidder withdraws from the auction.
+
+In private auctions we can easily bypass this problem by offloading the responsibility to the seller, who is both incentivized to ensure the deposit is sufficient, and a trusted party in regards to the auction.
+
+Public auctions must solve this same problem without the involvement of the seller after the initial announcing of the auction. In order to do this, we will rely on the other class of trusted parties in the auction protocol - the hydra delegates.
+
+## Solution
+
+### L1
+
+When a prospective bidder places a deposit, they will be able to immediately bid on L1 by referencing the deposit they placed.
+
+These deposits are stored with datums which include the following information: 
+```haskell
+data PBidderInfo (s :: S)
+  = PBidderInfo
+      ( Term
+          s
+          ( PDataRecord
+              '[ "biBidderAddress" ':= PAddress
+               , "biBidderVk" ':= PByteString
+               ]
+          )
+      )
+  deriving stock (Generic)
+  deriving anyclass (PlutusType, PIsData, PDataFields, PShow, PEq)
+```
+
+To allow for public auctions instead of private auctions, the standing bid validator must be changed to allow bids to be placed by referencing a datum which: 
+- includes a matching address
+- includes a sufficient deposit 
+- is stored at the correct address
+
+### L2
+
+On L2, the hydra delegates are expected to maintain a list of valid deposits in the form of a list of `Address`es which can be similarly referenced:
+- When the auction is first moved to L2, the list is created with all sufficient & valid deposits currently placed at the auction's bidder deposit validator.
+- Whenever a new participant that is not currently in that list attempts to place a bid on L2 the delegate through which that bid is being placed should also update the list of valid deposits to include all new deposits that have been placed since the last update.
+
+To place a bid on L2, the private standing bid validator requires the inclusion of a reference to the list of `Address`es showing that the bidder is included in the list.
+
+### Notes
+
+The L2 bidding system can technically be used in L1 as well, however there is no need to require bidders to rely on the delegates on L1 when they can easily prove the legitimacy of their deposit on their own.
+
+In the future, should deposit withdrawal be allowed, this system will need to be updated with more regularity.
+
+## Endpoints
+
+Altogether, the updated redeemers for the public standing bid validator are as follows:
+
+### `NewBid` (modified)
+
+Bid transactions must now either reference a datum which (for L1 bidding)
+- includes a matching address
+- includes a sufficient deposit 
+- is stored at the bid deposit validator address
+
+OR which (for L2 bidding)
+- includes a list of addresses which includes a matching address
+- is stored at the standing bid validator address
+
+### `UpdateRegistry` (new)
+
+- Must output a list of addresses to the standing bid validator
+- Must include the signature of 1 or more delegates
+
 # Fully-Backed Bids
 
 ## Problem Statement (Bid Guarantees on L2)
