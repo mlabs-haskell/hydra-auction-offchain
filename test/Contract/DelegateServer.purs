@@ -45,7 +45,7 @@ import HydraAuctionOffchain.Contract.Types
   , StandingBidState(StandingBidState)
   , bidderSignatureMessage
   )
-import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, waitSeconds)
+import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, randomElem, waitSeconds)
 import HydraAuctionOffchain.Wallet (signMessage)
 import JS.BigInt (BigInt, fromInt)
 import Mote (group, skip, test)
@@ -57,7 +57,7 @@ import Test.Contract.Fixtures (minBidIncrementFixture, startingBidFixture)
 import Test.Contract.PlaceBid (discoverSellerSignature)
 import Test.Contract.StartBidding (startBidding)
 import Test.DelegateServer.Cluster (TestAppHandle, withWallets')
-import Test.Helpers (defDistribution, randomElem, untilM, waitUntil)
+import Test.Helpers (defDistribution, untilM, waitUntil)
 import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne)
 import Test.Spec.Assertions (shouldEqual, shouldReturn, shouldSatisfy)
 

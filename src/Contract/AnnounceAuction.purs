@@ -57,6 +57,7 @@ import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
 import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
 import Data.Array (head) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
@@ -82,9 +83,11 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult'
+  , DelegateInfo
   , assetToValue
   , auctionInfoExtendedCodec
   , auctionTermsInputCodec
+  , delegateInfoCodec
   , emptySubmitTxData
   , mkAuctionInfoExtended
   , mkAuctionTerms
@@ -104,6 +107,7 @@ import Record (merge) as Record
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
   { auctionTerms :: AuctionTermsInput
+  , delegateInfo :: Maybe DelegateInfo
   -- Allows the user to provide additional utxos to cover auction lot Value. This can be useful
   -- if some portion of the Value is, for example, locked at a multi-signature address.
   , additionalAuctionLotOrefs :: Array TransactionInput
@@ -124,6 +128,7 @@ announceAuctionContractParamsCodec =
   wrapIso AnnounceAuctionContractParams $ CA.object "AnnounceAuctionContractParams" $
     CAR.record
       { auctionTerms: auctionTermsInputCodec
+      , delegateInfo: CA.maybe delegateInfoCodec
       , additionalAuctionLotOrefs: CA.array orefCodec
       }
 
@@ -248,6 +253,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     auctionInfo = wrap
       { auctionId: auctionCs
       , auctionTerms
+      , delegateInfo: params.delegateInfo
       , auctionEscrowAddr: validatorAddresses.auctionEscrow
       , bidderDepositAddr: validatorAddresses.bidderDeposit
       , feeEscrowAddr: validatorAddresses.feeEscrow

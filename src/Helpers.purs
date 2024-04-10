@@ -8,6 +8,7 @@ module HydraAuctionOffchain.Helpers
   , liftEitherShow
   , mkPosixTimeUnsafe
   , nowPosix
+  , randomElem
   , tokenNameFromAsciiUnsafe
   , waitSeconds
   , withEmptyPlutusV2Script
@@ -34,10 +35,12 @@ import Control.Error.Util (hush, (!?))
 import Control.Monad.Error.Class (class MonadError, class MonadThrow, liftEither, try)
 import Control.Monad.Except (ExceptT)
 import Ctl.Internal.Plutus.Types.Address (class PlutusAddress)
+import Data.Array (unsafeIndex)
 import Data.Bifunctor (lmap)
 import Data.DateTime (DateTime)
 import Data.DateTime.Instant (instant, toDateTime, unInstant)
 import Data.Either (Either)
+import Data.Foldable (length)
 import Data.Int (toNumber) as Int
 import Data.Map (toUnfoldable) as Map
 import Data.Maybe (Maybe(Just, Nothing), fromJust, fromMaybe')
@@ -51,6 +54,7 @@ import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
 import Effect.Now (now)
+import Effect.Random (randomInt)
 import JS.BigInt (fromNumber, toNumber) as BigInt
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 
@@ -99,6 +103,11 @@ mkPosixTimeUnsafe dur =
 
 nowPosix :: forall (m :: Type -> Type). MonadEffect m => m POSIXTime
 nowPosix = liftEffect $ now <#> mkPosixTimeUnsafe <<< unInstant
+
+randomElem :: forall m a. MonadEffect m => Array a -> m a
+randomElem xs =
+  liftEffect $ unsafePartial $
+    unsafeIndex xs <$> randomInt zero (length xs - one)
 
 waitSeconds :: forall m. MonadAff m => Int -> m Unit
 waitSeconds seconds = liftAff $ delay $ fromDuration $ Seconds $ Int.toNumber seconds

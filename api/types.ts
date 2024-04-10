@@ -2,6 +2,7 @@
 
 export type AnnounceAuctionContractParams = {
   auctionTerms: AuctionTermsInput;
+  delegateInfo: DelegateInfo | null;
   additionalAuctionLotOrefs: Array<TransactionInput>;
 };
 
@@ -66,6 +67,7 @@ export type StartBiddingContractParams = {
 export type AuctionInfo = {
   auctionId: CurrencySymbol;
   auctionTerms: AuctionTerms;
+  delegateInfo: DelegateInfo | null;
   auctionEscrowAddr: Address;
   bidderDepositAddr: Address;
   feeEscrowAddr: Address;
@@ -101,6 +103,11 @@ export type BidTerms = {
   price: BigInt;
   bidderSignature: ByteArray;
   sellerSignature: ByteArray;
+};
+
+export type DelegateInfo = {
+  httpServers: string[];
+  wsServers: string[];
 };
 
 export type StandingBidState = BidTerms | null;

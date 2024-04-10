@@ -9,6 +9,7 @@ module DelegateServer.Handlers.PlaceBid
       )
   , placeBidHandler
   , placeBidHandlerImpl
+  , placeBidResponseCodec
   ) where
 
 import Prelude
@@ -31,6 +32,7 @@ import DelegateServer.State (class AppOpen)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   , respCreatedOrBadRequest
+  , serverResponseCodec
   )
 import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Codec (class HasJson)
@@ -39,6 +41,9 @@ import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import Type.Proxy (Proxy(Proxy))
 
 type PlaceBidResponse = ServerResponse PlaceBidSuccess PlaceBidError
+
+placeBidResponseCodec :: CA.JsonCodec PlaceBidResponse
+placeBidResponseCodec = serverResponseCodec placeBidSuccessCodec placeBidErrorCodec
 
 placeBidHandler :: forall m. AppOpen m => HydraNodeApiWebSocket -> String -> m HTTPure.Response
 placeBidHandler ws = respCreatedOrBadRequest <=< placeBidHandlerImpl ws

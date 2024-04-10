@@ -8,6 +8,7 @@ module HydraAuctionOffchain.Contract
   , module ExportEnterAuction
   , module ExportMintTokens
   , module ExportPlaceBid
+  , module ExportPlaceBidL2
   , module ExportQueryAuctions
   , module ExportQueryStandingBidState
   , module ExportStartBidding
@@ -128,6 +129,22 @@ import HydraAuctionOffchain.Contract.PlaceBid
   , mkPlaceBidContractWithErrors
   , placeBidContract
   ) as ExportPlaceBid
+
+import HydraAuctionOffchain.Contract.PlaceBidL2
+  ( SendBidToDelegateContractError
+      ( SendBidToDelegate_Error_MissingDelegateInfo
+      , SendBidToDelegate_Error_InvalidAuctionTerms
+      , SendBidToDelegate_Error_CurrentTimeBeforeBiddingStart
+      , SendBidToDelegate_Error_CurrentTimeAfterBiddingEnd
+      , SendBidToDelegate_Error_CouldNotBuildAuctionValidators
+      , SendBidToDelegate_Error_InvalidAuctionInfo
+      , SendBidToDelegate_Error_CouldNotGetOwnPubKeyHash
+      , SendBidToDelegate_Error_CouldNotSignBidderMessage
+      , SendBidToDelegate_Error_PlaceBidRequestServiceError
+      )
+  , sendBidContract
+  , mkSendBidContractWithErrors
+  ) as ExportPlaceBidL2
 
 import HydraAuctionOffchain.Contract.QueryAuctions
   ( queryAuctions

@@ -40,6 +40,10 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms
   , auctionTermsCodec
   )
+import HydraAuctionOffchain.Contract.Types.Plutus.DelegateInfo
+  ( DelegateInfo
+  , delegateInfoCodec
+  )
 import HydraAuctionOffchain.Contract.Validators (AuctionValidators)
 import HydraAuctionOffchain.Helpers (errV)
 import Record (merge) as Record
@@ -51,6 +55,7 @@ import Type.Proxy (Proxy(Proxy))
 type AuctionInfoRec (r :: Row Type) =
   ( auctionId :: CurrencySymbol
   , auctionTerms :: AuctionTerms
+  , delegateInfo :: Maybe DelegateInfo
   , auctionEscrowAddr :: Address
   , bidderDepositAddr :: Address
   , feeEscrowAddr :: Address
@@ -70,6 +75,7 @@ instance Show AuctionInfo where
 type AuctionInfoSchema =
   ("auctionId" :~: CurrencySymbol)
     :$: ("auctionTerms" :~: AuctionTerms)
+    :$: ("delegateInfo" :~: Maybe DelegateInfo)
     :$: ("auctionEscrowAddr" :~: Address)
     :$: ("bidderDepositAddr" :~: Address)
     :$: ("feeEscrowAddr" :~: Address)
@@ -96,6 +102,7 @@ auctionInfoCodec =
   wrapIso AuctionInfo $ CA.object "AuctionInfo" $ CAR.record
     { auctionId: currencySymbolCodec
     , auctionTerms: auctionTermsCodec
+    , delegateInfo: CA.maybe delegateInfoCodec
     , auctionEscrowAddr: addressCodec config.network
     , bidderDepositAddr: addressCodec config.network
     , feeEscrowAddr: addressCodec config.network
@@ -121,6 +128,7 @@ instance Show AuctionInfoExtended where
 type AuctionInfoExtendedSchema =
   ("auctionId" :~: CurrencySymbol)
     :$: ("auctionTerms" :~: AuctionTerms)
+    :$: ("delegateInfo" :~: Maybe DelegateInfo)
     :$: ("auctionEscrowAddr" :~: Address)
     :$: ("bidderDepositAddr" :~: Address)
     :$: ("feeEscrowAddr" :~: Address)
@@ -149,6 +157,7 @@ auctionInfoExtendedCodec =
   wrapIso AuctionInfoExtended $ CA.object "AuctionInfoExtended" $ CAR.record
     { auctionId: currencySymbolCodec
     , auctionTerms: auctionTermsCodec
+    , delegateInfo: CA.maybe delegateInfoCodec
     , auctionEscrowAddr: addressCodec config.network
     , bidderDepositAddr: addressCodec config.network
     , feeEscrowAddr: addressCodec config.network

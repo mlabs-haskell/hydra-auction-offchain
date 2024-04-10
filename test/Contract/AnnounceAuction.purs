@@ -61,6 +61,7 @@ announceAuctionFix fixAuctionTerms = do
         auctionTermsInputFixture auctionLotValue biddingStart
     params = wrap
       { auctionTerms
+      , delegateInfo: Nothing
       , additionalAuctionLotOrefs: mempty
       }
   liftedE $ runExceptT $ mkAnnounceAuctionContractWithErrors params

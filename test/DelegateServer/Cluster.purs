@@ -58,7 +58,7 @@ import HydraAuctionOffchain.Contract.Types
   , StandingBidState
   , bidTermsCodec
   )
-import HydraAuctionOffchain.Helpers (fromJustWithErr)
+import HydraAuctionOffchain.Helpers (fromJustWithErr, randomElem)
 import HydraAuctionOffchain.Lib.Json (caEncodeString)
 import Node.Buffer (toString) as Buffer
 import Node.ChildProcess (defaultExecSyncOptions, execSync)
@@ -72,7 +72,6 @@ import Test.Helpers
   , localhost
   , mkdirIfNotExists
   , publicPaymentKeyToFile
-  , randomElem
   )
 import Test.Plutip.Config (plutipConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)

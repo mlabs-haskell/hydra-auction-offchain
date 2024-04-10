@@ -12,6 +12,7 @@ module HydraAuctionOffchain.Contract.Types
   , module ExportPlutusAuctionTerms
   , module ExportPlutusBidderInfo
   , module ExportPlutusBidTerms
+  , module ExportPlutusDelegateInfo
   , module ExportPlutusExtraAssetClass
   , module ExportPlutusRedeemers
   , module ExportPlutusStandingBidState
@@ -122,6 +123,12 @@ import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
   , sellerPayout
   , sellerSignatureMessage
   ) as ExportPlutusBidTerms
+
+import HydraAuctionOffchain.Contract.Types.Plutus.DelegateInfo
+  ( DelegateInfo(DelegateInfo)
+  , delegateInfoCodec
+  , randomHttpServer
+  ) as ExportPlutusDelegateInfo
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass
   ( AssetClass(AssetClass)

@@ -144,6 +144,11 @@ export const placeBid = async (
   params: PlaceBidContractParams
 ): Promise<ContractOutput<TransactionHash>> => Purs.placeBid(walletApp)(params)();
 
+export const placeBidL2 = async (
+  walletApp: WalletApp,
+  params: PlaceBidContractParams
+): Promise<ContractOutput<any>> => Purs.placeBidL2(walletApp)(params)();
+
 /**
  * Claim the auction lot if the bid placed by the bidder wins, distribute the
  * auction fees to the delegates.

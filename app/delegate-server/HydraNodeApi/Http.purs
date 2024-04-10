@@ -20,11 +20,11 @@ import Data.Maybe (Maybe(Just))
 import Data.Newtype (wrap)
 import DelegateServer.HydraNodeApi.Types.Commit (CommitUtxoMap)
 import DelegateServer.HydraNodeApi.Types.DraftCommitTx (DraftCommitTx, draftCommitTxCodec)
-import DelegateServer.Types.ServiceError
-  ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
-  )
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraAuctionOffchain.Service.Common
+  ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
+  )
 
 commit :: ServerConfig -> CommitUtxoMap -> Aff (Either ServiceError DraftCommitTx)
 commit serverConfig utxos = do

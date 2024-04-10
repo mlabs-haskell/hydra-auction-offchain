@@ -1,6 +1,7 @@
 module DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   , respCreatedOrBadRequest
+  , serverResponseCodec
   ) where
 
 import Prelude
@@ -29,6 +30,9 @@ derive instance (Eq success, Eq err) => Eq (ServerResponse success err)
 instance (Show success, Show err) => Show (ServerResponse success err) where
   show = genericShow
 
+instance (HasJson success, HasJson err) => HasJson (ServerResponse success err) where
+  jsonCodec = const (serverResponseCodec (jsonCodec Proxy) (jsonCodec Proxy))
+
 serverResponseCodec
   :: forall success err
    . CA.JsonCodec success
@@ -56,8 +60,7 @@ serverResponseCodec successCodec errCodec =
 respCreatedOrBadRequest
   :: forall m success err
    . MonadAff m
-  => HasJson success
-  => HasJson err
+  => HasJson (ServerResponse success err)
   => ServerResponse success err
   -> m HTTPure.Response
 respCreatedOrBadRequest resp =
@@ -68,7 +71,4 @@ respCreatedOrBadRequest resp =
       HTTPure.badRequest respBody
   where
   respBody :: String
-  respBody =
-    stringify $ CA.encode
-      (serverResponseCodec (jsonCodec Proxy) (jsonCodec Proxy))
-      resp
+  respBody = stringify $ CA.encode (jsonCodec Proxy) resp
