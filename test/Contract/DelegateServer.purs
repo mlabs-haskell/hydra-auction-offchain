@@ -158,7 +158,7 @@ shortBiddingPeriod :: AuctionTermsMutator
 shortBiddingPeriod auctionTerms =
   auctionTerms
     { biddingEnd =
-        auctionTerms.biddingStart + mkPosixTimeUnsafe (Seconds 20.0)
+        auctionTerms.biddingStart + mkPosixTimeUnsafe (Seconds 30.0)
     }
 
 openHead :: TestAppHandle -> { autoInit :: Boolean } -> Contract Unit
