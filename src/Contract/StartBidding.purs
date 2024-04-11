@@ -229,36 +229,28 @@ instance Show StartBiddingContractError where
   show = genericShow
 
 instance ToContractError StartBiddingContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "StartBidding"
+  errorMessage = case _ of
     StartBidding_Error_InvalidAuctionTerms errors ->
-      { errorCode: "StartBidding01"
-      , message: "Invalid auction terms, errors: " <> show errors <> "."
-      }
+      "Invalid auction terms, errors: " <> show errors <> "."
+
     StartBidding_Error_CouldNotGetOwnAddress ->
-      { errorCode: "StartBidding02"
-      , message: "Could not get own address."
-      }
+      "Could not get own address."
+
     StartBidding_Error_ContractNotInitiatedBySeller ->
-      { errorCode: "StartBidding03"
-      , message: "Contract must be initiated by the seller."
-      }
+      "Contract must be initiated by the seller."
+
     StartBidding_Error_CurrentTimeBeforeBiddingStart ->
-      { errorCode: "StartBidding04"
-      , message: "Tx cannot be submitted before bidding start time."
-      }
+      "Tx cannot be submitted before bidding start time."
+
     StartBidding_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "StartBidding05"
-      , message: "Tx cannot be submitted after bidding end time."
-      }
+      "Tx cannot be submitted after bidding end time."
+
     StartBidding_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "StartBidding06"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
+
     StartBidding_Error_InvalidAuctionInfo errors ->
-      { errorCode: "StartBidding07"
-      , message: "Invalid auction info, errors: " <> show errors <> "."
-      }
+      "Invalid auction info, errors: " <> show errors <> "."
+
     StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo ->
-      { errorCode: "StartBidding08"
-      , message: "Could not find current auction escrow utxo."
-      }
+      "Could not find current auction escrow utxo."

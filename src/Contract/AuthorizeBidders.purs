@@ -135,19 +135,15 @@ instance Show AuthBiddersContractError where
   show = genericShow
 
 instance ToContractError AuthBiddersContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "AuthorizeBidders"
+  errorMessage = case _ of
     AuthBidders_Error_NoBiddersToAuthorize ->
-      { errorCode: "AuthorizeBidders01"
-      , message: "There must be at least one bidder to authorize."
-      }
+      "There must be at least one bidder to authorize."
+
     AuthBidders_Error_CouldNotGetOwnPubKeyHash ->
-      { errorCode: "AuthorizeBidders02"
-      , message: "Could not get own public key hash."
-      }
+      "Could not get own public key hash."
+
     AuthBidders_Error_CouldNotSignSellerMessage bidderVk err ->
-      { errorCode: "AuthorizeBidders03"
-      , message:
-          "Could not generate signature for bidder with " <> show bidderVk <> ", error: "
-            <> show err
-            <> "."
-      }
+      "Could not generate signature for bidder with " <> show bidderVk <> ", error: "
+        <> show err
+        <> "."

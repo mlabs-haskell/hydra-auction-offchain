@@ -255,31 +255,25 @@ instance Show PlaceBidL2ContractError where
   show = genericShow
 
 instance ToContractError PlaceBidL2ContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "PlaceBidL2_"
+  errorMessage = case _ of
     PlaceBidL2_Error_CurrentTimeBeforeBiddingStart ->
-      { errorCode: "PlaceBidL201"
-      , message: "Tx cannot be submitted before bidding start time."
-      }
+      "Tx cannot be submitted before bidding start time."
+
     PlaceBidL2_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "PlaceBidL202"
-      , message: "Tx cannot be submitted after bidding end time."
-      }
+      "Tx cannot be submitted after bidding end time."
+
     PlaceBidL2_Error_CouldNotFindCollateralUtxo ->
-      { errorCode: "PlaceBidL203"
-      , message: "Could not find collateral utxo."
-      }
+      "Could not find collateral utxo."
+
     PlaceBidL2_Error_CouldNotFindCurrentStandingBidUtxo ->
-      { errorCode: "PlaceBidL204"
-      , message: "Could not find current standing bid utxo."
-      }
+      "Could not find current standing bid utxo."
+
     PlaceBidL2_Error_InvalidBidStateTransition ->
-      { errorCode: "PlaceBidL205"
-      , message: "Invalid bid state transition."
-      }
+      "Invalid bid state transition."
+
     PlaceBidL2_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "PlaceBidL206"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
 
 placeBidL2ContractErrorCodec :: CA.JsonCodec PlaceBidL2ContractError
 placeBidL2ContractErrorCodec =

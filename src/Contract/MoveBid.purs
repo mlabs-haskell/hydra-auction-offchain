@@ -150,24 +150,19 @@ instance Show MoveBidContractError where
   show = genericShow
 
 instance ToContractError MoveBidContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "MoveBid"
+  errorMessage = case _ of
     MoveBid_Error_InvalidAuctionTerms validationErrors ->
-      { errorCode: "MoveBid01"
-      , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
-      }
+      "Invalid auction terms, errors: " <> show validationErrors <> "."
+
     MoveBid_Error_InvalidDelegateInfo validationErrors ->
-      { errorCode: "MoveBid02"
-      , message: "Invalid delegate info, errors: " <> show validationErrors <> "."
-      }
+      "Invalid delegate info, errors: " <> show validationErrors <> "."
+
     MoveBid_Error_CurrentTimeBeforeBiddingStart ->
-      { errorCode: "MoveBid03"
-      , message: "Tx cannot be submitted before bidding start time."
-      }
+      "Tx cannot be submitted before bidding start time."
+
     MoveBid_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "MoveBid04"
-      , message: "Tx cannot be submitted after bidding end time."
-      }
+      "Tx cannot be submitted after bidding end time."
+
     MoveBid_Error_MoveBidRequestServiceError err ->
-      { errorCode: "MoveBid05"
-      , message: "MoveBid request failed with error: " <> show err <> "."
-      }
+      "MoveBid request failed with error: " <> show err <> "."

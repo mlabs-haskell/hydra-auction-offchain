@@ -286,52 +286,40 @@ instance Show ClaimAuctionLotBidderContractError where
   show = genericShow
 
 instance ToContractError ClaimAuctionLotBidderContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "ClaimAuctionLotBidder"
+  errorMessage = case _ of
     ClaimAuctionLotBidder_Error_InvalidAuctionTerms errors ->
-      { errorCode: "ClaimAuctionLotBidder01"
-      , message: "Invalid auction terms, errors: " <> show errors <> "."
-      }
+      "Invalid auction terms, errors: " <> show errors <> "."
+
     ClaimAuctionLotBidder_Error_CurrentTimeBeforeBiddingEnd ->
-      { errorCode: "ClaimAuctionLotBidder02"
-      , message: "Tx cannot be submitted before bidding end time."
-      }
+      "Tx cannot be submitted before bidding end time."
+
     ClaimAuctionLotBidder_Error_CurrentTimeAfterPurchaseDeadline ->
-      { errorCode: "ClaimAuctionLotBidder03"
-      , message: "Tx cannot be submitted after purchase deadline."
-      }
+      "Tx cannot be submitted after purchase deadline."
+
     ClaimAuctionLotBidder_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "ClaimAuctionLotBidder04"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
+
     ClaimAuctionLotBidder_Error_InvalidAuctionInfo errors ->
-      { errorCode: "ClaimAuctionLotBidder05"
-      , message: "Invalid auction info, errors: " <> show errors <> "."
-      }
+      "Invalid auction info, errors: " <> show errors <> "."
+
     ClaimAuctionLotBidder_Error_MissingMetadataOref ->
-      { errorCode: "ClaimAuctionLotBidder06"
-      , message: "Auction metadata output reference not provided."
-      }
+      "Auction metadata output reference not provided."
+
     ClaimAuctionLotBidder_Error_CouldNotQueryAuctionMetadataUtxo ->
-      { errorCode: "ClaimAuctionLotBidder07"
-      , message: "Could not query auction metadata utxo."
-      }
+      "Could not query auction metadata utxo."
+
     ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo ->
-      { errorCode: "ClaimAuctionLotBidder08"
-      , message: "Could not find auction escrow utxo."
-      }
+      "Could not find auction escrow utxo."
+
     ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo ->
-      { errorCode: "ClaimAuctionLotBidder09"
-      , message: "Could not find standing bid utxo."
-      }
+      "Could not find standing bid utxo."
+
     ClaimAuctionLotBidder_Error_EmptyStandingBid ->
-      { errorCode: "ClaimAuctionLotBidder10"
-      , message: "Standing bid is empty."
-      }
+      "Standing bid is empty."
+
     ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh ->
-      { errorCode: "ClaimAuctionLotBidder11"
-      , message: "Could not get buyer pkh."
-      }
+      "Could not get buyer pkh."
+
     ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh ->
-      { errorCode: "ClaimAuctionLotBidder12"
-      , message: "Could not get seller pkh."
-      }
+      "Could not get seller pkh."

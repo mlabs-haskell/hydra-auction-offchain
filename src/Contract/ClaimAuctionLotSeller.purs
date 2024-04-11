@@ -260,44 +260,34 @@ instance Show ClaimAuctionLotSellerContractError where
   show = genericShow
 
 instance ToContractError ClaimAuctionLotSellerContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "ClaimAuctionLotSeller"
+  errorMessage = case _ of
     ClaimAuctionLotSeller_Error_InvalidAuctionTerms errors ->
-      { errorCode: "ClaimAuctionLotSeller01"
-      , message: "Invalid auction terms, errors: " <> show errors <> "."
-      }
+      "Invalid auction terms, errors: " <> show errors <> "."
+
     ClaimAuctionLotSeller_Error_CurrentTimeBeforePurchaseDeadline ->
-      { errorCode: "ClaimAuctionLotSeller02"
-      , message: "Tx cannot be submitted before purchase deadline."
-      }
+      "Tx cannot be submitted before purchase deadline."
+
     ClaimAuctionLotSeller_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "ClaimAuctionLotSeller03"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
+
     ClaimAuctionLotSeller_Error_InvalidAuctionInfo errors ->
-      { errorCode: "ClaimAuctionLotSeller04"
-      , message: "Invalid auction info, errors: " <> show errors <> "."
-      }
+      "Invalid auction info, errors: " <> show errors <> "."
+
     ClaimAuctionLotSeller_Error_MissingMetadataOref ->
-      { errorCode: "ClaimAuctionLotSeller05"
-      , message: "Auction metadata output reference not provided."
-      }
+      "Auction metadata output reference not provided."
+
     ClaimAuctionLotSeller_Error_CouldNotQueryAuctionMetadataUtxo ->
-      { errorCode: "ClaimAuctionLotSeller06"
-      , message: "Could not query auction metadata utxo."
-      }
+      "Could not query auction metadata utxo."
+
     ClaimAuctionLotSeller_Error_CouldNotFindAuctionEscrowUtxo ->
-      { errorCode: "ClaimAuctionLotSeller07"
-      , message: "Could not find auction escrow utxo."
-      }
+      "Could not find auction escrow utxo."
+
     ClaimAuctionLotSeller_Error_CouldNotFindStandingBidUtxo ->
-      { errorCode: "ClaimAuctionLotSeller08"
-      , message: "Could not find standing bid utxo."
-      }
+      "Could not find standing bid utxo."
+
     ClaimAuctionLotSeller_Error_CouldNotFindBidderDepositUtxo ->
-      { errorCode: "ClaimAuctionLotSeller09"
-      , message: "Could not find bidder deposit utxo."
-      }
+      "Could not find bidder deposit utxo."
+
     ClaimAuctionLotSeller_Error_CouldNotGetSellerPkh ->
-      { errorCode: "ClaimAuctionLotSeller10"
-      , message: "Could not get seller pkh."
-      }
+      "Could not get seller pkh."

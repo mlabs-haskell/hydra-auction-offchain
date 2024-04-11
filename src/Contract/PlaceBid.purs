@@ -251,48 +251,37 @@ instance Show PlaceBidContractError where
   show = genericShow
 
 instance ToContractError PlaceBidContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "PlaceBid"
+  errorMessage = case _ of
     PlaceBid_Error_InvalidAuctionTerms validationErrors ->
-      { errorCode: "PlaceBid01"
-      , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
-      }
+      "Invalid auction terms, errors: " <> show validationErrors <> "."
+
     PlaceBid_Error_CurrentTimeBeforeBiddingStart ->
-      { errorCode: "PlaceBid02"
-      , message: "Tx cannot be submitted before bidding start time."
-      }
+      "Tx cannot be submitted before bidding start time."
+
     PlaceBid_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "PlaceBid03"
-      , message: "Tx cannot be submitted after bidding end time."
-      }
+      "Tx cannot be submitted after bidding end time."
+
     PlaceBid_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "PlaceBid04"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
+
     PlaceBid_Error_InvalidAuctionInfo errors ->
-      { errorCode: "PlaceBid05"
-      , message: "Invalid auction info, errors: " <> show errors <> "."
-      }
+      "Invalid auction info, errors: " <> show errors <> "."
+
     PlaceBid_Error_CouldNotFindCurrentStandingBidUtxo ->
-      { errorCode: "PlaceBid06"
-      , message: "Could not find current standing bid utxo."
-      }
+      "Could not find current standing bid utxo."
+
     PlaceBid_Error_CouldNotGetOwnPubKeyHash ->
-      { errorCode: "PlaceBid07"
-      , message: "Could not get own public key hash."
-      }
+      "Could not get own public key hash."
+
     PlaceBid_Error_CouldNotSignBidderMessage err ->
-      { errorCode: "PlaceBid08"
-      , message: "Could not sign bidder message, error: " <> show err <> "."
-      }
+      "Could not sign bidder message, error: " <> show err <> "."
+
     PlaceBid_Error_InvalidBidStateTransition ->
-      { errorCode: "PlaceBid09"
-      , message: "Invalid bid state transition."
-      }
+      "Invalid bid state transition."
+
     PlaceBid_Error_MissingMetadataOref ->
-      { errorCode: "PlaceBid10"
-      , message: "Auction metadata output reference not provided."
-      }
+      "Auction metadata output reference not provided."
+
     PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo ->
-      { errorCode: "PlaceBid11"
-      , message: "Could not query auction metadata utxo."
-      }
+      "Could not query auction metadata utxo."

@@ -74,24 +74,19 @@ instance Show QueryAuctionError where
   show = genericShow
 
 instance ToContractError QueryAuctionError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "QueryAuction"
+  errorMessage = case _ of
     QueryAuction_Error_CouldNotQueryAuctionMetadataUtxo ->
-      { errorCode: "QueryAuction01"
-      , message: "Could not query auction metadata utxo."
-      }
+      "Could not query auction metadata utxo."
+
     QueryAuction_Error_CouldNotDecodeAuctionInfoDatum ->
-      { errorCode: "QueryAuction02"
-      , message: "Could not decode AuctionInfo."
-      }
+      "Could not decode AuctionInfo."
+
     QueryAuction_Error_InvalidAuctionTerms errors ->
-      { errorCode: "QueryAuction03"
-      , message: "Invalid auction terms, errors: " <> show errors <> "."
-      }
+      "Invalid auction terms, errors: " <> show errors <> "."
+
     QueryAuction_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "QueryAuction04"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
+
     QueryAuction_Error_InvalidAuctionInfo errors ->
-      { errorCode: "QueryAuction05"
-      , message: "Invalid auction info, errors: " <> show errors <> "."
-      }
+      "Invalid auction info, errors: " <> show errors <> "."

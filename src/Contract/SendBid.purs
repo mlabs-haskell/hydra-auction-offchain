@@ -189,32 +189,25 @@ instance Show SendBidContractError where
   show = genericShow
 
 instance ToContractError SendBidContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "SendBid"
+  errorMessage = case _ of
     SendBid_Error_InvalidAuctionTerms validationErrors ->
-      { errorCode: "SendBid01"
-      , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
-      }
+      "Invalid auction terms, errors: " <> show validationErrors <> "."
+
     SendBid_Error_InvalidDelegateInfo validationErrors ->
-      { errorCode: "SendBid02"
-      , message: "Invalid delegate info, errors: " <> show validationErrors <> "."
-      }
+      "Invalid delegate info, errors: " <> show validationErrors <> "."
+
     SendBid_Error_CurrentTimeBeforeBiddingStart ->
-      { errorCode: "SendBid03"
-      , message: "Tx cannot be submitted before bidding start time."
-      }
+      "Tx cannot be submitted before bidding start time."
+
     SendBid_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "SendBid04"
-      , message: "Tx cannot be submitted after bidding end time."
-      }
+      "Tx cannot be submitted after bidding end time."
+
     SendBid_Error_CouldNotGetOwnPubKeyHash ->
-      { errorCode: "SendBid05"
-      , message: "Could not get own public key hash."
-      }
+      "Could not get own public key hash."
+
     SendBid_Error_CouldNotSignBidderMessage err ->
-      { errorCode: "SendBid06"
-      , message: "Could not sign bidder message, error: " <> show err <> "."
-      }
+      "Could not sign bidder message, error: " <> show err <> "."
+
     SendBid_Error_PlaceBidRequestServiceError err ->
-      { errorCode: "SendBid07"
-      , message: "PlaceBid request failed with error: " <> show err <> "."
-      }
+      "PlaceBid request failed with error: " <> show err <> "."

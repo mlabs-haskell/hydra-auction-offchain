@@ -378,37 +378,28 @@ instance Show AnnounceAuctionContractError where
   show = genericShow
 
 instance ToContractError AnnounceAuctionContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "AnnounceAuction"
+  errorMessage = case _ of
     AnnounceAuction_Error_InvalidAuctionTerms validationErrors ->
-      { errorCode: "AnnounceAuction01"
-      , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
-      }
-    AnnounceAuction_Error_CouldNotGetWalletUtxos ->
-      { errorCode: "AnnounceAuction02"
-      , message: "Could not get wallet utxos."
-      }
-    AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos ->
-      { errorCode: "AnnounceAuction03"
-      , message: "Could not resolve provided action lot output references."
-      }
-    AnnounceAuction_Error_CouldNotCoverAuctionLot ->
-      { errorCode: "AnnounceAuction04"
-      , message: "Could not cover auction lot Value."
-      }
-    AnnounceAuction_Error_EmptyAuctionLotUtxoMap ->
-      { errorCode: "AnnounceAuction05"
-      , message: "Impossible: Auction lot utxo map cannot be empty."
-      }
-    AnnounceAuction_Error_CurrentTimeAfterBiddingStart ->
-      { errorCode: "AnnounceAuction06"
-      , message: "Tx cannot be submitted after bidding start time."
-      }
-    AnnounceAuction_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "AnnounceAuction07"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
-    AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
-      { errorCode: "AnnounceAuction08"
-      , message: "Could not get own public key, error: " <> show err <> "."
-      }
+      "Invalid auction terms, errors: " <> show validationErrors <> "."
 
+    AnnounceAuction_Error_CouldNotGetWalletUtxos ->
+      "Could not get wallet utxos."
+
+    AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos ->
+      "Could not resolve provided action lot output references."
+
+    AnnounceAuction_Error_CouldNotCoverAuctionLot ->
+      "Could not cover auction lot Value."
+
+    AnnounceAuction_Error_EmptyAuctionLotUtxoMap ->
+      "Impossible: Auction lot utxo map cannot be empty."
+
+    AnnounceAuction_Error_CurrentTimeAfterBiddingStart ->
+      "Tx cannot be submitted after bidding start time."
+
+    AnnounceAuction_Error_CouldNotBuildAuctionValidators err ->
+      "Could not build auction validators, error: " <> show err <> "."
+
+    AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
+      "Could not get own public key, error: " <> show err <> "."
