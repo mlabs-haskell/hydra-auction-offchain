@@ -49,6 +49,24 @@ export type PlaceBidContractParams = {
   bidAmount: BigInt;
 };
 
+// MoveBidL2 ---------------------------------------------------------
+
+export type MoveBidL2ContractParams = {
+  auctionCs: CurrencySymbol;
+  auctionTerms: AuctionTerms;
+  delegateInfo: DelegateInfo;
+};
+
+// PlaceBidL2 --------------------------------------------------------
+
+export type PlaceBidL2ContractParams = {
+  auctionCs: CurrencySymbol;
+  auctionTerms: AuctionTerms;
+  delegateInfo: DelegateInfo;
+  sellerSignature: ByteArray;
+  bidAmount: BigInt;
+};
+
 // DiscoverSellerSignature -------------------------------------------
 
 export type DiscoverSellerSigContractParams = {

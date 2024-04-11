@@ -14,7 +14,9 @@ import type {
   CurrencySymbol,
   DiscoverSellerSigContractParams,
   EnterAuctionContractParams,
+  MoveBidL2ContractParams,
   PlaceBidContractParams,
+  PlaceBidL2ContractParams,
   PubKeyHash,
   StartBiddingContractParams,
   StandingBidState,
@@ -65,6 +67,11 @@ export const queryStandingBidState = async (
   auctionInfo: AuctionInfo
 ): Promise<ContractOutput<StandingBidState>> =>
   Purs.queryStandingBidState(walletApp)(auctionInfo)();
+
+export const moveBidL2 = async (
+  walletApp: WalletApp,
+  params: MoveBidL2ContractParams
+): Promise<ContractOutput<any>> => Purs.moveBidL2(walletApp)(params)();
 
 // Auctions (seller) -------------------------------------------------
 
@@ -146,7 +153,7 @@ export const placeBid = async (
 
 export const placeBidL2 = async (
   walletApp: WalletApp,
-  params: PlaceBidContractParams
+  params: PlaceBidL2ContractParams
 ): Promise<ContractOutput<any>> => Purs.placeBidL2(walletApp)(params)();
 
 /**

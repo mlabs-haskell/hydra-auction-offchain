@@ -10,6 +10,7 @@ module DelegateServer.Handlers.MoveBid
       )
   , moveBidHandler
   , moveBidHandlerImpl
+  , moveBidResponseCodec
   ) where
 
 import Prelude
@@ -40,6 +41,7 @@ import DelegateServer.Types.HydraHeadStatus
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   , respCreatedOrBadRequest
+  , serverResponseCodec
   )
 import Effect.Class (liftEffect)
 import HTTPure (Response) as HTTPure
@@ -48,6 +50,9 @@ import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCo
 import Type.Proxy (Proxy(Proxy))
 
 type MoveBidResponse = ServerResponse MoveBidSuccess MoveBidError
+
+moveBidResponseCodec :: CA.JsonCodec MoveBidResponse
+moveBidResponseCodec = serverResponseCodec moveBidSuccessCodec moveBidErrorCodec
 
 moveBidHandler :: forall m. AppInit m => HydraNodeApiWebSocket -> m HTTPure.Response
 moveBidHandler = respCreatedOrBadRequest <=< moveBidHandlerImpl

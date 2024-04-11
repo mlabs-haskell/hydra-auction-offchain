@@ -10,6 +10,7 @@ module HydraAuctionOffchain.Api
   , discoverSellerSignature
   , enterAuction
   , mintTokenUsingAlwaysMints
+  , moveBidL2
   , placeBid
   , placeBidL2
   , queryAuctions
@@ -38,6 +39,7 @@ import HydraAuctionOffchain.Contract
   , discoverSellerSignature
   , enterAuctionContract
   , mintTokenUsingAlwaysMints
+  , moveBidContract
   , placeBidContract
   , queryAuctions
   , queryStandingBidState
@@ -80,6 +82,9 @@ enterAuction = contractGeneric Contract.enterAuctionContract
 
 placeBid :: Json -> Json -> Effect (Promise Json)
 placeBid = contractGeneric Contract.placeBidContract
+
+moveBidL2 :: Json -> Json -> Effect (Promise Json)
+moveBidL2 = contractGeneric Contract.moveBidContract
 
 placeBidL2 :: Json -> Json -> Effect (Promise Json)
 placeBidL2 = contractGeneric Contract.sendBidContract

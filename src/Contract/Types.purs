@@ -126,8 +126,10 @@ import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
 
 import HydraAuctionOffchain.Contract.Types.Plutus.DelegateInfo
   ( DelegateInfo(DelegateInfo)
+  , DelegateInfoValidationError(DelegateInfoAuctionTermsMismatch)
   , delegateInfoCodec
   , randomHttpServer
+  , validateDelegateInfo
   ) as ExportPlutusDelegateInfo
 
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.AssetClass
