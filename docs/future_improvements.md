@@ -8,7 +8,9 @@ The chief difficulty with running open auctions is ensuring the bidder deposit i
 
 In private auctions we can easily bypass this problem by offloading the responsibility to the seller, who is both incentivized to ensure the deposit is sufficient, and a trusted party in regards to the auction.
 
-Public auctions must solve this same problem without the involvement of the seller after the initial announcing of the auction. In order to do this, we will rely on the other class of trusted parties in the auction protocol - the hydra delegates.
+Public auctions must solve this same problem without the involvement of the seller after the initial announcing of the auction. In order to do this, we will rely on the other class of trusted parties in the auction protocol - the Hydra delegates.
+
+This means no more reliance on seller signatures, and no need of a method for sending those signatures to prospective bidders (such as the Seller Oracle we use in private auctions).
 
 ## Solution
 
@@ -39,15 +41,18 @@ To allow for public auctions instead of private auctions, the standing bid valid
 
 ### L2
 
-On L2, the hydra delegates are expected to maintain a list of valid deposits in the form of a list of `Address`es which can be similarly referenced:
+On L2, the Hydra delegates are expected to maintain a list of valid deposits in the form of a list of `Address`es which can be similarly referenced:
 - When the auction is first moved to L2, the list is created with all sufficient & valid deposits currently placed at the auction's bidder deposit validator.
-- Whenever a new participant that is not currently in that list attempts to place a bid on L2 the delegate through which that bid is being placed should also update the list of valid deposits to include all new deposits that have been placed since the last update.
+- Whenever a new participant that is not currently in that list attempts to place a bid on L2 the delegate through which that bid is being placed should first initiate an update to the list of valid deposits to include all new deposits that have been placed since the last update.
 
 To place a bid on L2, the private standing bid validator requires the inclusion of a reference to the list of `Address`es showing that the bidder is included in the list.
 
 ### Notes
 
-The L2 bidding system can technically be used in L1 as well, however there is no need to require bidders to rely on the delegates on L1 when they can easily prove the legitimacy of their deposit on their own.
+Private auctions cannot be run securely with a standing bid validator that includes the public auction endpoints. This script must be compiled separately for public & private auctions. 
+However, a public auction could be run with the private bid endpoint still enabled, which would allow the seller to admit trusted parties without a deposit.
+
+The L2 bidding system can technically be used in L1 as well, but there is no need to require bidders to rely on the delegates on L1 when they can easily prove the legitimacy of their deposit on their own.
 
 In the future, should deposit withdrawal be allowed, this system will need to be updated with more regularity.
 
@@ -69,7 +74,7 @@ OR which (for L2 bidding)
 ### `UpdateRegistry` (new)
 
 - Must output a list of addresses to the standing bid validator
-- Must include the signature of 1 or more delegates
+- Must include the signature of all delegates in the delegate group
 
 # Fully-Backed Bids
 
