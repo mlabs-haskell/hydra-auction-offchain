@@ -38,7 +38,7 @@ stateDiagram-v2
   BiddingOnL1   -->   Purchase:      [P3]
   BiddingOnL2   -->   BiddingOnL1:   FanoutStandingBid [P2]
   BiddingOnL2   -->   Purchase:      FanoutStandingBid [P3]
-  Purchase      -->   [*]:           Conclude [P4]
+  Purchase      -->   [*]:           Resolve [P4]
 ```
 
 There are two changed state transitions:
