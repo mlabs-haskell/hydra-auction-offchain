@@ -2,8 +2,8 @@
 
 This document presents the design and specification for two additional features
 we are considering to add to Hydra-based auctions in the future:
-* Open Auctions;
-* Full-Backed Bids.
+* Open Auctions
+* Full-Backed Bids
 
 ## Open Auctions
 
@@ -51,9 +51,9 @@ data PBidderInfo (s :: S)
 ```
 
 To allow for public auctions instead of private auctions, the standing bid validator must be changed to allow bids to be placed by referencing a datum which: 
-- includes a matching bidder's address;
-- comes with an output that includes a sufficient deposit; 
-- is stored at the correct address.
+- includes a matching bidder's address
+- comes with an output that includes a sufficient deposit
+- is stored at the correct address
 
 #### L2
 
@@ -104,8 +104,8 @@ OR which (for L2 bidding):
 
 #### `UpdateRegistry` (new)
 
-- Must output a list of addresses to the standing bid validator
-- Must include the signature of all delegates in the delegate group
+- Must output a list of addresses to the standing bid validator.
+- Must include the signature of all delegates in the delegate group.
 
 ## Fully-Backed Bids
 
