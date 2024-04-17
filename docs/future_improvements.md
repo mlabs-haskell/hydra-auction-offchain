@@ -1,7 +1,7 @@
 # L2 Auction Additional Features
 
 This document presents the design and specification for two additional features
-we are considering to add in the Hydra-based auctions in the future:
+we are considering to add to Hydra-based auctions in the future:
 * Open Auctions;
 * Full-Backed Bids.
 
