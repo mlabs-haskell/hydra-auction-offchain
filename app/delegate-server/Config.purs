@@ -3,13 +3,17 @@ module DelegateServer.Config
   , AppConfig'(AppConfig)
   , Network(Testnet, Mainnet)
   , Options
-  , execAppConfigParser 
+  , execAppConfigParser
   , optionsParser
   ) where
 
 import Prelude
 
-import Contract.Config (QueryBackendParams(CtlBackendParams, BlockfrostBackendParams), ServerConfig, defaultConfirmTxDelay)
+import Contract.Config
+  ( QueryBackendParams(CtlBackendParams, BlockfrostBackendParams)
+  , ServerConfig
+  , defaultConfirmTxDelay
+  )
 import Contract.Transaction (TransactionInput)
 import Control.Alt ((<|>))
 import Data.Array (fromFoldable) as Array
@@ -31,7 +35,11 @@ import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Lib.Codec (fixTaggedSumCodec)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
-import DelegateServer.Types.QueryBackendParamsSimple (QueryBackendParamsSimple, queryBackendParamsSimpleCodec, toQueryBackendParams)
+import DelegateServer.Types.QueryBackendParamsSimple
+  ( QueryBackendParamsSimple
+  , queryBackendParamsSimpleCodec
+  , toQueryBackendParams
+  )
 import Effect (Effect)
 import Effect.Exception (throw)
 import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
@@ -96,7 +104,7 @@ appConfigCodec =
     , logLevel: logLevelCodec
     }
 
-execAppConfigParser :: Optparse.ParserInfo Options -> Effect AppConfig 
+execAppConfigParser :: Optparse.ParserInfo Options -> Effect AppConfig
 execAppConfigParser parserInfo = do
   opts <- Optparse.execParser parserInfo
   case opts of
