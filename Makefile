@@ -7,7 +7,7 @@ ha-frontend-api := ha-frontend-api
 
 requires-nix-shell:
 	@[ "$(IN_NIX_SHELL)" ] || \
-		( echo "The '$(MAKECMDGOALS)' target must be run from inside a nix shell, run 'nix develop' first" \
+		( echo "The '$(MAKECMDGOALS)' target must be run from inside a nix shell, run 'nix develop' first." \
 				&& false \
 		)
 

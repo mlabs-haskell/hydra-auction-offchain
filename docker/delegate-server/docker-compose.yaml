@@ -1,28 +1,28 @@
 services:
   delegate-server1:
     build:
-      context: ../..
-      dockerfile: docker/delegate-server/Dockerfile
+      context: "../.."
+      dockerfile: "docker/delegate-server/Dockerfile"
     command: "'--config config.json'"
     volumes:
-      - ./config1.json:/app/config.json
-      - ../../keys:/app/keys
-      - ~/preview/state-node-preview/node.socket:/app/node.socket
+      - "./config1.json:/app/config.json"
+      - "../../keys:/app/keys"
+      - "${CARDANO_NODE_SOCKET_PATH}:/app/node.socket"
     ports:
-      - 7000
-      - 7010
-      - 7020
+      - "7000"
+      - "7010:7010"
+      - "7020:7020"
 
   delegate-server2:
     build:
-      context: ../..
-      dockerfile: docker/delegate-server/Dockerfile
+      context: "../.."
+      dockerfile: "docker/delegate-server/Dockerfile"
     command: "'--config config.json'"
     volumes:
-      - ./config2.json:/app/config.json
-      - ../../keys:/app/keys
-      - ~/preview/state-node-preview/node.socket:/app/node.socket
+      - "./config2.json:/app/config.json"
+      - "../../keys:/app/keys"
+      - "${CARDANO_NODE_SOCKET_PATH}:/app/node.socket"
     ports:
-      - 7002
-      - 7011
-      - 7021
+      - "7002"
+      - "7011:7011"
+      - "7021:7021"
