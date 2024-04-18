@@ -17,13 +17,13 @@ import Contract.Config
   , NetworkId(MainnetId, TestnetId)
   , ServerConfig
   , blockfrostPublicMainnetServerConfig
-  , blockfrostPublicPreprodServerConfig
+  , blockfrostPublicPreviewServerConfig
   , defaultConfirmTxDelay
   , defaultTimeParams
-  , disabledSynchronizationParams
   , emptyHooks
   , mkBlockfrostBackendParams
   , mkCtlBackendParams
+  , strictSynchronizationParams
   )
 import Contract.Test.Plutip (PlutipConfig)
 import Control.Error.Util (bool)
@@ -93,7 +93,7 @@ blockfrostServerConfig :: ServerConfig
 blockfrostServerConfig =
   case config.network of
     TestnetId ->
-      blockfrostPublicPreprodServerConfig
+      blockfrostPublicPreviewServerConfig
     MainnetId ->
       blockfrostPublicMainnetServerConfig
 
@@ -120,7 +120,7 @@ mkContractParams walletApp =
     , suppressLogs: false
     , hooks: emptyHooks
     , timeParams: defaultTimeParams
-    , synchronizationParams: disabledSynchronizationParams
+    , synchronizationParams: strictSynchronizationParams
     }
 
 plutipConfig :: PlutipConfig

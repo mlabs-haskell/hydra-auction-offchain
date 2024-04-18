@@ -19,7 +19,7 @@ import Data.Traversable (traverse_)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, getAppEffRunner)
-import DelegateServer.Config (AppConfig(AppConfig))
+import DelegateServer.Config (AppConfig'(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.HydraNodeApi.Types.Message

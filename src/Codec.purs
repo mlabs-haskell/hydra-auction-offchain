@@ -10,9 +10,12 @@ module HydraAuctionOffchain.Codec
   , jsonCodec
   , liftAff1
   , liftAff2
+  , logLevelCodec
   , orefCodec
+  , portCodec
   , posixTimeCodec
   , pubKeyHashCodec
+  , serverConfigCodec
   , sysStartCodec
   , toJs
   , tokenNameCodec
@@ -29,7 +32,7 @@ import Contract.Address
   , addressWithNetworkTagFromBech32
   , addressWithNetworkTagToBech32
   )
-import Contract.Config (NetworkId)
+import Contract.Config (NetworkId, ServerConfig)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Time (POSIXTime(POSIXTime), SystemStart)
 import Contract.Transaction
@@ -67,17 +70,21 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Foldable (foldMap)
 import Data.Formatter.DateTime (formatDateTime, unformatDateTime)
-import Data.Maybe (Maybe)
+import Data.Log.Level (LogLevel(Trace, Debug, Info, Warn, Error))
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Profunctor (dimap, wrapIso)
 import Data.Tuple.Nested ((/\))
-import Data.UInt (fromString, toString) as UInt
+import Data.UInt (UInt)
+import Data.UInt (fromInt', fromString, toInt, toString) as UInt
 import Effect (Effect)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
 import Type.Proxy (Proxy(Proxy))
+import URI.Port (Port)
+import URI.Port (fromInt, toInt) as Port
 
 addressCodec :: NetworkId -> CA.JsonCodec Address
 addressCodec network =
@@ -103,15 +110,25 @@ bigIntCodecNum = CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber CA
 byteArrayCodec :: CA.JsonCodec ByteArray
 byteArrayCodec = CA.prismaticCodec "ByteArray" hexToByteArray byteArrayToHex CA.string
 
-sysStartCodec :: CA.JsonCodec SystemStart
-sysStartCodec =
-  CA.prismaticCodec "SystemStart"
-    (map wrap <<< hush <<< unformatDateTime formatter)
-    (fromJustWithErr "sysStartCodec" <<< hush <<< formatDateTime formatter <<< unwrap)
-    CA.string
+logLevelCodec :: CA.JsonCodec LogLevel
+logLevelCodec = CA.prismaticCodec "LogLevel" readLogLevel printLogLevel CA.string
   where
-  formatter :: String
-  formatter = "YYYY-MM-DDTHH:mm:ssZ"
+  readLogLevel :: String -> Maybe LogLevel
+  readLogLevel = case _ of
+    "trace" -> Just Trace
+    "debug" -> Just Debug
+    "info" -> Just Info
+    "warn" -> Just Warn
+    "error" -> Just Error
+    _ -> Nothing
+
+  printLogLevel :: LogLevel -> String
+  printLogLevel = case _ of
+    Trace -> "trace"
+    Debug -> "debug"
+    Info -> "info"
+    Warn -> "warn"
+    Error -> "error"
 
 orefCodec :: CA.JsonCodec TransactionInput
 orefCodec =
@@ -119,6 +136,9 @@ orefCodec =
     { transactionId: transactionHashCodec
     , index: CA.prismaticCodec "UInt" UInt.fromString UInt.toString CA.string
     }
+
+portCodec :: CA.JsonCodec Port
+portCodec = CA.prismaticCodec "Port" Port.fromInt Port.toInt CA.int
 
 posixTimeCodec :: CA.JsonCodec POSIXTime
 posixTimeCodec = wrapIso POSIXTime bigIntCodec
@@ -129,12 +149,34 @@ pubKeyHashCodec =
     (unwrap <<< ed25519KeyHashToBytes <<< unwrap)
     byteArrayCodec
 
+serverConfigCodec :: CA.JsonCodec ServerConfig
+serverConfigCodec =
+  CA.object "ServerConfig" $ CAR.record
+    { port: uintCodec
+    , host: CA.string
+    , secure: CA.boolean
+    , path: CA.maybe CA.string
+    }
+
+sysStartCodec :: CA.JsonCodec SystemStart
+sysStartCodec =
+  CA.prismaticCodec "SystemStart"
+    (map wrap <<< hush <<< unformatDateTime formatter)
+    (fromJustWithErr "sysStartCodec" <<< hush <<< formatDateTime formatter <<< unwrap)
+    CA.string
+  where
+  formatter :: String
+  formatter = "YYYY-MM-DDTHH:mm:ssZ"
+
 tokenNameCodec :: CA.JsonCodec TokenName
 tokenNameCodec =
   CA.prismaticCodec "TokenName" mkTokenName getTokenName byteArrayCodec
 
 transactionHashCodec :: CA.JsonCodec TransactionHash
 transactionHashCodec = wrapIso TransactionHash byteArrayCodec
+
+uintCodec :: CA.JsonCodec UInt
+uintCodec = CA.prismaticCodec "UInt" UInt.fromInt' UInt.toInt CA.int
 
 valueCodec :: CA.JsonCodec Value
 valueCodec = dimap fromValue toValue $ CA.array valueEntryCodec

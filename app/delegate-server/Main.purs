@@ -30,7 +30,14 @@ import DelegateServer.App
   , runContract
   , runContractExitOnErr
   )
-import DelegateServer.Config (AppConfig(AppConfig), Network(Testnet, Mainnet), configParser)
+import DelegateServer.Config
+  ( AppConfig
+  , AppConfig'(AppConfig)
+  , Network(Testnet, Mainnet)
+  , Options
+  , execAppConfigParser
+  , optionsParser
+  )
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
@@ -84,7 +91,7 @@ import Type.Proxy (Proxy(Proxy))
 
 main :: Effect Unit
 main = launchAff_ do
-  appConfig <- liftEffect $ Optparse.execParser opts
+  appConfig <- liftEffect $ execAppConfigParser opts
   appHandle <- startDelegateServer appConfig
   liftEffect do
     onUncaughtException \err -> do
@@ -97,9 +104,9 @@ main = launchAff_ do
     log $ withGraphics (foreground Red) $ show exitReason
     appHandle.cleanupHandler
 
-opts :: Optparse.ParserInfo AppConfig
+opts :: Optparse.ParserInfo Options
 opts =
-  Optparse.info (configParser <**> Optparse.helper) $ Optparse.fullDesc
+  Optparse.info (optionsParser <**> Optparse.helper) $ Optparse.fullDesc
     <> Optparse.header "delegate-server"
 
 type AppHandle =
@@ -270,7 +277,7 @@ startHydraNode (AppConfig appConfig) = do
   networkArgs :: Array String
   networkArgs =
     case appConfig.network of
-      Testnet magic ->
+      Testnet { magic } ->
         [ "--testnet-magic"
         , Int.toStringAs Int.decimal magic
         ]
