@@ -1,14 +1,14 @@
 {
-    "auctionMetadataOref": "8aabbefde8c726a60fe982f3e28adc6464d456253c7f30828188c948d95b12d6#0",
-    "serverPort": 7010,
-    "wsServerPort": 7020,
-    "hydraNodeId": "A",
-    "hydraNode": "127.0.0.1:7000",
-    "hydraNodeApi": "127.0.0.1:7001",
+    "auctionMetadataOref": "7c181d8cda75cf964efae7bccec6c8373256b03d1d066641cf0bff553de76c5d#0",
+    "serverPort": 7011,
+    "wsServerPort": 7021,
+    "hydraNodeId": "B",
+    "hydraNode": "0.0.0.0:7002",
+    "hydraNodeApi": "127.0.0.1:7003",
     "hydraPersistDir": "./hydra-persist",
-    "hydraSk": "keys/hydra.sk",
-    "cardanoSk": "keys/cardano.sk",
-    "walletSk": "keys/wallet.sk",
+    "hydraSk": "keys/hydra2.sk",
+    "cardanoSk": "keys/cardano2.sk",
+    "walletSk": "keys/wallet2.sk",
     "nodeSocket": "node.socket",
     "network": {
         "tag": "testnet",
@@ -29,9 +29,9 @@
     "logLevel": "info",
     "peers": [
         { 
-            "hydraNode": "127.0.0.1:7002",
-            "hydraVk": "keys/hydra2.vk",
-            "cardanoVk": "keys/cardano2.vk"
+            "hydraNode": "delegate-server-a:7000",
+            "hydraVk": "keys/hydra.vk",
+            "cardanoVk": "keys/cardano.vk"
         }
     ]
 }

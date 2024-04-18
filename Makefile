@@ -1,9 +1,10 @@
 .PHONY: requires-nix-shell build bundle bundle-docker serve repl \
 			  format check plutip-test plutip-env delegate-server-help \
-        delegate-cluster
+        delegate-cluster delegate-cluster-cleanup
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
 ha-frontend-api := ha-frontend-api
+delegate-cluster-docker-compose := docker/delegate-cluster/docker-compose.yaml
 
 requires-nix-shell:
 	@[ "$(IN_NIX_SHELL)" ] || \
@@ -51,4 +52,7 @@ delegate-server-help: requires-nix-shell
 	spago run --main DelegateServer.Main --exec-args '--help'
 
 delegate-cluster:
-	docker compose -f docker/delegate-server/docker-compose.yaml up --build
+	docker compose -f ${delegate-cluster-docker-compose} up --build
+
+delegate-cluster-cleanup:
+	docker compose -f ${delegate-cluster-docker-compose} rm --force --stop --volumes

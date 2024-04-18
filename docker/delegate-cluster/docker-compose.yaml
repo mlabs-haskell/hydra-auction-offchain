@@ -1,0 +1,49 @@
+services:
+  delegate-server-a:
+    build:
+      context: "../.."
+      dockerfile: "docker/delegate-server/Dockerfile"
+    command: "'--config config.json'"
+    volumes:
+      - type: "bind"
+        source: "./config1.json"
+        target: "/app/config.json"
+      - type: "bind"
+        source: "../../keys"
+        target: "/app/keys"
+      - type: "bind"
+        source: "${CARDANO_NODE_SOCKET_PATH}"
+        target: "/app/node.socket"
+      - type: "volume"
+        source: "hydra-persist-a"
+        target: "/app/hydra-persist"
+    ports:
+      - "7010:7010"
+      - "7020:7020"
+
+  delegate-server-b:
+    build:
+      context: "../.."
+      dockerfile: "docker/delegate-server/Dockerfile"
+    command: "'--config config.json'"
+    volumes:
+      - type: "bind"
+        source: "./config2.json"
+        target: "/app/config.json"
+      - type: "bind"
+        source: "../../keys"
+        target: "/app/keys"
+      - type: "bind"
+        source: "${CARDANO_NODE_SOCKET_PATH}"
+        target: "/app/node.socket"
+      - type: "volume"
+        source: "hydra-persist-b"
+        target: "/app/hydra-persist"
+
+    ports:
+      - "7011:7011"
+      - "7021:7021"
+
+volumes:
+  hydra-persist-a:
+  hydra-persist-b:
