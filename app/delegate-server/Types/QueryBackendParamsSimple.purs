@@ -23,8 +23,8 @@ import Data.Maybe (Maybe)
 import Data.Profunctor (dimap)
 import Data.Time.Duration (Seconds)
 import Data.Variant (inj, match) as Variant
-import DelegateServer.Lib.Codec (fixTaggedSumCodec)
 import HydraAuctionOffchain.Codec (serverConfigCodec)
+import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import Type.Proxy (Proxy(Proxy))
 
 data QueryBackendParamsSimple

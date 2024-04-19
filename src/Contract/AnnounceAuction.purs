@@ -20,6 +20,7 @@ import Contract.Prelude
 
 import Contract.Address (getNetworkId, scriptHashAddress)
 import Contract.Chain (currentTime)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
@@ -63,7 +64,7 @@ import Data.Either (hush)
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (class HasJson, orefCodec, transactionHashCodec)
+import HydraAuctionOffchain.Codec (orefCodec, transactionHashCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
@@ -100,6 +101,7 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionMetadataValidator
   , mkAuctionValidators
   )
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 import JS.BigInt (fromInt) as BigInt
 import Partial.Unsafe (unsafePartial)
@@ -120,8 +122,8 @@ derive instance Eq AnnounceAuctionContractParams
 instance Show AnnounceAuctionContractParams where
   show = genericShow
 
-instance HasJson AnnounceAuctionContractParams where
-  jsonCodec = const announceAuctionContractParamsCodec
+instance HasJson AnnounceAuctionContractParams anyParams where
+  jsonCodec _ = const announceAuctionContractParamsCodec
 
 announceAuctionContractParamsCodec :: CA.JsonCodec AnnounceAuctionContractParams
 announceAuctionContractParamsCodec =
@@ -145,17 +147,17 @@ derive instance Eq AnnounceAuctionContractOutput
 instance Show AnnounceAuctionContractOutput where
   show = genericShow
 
-instance HasJson AnnounceAuctionContractOutput where
-  jsonCodec = const announceAuctionContractOutputCodec
+instance HasJson AnnounceAuctionContractOutput NetworkId where
+  jsonCodec network = const (announceAuctionContractOutputCodec network)
 
 type AnnounceAuctionContractResult = ContractResult' (auctionInfo :: AuctionInfoExtended)
 
-announceAuctionContractOutputCodec :: CA.JsonCodec AnnounceAuctionContractOutput
-announceAuctionContractOutputCodec =
+announceAuctionContractOutputCodec :: NetworkId -> CA.JsonCodec AnnounceAuctionContractOutput
+announceAuctionContractOutputCodec network =
   wrapIso AnnounceAuctionContractOutput $ CA.object "AnnounceAuctionContractOutput" $
     CAR.record
       { txHash: transactionHashCodec
-      , auctionInfo: auctionInfoExtendedCodec
+      , auctionInfo: auctionInfoExtendedCodec network
       }
 
 announceAuctionContract

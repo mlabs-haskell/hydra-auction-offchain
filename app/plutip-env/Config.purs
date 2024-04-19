@@ -6,19 +6,33 @@ module PlutipEnv.Config
 import Prelude
 
 import Data.Foldable (fold)
+import HydraAuctionOffchain.Types.HostPort (HostPort, parseHostPort)
 import Node.Path (FilePath)
 import Options.Applicative as Optparse
 
 type PlutipEnvConfig =
-  { paymentSkeyFilePath :: FilePath
+  { plutipEnvHostPort :: HostPort
+  , demoHostPort :: HostPort
+  , paymentSkeyFilePath :: FilePath
   }
 
 configParser :: Optparse.Parser PlutipEnvConfig
-configParser =
-  { paymentSkeyFilePath: _ } <$>
-    ( Optparse.strOption $ fold
-        [ Optparse.long "payment-skey-file"
-        , Optparse.metavar "FILEPATH"
-        , Optparse.help "File to store the generated KeyWallet payment signing key"
-        ]
-    )
+configParser = ado
+  plutipEnvHostPort <- Optparse.option parseHostPort $ fold
+    [ Optparse.long "plutip-env"
+    , Optparse.metavar "HOSTPORT"
+    ]
+  demoHostPort <- Optparse.option parseHostPort $ fold
+    [ Optparse.long "demo"
+    , Optparse.metavar "HOSTPORT"
+    ]
+  paymentSkeyFilePath <- Optparse.strOption $ fold
+    [ Optparse.long "payment-skey-file"
+    , Optparse.metavar "FILEPATH"
+    , Optparse.help "File to store the generated KeyWallet payment signing key"
+    ]
+  in
+    { plutipEnvHostPort
+    , demoHostPort
+    , paymentSkeyFilePath
+    }

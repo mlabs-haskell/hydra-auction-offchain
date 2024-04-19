@@ -10,6 +10,7 @@ import type {
   BidderInfoCandidate,
   BigInt,
   ByteArray,
+  ContractConfig,
   ContractOutput,
   CurrencySymbol,
   DiscoverSellerSigContractParams,
@@ -23,8 +24,7 @@ import type {
   TokenName,
   TransactionHash,
   TxCbor,
-  VerificationKey,
-  WalletApp
+  VerificationKey
 } from "./types";
 
 // High-level auction workflow pseudocode for L1:
@@ -52,26 +52,26 @@ import type {
 // Auctions (anyone) -------------------------------------------------
 
 export const queryAuctions = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   filters: AuctionFilters = {}
-): Promise<Array<AuctionInfo>> => Purs.queryAuctions(walletApp)(filters)();
+): Promise<Array<AuctionInfo>> => Purs.queryAuctions(config)(filters)();
 
 /* NOTE: not implemented, returns stubbed data */
 export const cleanupAuction = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   auctionInfo: AuctionInfo
-): Promise<ContractOutput<TransactionHash>> => Purs.cleanupAuction(walletApp)(auctionInfo)();
+): Promise<ContractOutput<TransactionHash>> => Purs.cleanupAuction(config)(auctionInfo)();
 
 export const queryStandingBidState = async (
-  walletApp: WalletApp | null,
+  config: ContractConfig,
   auctionInfo: AuctionInfo
 ): Promise<ContractOutput<StandingBidState>> =>
-  Purs.queryStandingBidState(walletApp)(auctionInfo)();
+  Purs.queryStandingBidState(config)(auctionInfo)();
 
 export const moveBidL2 = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: MoveBidL2ContractParams
-): Promise<ContractOutput<any>> => Purs.moveBidL2(walletApp)(params)();
+): Promise<ContractOutput<any>> => Purs.moveBidL2(config)(params)();
 
 // Auctions (seller) -------------------------------------------------
 
@@ -80,19 +80,19 @@ export const moveBidL2 = async (
  * lot into the escrow.
  */
 export const announceAuction = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: AnnounceAuctionContractParams
 ): Promise<ContractOutput<AnnounceAuctionContractOutput>> =>
-  Purs.announceAuction(walletApp)(params)();
+  Purs.announceAuction(config)(params)();
 
 /**
  * Discover bidders who have indicated their interest in participating
  * in the auction by paying a bidder deposit.
  */
 export const discoverBidders = async (
-  walletApp: WalletApp | null,
+  config: ContractConfig,
   auctionInfo: AuctionInfo
-): Promise<Array<BidderInfoCandidate>> => Purs.discoverBidders(walletApp)(auctionInfo)();
+): Promise<Array<BidderInfoCandidate>> => Purs.discoverBidders(config)(auctionInfo)();
 
 /**
  * Authorize bidders to participate in the auction by posting a list of
@@ -100,17 +100,17 @@ export const discoverBidders = async (
  * discover these signatures using `discoverSellerSignatures`.
  */
 export const authorizeBidders = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: AuthorizeBiddersContractParams
-): Promise<ContractOutput<TransactionHash>> => Purs.authorizeBidders(walletApp)(params)();
+): Promise<ContractOutput<TransactionHash>> => Purs.authorizeBidders(config)(params)();
 
 /**
  * Initiate the auction, enabling bidders to place their bids.
  */
 export const startBidding = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: StartBiddingContractParams
-): Promise<ContractOutput<TransactionHash>> => Purs.startBidding(walletApp)(params)();
+): Promise<ContractOutput<TransactionHash>> => Purs.startBidding(config)(params)();
 
 /**
  * Claim the auction lot and deposit if the auction lot has not been purchased
@@ -118,10 +118,10 @@ export const startBidding = async (
  * to the delegates.
  */
 export const claimAuctionLotSeller = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> =>
-  Purs.claimAuctionLotSeller(walletApp)(auctionInfo)();
+  Purs.claimAuctionLotSeller(config)(auctionInfo)();
 
 // Auctions (bidder) -------------------------------------------------
 
@@ -132,39 +132,38 @@ export const claimAuctionLotSeller = async (
  * If `depositAmount` is set to `null`, the minimum deposit will be made.
  */
 export const enterAuction = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: EnterAuctionContractParams
-): Promise<ContractOutput<TransactionHash>> => Purs.enterAuction(walletApp)(params)();
+): Promise<ContractOutput<TransactionHash>> => Purs.enterAuction(config)(params)();
 
 /**
  * Discover own bidder-auction authorization signature required for
  * placing bids on a particular auction.
  */
 export const discoverSellerSignature = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: DiscoverSellerSigContractParams
-): Promise<ContractOutput<ByteArray | null>> =>
-  Purs.discoverSellerSignature(walletApp)(params)();
+): Promise<ContractOutput<ByteArray | null>> => Purs.discoverSellerSignature(config)(params)();
 
 export const placeBid = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: PlaceBidContractParams
-): Promise<ContractOutput<TransactionHash>> => Purs.placeBid(walletApp)(params)();
+): Promise<ContractOutput<TransactionHash>> => Purs.placeBid(config)(params)();
 
 export const placeBidL2 = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   params: PlaceBidL2ContractParams
-): Promise<ContractOutput<any>> => Purs.placeBidL2(walletApp)(params)();
+): Promise<ContractOutput<any>> => Purs.placeBidL2(config)(params)();
 
 /**
  * Claim the auction lot if the bid placed by the bidder wins, distribute the
  * auction fees to the delegates.
  */
 export const claimAuctionLotBidder = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   auctionInfo: AuctionInfo
 ): Promise<ContractOutput<TransactionHash>> =>
-  Purs.claimAuctionLotBidder(walletApp)(auctionInfo)();
+  Purs.claimAuctionLotBidder(config)(auctionInfo)();
 
 /**
  * Reclaim the deposit if someone's else bid wins.
@@ -172,10 +171,9 @@ export const claimAuctionLotBidder = async (
  * NOTE: not implemented, returns stubbed data
  */
 export const claimDepositLoser = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   auctionInfo: AuctionInfo
-): Promise<ContractOutput<TransactionHash>> =>
-  Purs.claimDepositLoser(walletApp)(auctionInfo)();
+): Promise<ContractOutput<TransactionHash>> => Purs.claimDepositLoser(config)(auctionInfo)();
 
 // Auctions (delegate) -----------------------------------------------
 
@@ -188,13 +186,12 @@ export const announceDelegateGroup = async (
 // Helpers -----------------------------------------------------------
 
 export const awaitTxConfirmed = async (
-  walletApp: WalletApp | null,
+  config: ContractConfig,
   txHash: TransactionHash
-): Promise<void> => Purs.awaitTxConfirmed(walletApp)(txHash)();
+): Promise<void> => Purs.awaitTxConfirmed(config)(txHash)();
 
 export const mintTokenUsingAlwaysMints = async (
-  walletApp: WalletApp,
+  config: ContractConfig,
   tokenName: TokenName,
   quantity: BigInt
-): Promise<TransactionHash> =>
-  Purs.mintTokenUsingAlwaysMints(walletApp)(tokenName)(quantity)();
+): Promise<TransactionHash> => Purs.mintTokenUsingAlwaysMints(config)(tokenName)(quantity)();

@@ -7,7 +7,7 @@ import Prelude
 
 import Data.Codec.Argonaut (JsonCodec, object, string) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import HydraAuctionOffchain.Config (HostPort, hostPortCodec)
+import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec)
 import Node.Path (FilePath)
 
 type HydraHeadPeer =

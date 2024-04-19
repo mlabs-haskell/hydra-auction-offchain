@@ -14,7 +14,7 @@ import Effect.Aff (Aff, launchAff_)
 import Effect.Aff.AVar (empty, take) as AVar
 import Effect.Class (liftEffect)
 import Effect.Console (log)
-import HydraAuctionOffchain.Config (plutipConfig)
+import HydraAuctionOffchain.Types.ContractConfig (plutipConfig)
 import JS.BigInt (fromInt) as BigInt
 import Node.Encoding (Encoding(UTF8))
 import Node.Process (stdin)

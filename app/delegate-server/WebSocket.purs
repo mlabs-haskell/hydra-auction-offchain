@@ -25,8 +25,8 @@ import Data.Tuple.Nested (type (/\))
 import Data.UInt (toString) as UInt
 import Effect (Effect)
 import Effect.Class (class MonadEffect)
-import HydraAuctionOffchain.Config (HostPort)
 import HydraAuctionOffchain.Lib.Json (caDecodeString, caEncodeString)
+import HydraAuctionOffchain.Types.HostPort (HostPort)
 
 type WebSocket (m :: Type -> Type) (in_ :: Type) (out :: Type) =
   { onConnect :: m Unit -> Effect Unit

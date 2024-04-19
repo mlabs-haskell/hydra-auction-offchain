@@ -6,6 +6,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
 
 import Prelude
 
+import Contract.Config (NetworkId)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec) as CA
@@ -16,13 +17,13 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
-import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
 import HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
   ( BidTerms
   , bidTermsCodec
   , validateBidTerms
   )
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 
 newtype StandingBidState = StandingBidState (Maybe BidTerms)
 
@@ -35,28 +36,31 @@ derive newtype instance FromData StandingBidState
 instance Show StandingBidState where
   show = genericShow
 
-instance HasJson StandingBidState where
-  jsonCodec = const standingBidStateCodec
+instance HasJson StandingBidState NetworkId where
+  jsonCodec network = const (standingBidStateCodec network)
 
-standingBidStateCodec :: CA.JsonCodec StandingBidState
-standingBidStateCodec = wrapIso StandingBidState $ CA.maybe bidTermsCodec
+standingBidStateCodec :: NetworkId -> CA.JsonCodec StandingBidState
+standingBidStateCodec network =
+  wrapIso StandingBidState $
+    CA.maybe (bidTermsCodec network)
 
 --------------------------------------------------------------------------------
 -- Validation
 --------------------------------------------------------------------------------
 
 validateNewBid
-  :: CurrencySymbol
+  :: NetworkId
+  -> CurrencySymbol
   -> AuctionTerms
   -> StandingBidState
   -> StandingBidState
   -> Effect Boolean
-validateNewBid auctionCs auctionTerms oldBidState newBidState =
+validateNewBid network auctionCs auctionTerms oldBidState newBidState =
   case unwrap newBidState of
     Nothing -> pure false
     Just newTerms ->
       conj (validateCompareBids auctionTerms oldBidState newTerms) <$>
-        validateBidTerms auctionCs auctionTerms newTerms
+        validateBidTerms network auctionCs auctionTerms newTerms
 
 validateCompareBids :: AuctionTerms -> StandingBidState -> BidTerms -> Boolean
 validateCompareBids auctionTerms oldBidState newTerms =

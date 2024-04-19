@@ -8,7 +8,7 @@ import Prelude
 import Contract.Transaction (Transaction)
 import Data.Codec.Argonaut (JsonCodec, object, string) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import DelegateServer.Lib.Codec (txCodec)
+import HydraAuctionOffchain.Codec (txCodec)
 
 type DraftCommitTx =
   { "type" :: String

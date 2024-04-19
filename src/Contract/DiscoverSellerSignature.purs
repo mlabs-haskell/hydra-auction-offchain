@@ -11,6 +11,7 @@ module HydraAuctionOffchain.Contract.DiscoverSellerSignature
 import Contract.Prelude
 
 import Contract.Address (Address, PubKeyHash, scriptHashAddress, toPubKeyHash)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Transaction (TransactionOutput)
@@ -27,8 +28,7 @@ import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (class HasJson, addressCodec, currencySymbolCodec)
-import HydraAuctionOffchain.Config (config)
+import HydraAuctionOffchain.Codec (addressCodec, currencySymbolCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -38,6 +38,7 @@ import HydraAuctionOffchain.Contract.Types
   , mkContractOutput
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 
 newtype DiscoverSellerSigContractParams = DiscoverSellerSigContractParams
@@ -52,15 +53,16 @@ derive instance Eq DiscoverSellerSigContractParams
 instance Show DiscoverSellerSigContractParams where
   show = genericShow
 
-instance HasJson DiscoverSellerSigContractParams where
-  jsonCodec = const discoverSellerSigContractParamsCodec
+instance HasJson DiscoverSellerSigContractParams NetworkId where
+  jsonCodec network = const (discoverSellerSigContractParamsCodec network)
 
-discoverSellerSigContractParamsCodec :: CA.JsonCodec DiscoverSellerSigContractParams
-discoverSellerSigContractParamsCodec =
+discoverSellerSigContractParamsCodec
+  :: NetworkId -> CA.JsonCodec DiscoverSellerSigContractParams
+discoverSellerSigContractParamsCodec network =
   wrapIso DiscoverSellerSigContractParams $ CA.object "DiscoverSellerSigContractParams" $
     CAR.record
       { auctionCs: currencySymbolCodec
-      , sellerAddress: addressCodec config.network
+      , sellerAddress: addressCodec network
       }
 
 discoverSellerSignature

@@ -18,6 +18,7 @@ import Contract.Prelude
 
 import Contract.Address (PaymentPubKeyHash, toPubKeyHash)
 import Contract.Chain (currentTime)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
@@ -44,7 +45,6 @@ import Data.Map (singleton) as Map
 import Data.Maybe (fromJust)
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , standingBidTokenName
@@ -69,6 +69,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import JS.BigInt (fromInt) as BigInt
 import Partial.Unsafe (unsafePartial)
 
@@ -83,14 +84,14 @@ derive instance Eq StartBiddingContractParams
 instance Show StartBiddingContractParams where
   show = genericShow
 
-instance HasJson StartBiddingContractParams where
-  jsonCodec = const startBiddingContractParamsCodec
+instance HasJson StartBiddingContractParams NetworkId where
+  jsonCodec network = const (startBiddingContractParamsCodec network)
 
-startBiddingContractParamsCodec :: CA.JsonCodec StartBiddingContractParams
-startBiddingContractParamsCodec =
+startBiddingContractParamsCodec :: NetworkId -> CA.JsonCodec StartBiddingContractParams
+startBiddingContractParamsCodec network =
   wrapIso StartBiddingContractParams $ CA.object "StartBiddingContractParams" $
     CAR.record
-      { auctionInfo: auctionInfoExtendedCodec
+      { auctionInfo: auctionInfoExtendedCodec network
       }
 
 startBiddingContract

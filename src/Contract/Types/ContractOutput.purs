@@ -14,7 +14,6 @@ import Data.Generic.Rep (class Generic)
 import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.Variant (inj, match) as Variant
-import HydraAuctionOffchain.Codec (class HasJson, jsonCodec)
 import HydraAuctionOffchain.Contract.Types.ContractError
   ( class GenericConstrIndex
   , class ToContractError
@@ -22,6 +21,7 @@ import HydraAuctionOffchain.Contract.Types.ContractError
   , contractErrorCodec
   , toContractError
   )
+import HydraAuctionOffchain.Lib.Codec (class HasJson, jsonCodec)
 import Type.Proxy (Proxy(Proxy))
 
 data ContractOutput (a :: Type)
@@ -34,8 +34,9 @@ derive instance Eq a => Eq (ContractOutput a)
 instance Show a => Show (ContractOutput a) where
   show = genericShow
 
-instance HasJson a => HasJson (ContractOutput a) where
-  jsonCodec = const (contractOutputCodec $ jsonCodec (Proxy :: Proxy a))
+instance HasJson a anyParams => HasJson (ContractOutput a) anyParams where
+  jsonCodec params =
+    const (contractOutputCodec $ jsonCodec params Proxy)
 
 contractOutputCodec :: forall (a :: Type). CA.JsonCodec a -> CA.JsonCodec (ContractOutput a)
 contractOutputCodec contractResultCodec =

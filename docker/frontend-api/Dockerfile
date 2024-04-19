@@ -9,11 +9,6 @@ COPY src src
 COPY scripts scripts
 COPY package.json packages.dhall spago.dhall .
 
-ARG CARDANO_NETWORK
-RUN test -n "$CARDANO_NETWORK"
-ARG BLOCKFROST_API_KEY
-RUN test -n "$BLOCKFROST_API_KEY"
-
 RUN npx handpick --target=bundleDependencies
 RUN npx spago build
 

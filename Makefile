@@ -20,12 +20,7 @@ check:
 
 bundle-docker:
 	docker rm -f ${ha-frontend-api}
-	docker build \
-		--build-arg CARDANO_NETWORK=${CARDANO_NETWORK} \
-		--build-arg BLOCKFROST_API_KEY=${BLOCKFROST_API_KEY} \
-		-t ${ha-frontend-api} \
-		-f docker/frontend-api/Dockerfile \
-		.
+	docker build -t ${ha-frontend-api} -f docker/frontend-api/Dockerfile .
 	docker create --name ${ha-frontend-api} ${ha-frontend-api}
 	docker cp ${ha-frontend-api}:/app/dist .
 	docker rm -f ${ha-frontend-api}
