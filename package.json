@@ -8,7 +8,7 @@
     "dist/**/*"
   ],
   "scripts": {
-    "prepare": "(if-env NPM_ENV=1 && handpick --target=bundleDependencies && spago build && node ./bundle.js && tsc --emitDeclarationOnly && rm -r node_modules) || exit 0"
+    "prepare": "handpick --target=bundleDependencies && spago build && node ./bundle.js && tsc --emitDeclarationOnly && rm -r node_modules"
   },
   "dependencies": {
     "@mlabs-haskell/cardano-message-signing": "1.0.1",
