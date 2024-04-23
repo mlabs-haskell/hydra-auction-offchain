@@ -1,4 +1,4 @@
-module DelegateServer.HydraNodeApi.Types.Message
+module DelegateServer.Types.HydraNodeApiMessage
   ( CommittedMessage
   , GreetingsMessage
   , HeadClosedMessage

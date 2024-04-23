@@ -8,10 +8,10 @@ import Prelude
 import Contract.Address (PubKeyHash)
 import Contract.Config (NetworkId(MainnetId), mkCtlBackendParams)
 import Contract.Hashing (publicKeyHash)
-import Contract.Monad (Contract, ContractEnv, liftContractM, runContractInEnv)
+import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
 import Contract.Test.Plutip (PlutipConfig)
-import Contract.Transaction (TransactionInput)
+import Contract.Transaction (Language(PlutusV2), TransactionInput)
 import Contract.Wallet (PrivatePaymentKey)
 import Contract.Wallet.Key (publicKeyFromPrivateKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
@@ -21,15 +21,19 @@ import Control.Parallel (parTraverse, parTraverse_)
 import Ctl.Internal.Helpers (concatPaths, (<</>>))
 import Ctl.Internal.Plutip.Types (ClusterStartupParameters)
 import Ctl.Internal.Plutip.Utils (tmpdir)
+import Ctl.Internal.Types.Int (fromInt)
 import Ctl.Internal.Wallet.Key (KeyWallet(KeyWallet))
 import Data.Array (concat, deleteAt, replicate)
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty (fromArray, head, toArray) as NEArray
+import Data.Codec.Argonaut (JsonCodec, array, int, object) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
 import Data.Log.Level (LogLevel(Info))
+import Data.Map (singleton) as Map
 import Data.Maybe (Maybe)
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (modify, unwrap, wrap)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -52,6 +56,7 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
 import Effect.Unsafe (unsafePerformEffect)
+import HydraAuctionOffchain.Codec (bigIntCodecNum)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended
   , BidTerms
@@ -59,13 +64,13 @@ import HydraAuctionOffchain.Contract.Types
   , bidTermsCodec
   )
 import HydraAuctionOffchain.Helpers (fromJustWithErr, randomElem)
-import HydraAuctionOffchain.Lib.Json (caEncodeString)
+import HydraAuctionOffchain.Lib.Json (caDecodeFile, caEncodeString)
+import JS.BigInt (BigInt)
 import Node.Buffer (toString) as Buffer
 import Node.ChildProcess (defaultExecSyncOptions, execSync)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (rm') as FSSync
 import Node.Path (FilePath)
-import Test.DelegateServer.PlaceBid.Suite (patchContractEnv)
 import Test.Helpers
   ( chunksOf2
   , defDistribution
@@ -324,3 +329,47 @@ publishHydraScripts nodeSocket cardanoSk =
           <> cardanoSk
     Buffer.toString Encoding.UTF8
       =<< execSync cmd defaultExecSyncOptions
+
+patchContractEnv :: forall (a :: Type). NetworkId -> Contract ContractEnv
+patchContractEnv network = do
+  pparams <- pparamsSlice
+  ask <#> \env -> env
+    { networkId = network
+    , ledgerConstants =
+        env.ledgerConstants
+          { pparams =
+              env.ledgerConstants.pparams # modify _
+                { costModels =
+                    wrap $ Map.singleton PlutusV2
+                      (wrap $ fromInt <$> pparams.costModels."PlutusV2")
+                , maxTxExUnits =
+                    { mem: pparams.maxTxExecutionUnits.memory
+                    , steps: pparams.maxTxExecutionUnits.steps
+                    }
+                }
+          }
+    }
+
+pparamsSlice :: Contract PParamsSlice
+pparamsSlice =
+  liftedE $ liftEffect $
+    caDecodeFile pparamsSliceCodec "protocol-parameters.json"
+
+type PParamsSlice =
+  { maxTxExecutionUnits :: { memory :: BigInt, steps :: BigInt }
+  , costModels :: { "PlutusV2" :: Array Int }
+  }
+
+pparamsSliceCodec :: CA.JsonCodec PParamsSlice
+pparamsSliceCodec =
+  CA.object "PParamsSlice" $ CAR.record
+    { maxTxExecutionUnits:
+        CA.object "PParamsSlice:ExUnits" $ CAR.record
+          { memory: bigIntCodecNum
+          , steps: bigIntCodecNum
+          }
+    , costModels:
+        CA.object "PParamsSlice:CostModels" $ CAR.record
+          { "PlutusV2": CA.array CA.int
+          }
+    }

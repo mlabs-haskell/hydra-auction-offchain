@@ -1,4 +1,4 @@
-module DelegateServer.HydraNodeApi.Types.DraftCommitTx
+module DelegateServer.Types.HydraDraftCommitTx
   ( DraftCommitTx
   , draftCommitTxCodec
   ) where

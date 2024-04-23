@@ -19,8 +19,6 @@ import Test.Contract.PlaceBid (suite) as PlaceBid
 import Test.Contract.StartBidding (suite) as StartBidding
 import Test.Plutip.Config (plutipConfig)
 
--- import Test.DelegateServer.PlaceBid.Suite (suite) as PlaceBidL2
-
 main :: Effect Unit
 main = do
   fiber <- launchAff $ interpret suite
@@ -36,5 +34,3 @@ suite =
       AuthorizeBidders.suite
       PlaceBid.suite
       DelegateServer.suite
-
--- PlaceBidL2.suite

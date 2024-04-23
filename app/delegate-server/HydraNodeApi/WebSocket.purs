@@ -22,7 +22,7 @@ import DelegateServer.App (AppM, getAppEffRunner)
 import DelegateServer.Config (AppConfig'(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
-import DelegateServer.HydraNodeApi.Types.Message
+import DelegateServer.Types.HydraNodeApiMessage
   ( CommittedMessage
   , GreetingsMessage
   , HeadClosedMessage

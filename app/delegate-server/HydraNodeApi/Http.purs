@@ -18,7 +18,7 @@ import Data.Either (Either(Left, Right))
 import Data.HTTP.Method (Method(POST))
 import Data.Maybe (Maybe(Just))
 import Data.Newtype (wrap)
-import DelegateServer.HydraNodeApi.Types.DraftCommitTx (DraftCommitTx, draftCommitTxCodec)
+import DelegateServer.Types.HydraDraftCommitTx (DraftCommitTx, draftCommitTxCodec)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import HydraAuctionOffchain.Service.Common
