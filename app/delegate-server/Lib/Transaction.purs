@@ -1,17 +1,21 @@
 module DelegateServer.Lib.Transaction
   ( reSignTransaction
+  , setAuxDataHash
   , setExUnitsToMax
   , setTxValid
   ) where
 
 import Prelude
 
+import Contract.Hashing (auxiliaryDataHash)
 import Contract.Monad (Contract)
 import Contract.ProtocolParameters (getProtocolParameters)
 import Contract.Transaction
   ( BalancedSignedTransaction
   , Language(PlutusV2)
   , Transaction
+  , _auxiliaryDataHash
+  , _body
   , _isValid
   , _plutusData
   , _vkeys
@@ -26,7 +30,13 @@ import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (filterKeys) as Map
 import Data.Maybe (Maybe(Nothing), fromMaybe)
 import Data.Newtype (modify, unwrap, wrap)
-import Effect.Class (liftEffect)
+import Data.Traversable (traverse)
+import Effect.Class (class MonadEffect, liftEffect)
+
+setAuxDataHash :: forall m. MonadEffect m => Transaction -> m Transaction
+setAuxDataHash tx = do
+  auxDataHash <- liftEffect $ traverse auxiliaryDataHash (unwrap tx).auxiliaryData
+  pure $ tx # _body <<< _auxiliaryDataHash .~ auxDataHash
 
 reSignTransaction :: BalancedSignedTransaction -> Contract BalancedSignedTransaction
 reSignTransaction tx =

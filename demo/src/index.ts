@@ -46,7 +46,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const config: ContractConfig = {
     tag: "network",
     network: "Preview",
-    blockfrostApiKey: "<BLOCKFROST_API_KEY>",
+    blockfrostApiKey: process.env.BLOCKFROST_API_KEY,
     walletApp: "Nami"
   };
   const preBiddingPeriod = config.tag === "plutip" ? 15000 : 90000;

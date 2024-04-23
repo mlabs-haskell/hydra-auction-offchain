@@ -1,11 +1,13 @@
 module DelegateServer.Contract.Commit
   ( CommitCollateralError
-      ( CommitCollateral_CommitRequestFailed
+      ( CommitCollateral_Error_CommitRequestFailed
       )
   , CommitStandingBidError
-      ( CommitBid_CouldNotFindStandingBidUtxo
-      , CommitBid_CouldNotBuildCommit
-      , CommitBid_CommitRequestFailed
+      ( CommitBid_Error_CurrentTimeBeforeBiddingStart
+      , CommitBid_Error_CurrentTimeAfterBiddingEnd
+      , CommitBid_Error_CouldNotFindStandingBidUtxo
+      , CommitBid_Error_CouldNotIndexRedeemers
+      , CommitBid_Error_CommitRequestFailed
       )
   , commitCollateral
   , commitStandingBid
@@ -14,99 +16,76 @@ module DelegateServer.Contract.Commit
 
 import Contract.Prelude
 
-import Contract.Log (logDebug', logInfo')
+import Contract.Chain (currentTime)
+import Contract.Log (logDebug')
+import Contract.Monad (Contract)
+import Contract.PlutusData (Redeemer, toData)
+import Contract.ScriptLookups (ScriptLookups)
+import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
+import Contract.Time (POSIXTimeRange, to)
 import Contract.Transaction
   ( BalancedSignedTransaction(BalancedSignedTransaction)
+  , Transaction
   , TransactionHash
+  , TransactionInput
   , signTransaction
   , submit
   )
+import Contract.TxConstraints (TxConstraints)
+import Contract.TxConstraints (mustSpendPubKeyOutput, mustSpendScriptOutput, mustValidateIn) as Constraints
+import Contract.UnbalancedTx (UnbalancedTx(UnbalancedTx), mkUnbalancedTx)
 import Control.Error.Util ((!?), (??))
-import Control.Monad.Except (ExceptT(ExceptT), withExceptT)
-import Data.Argonaut (encodeJson)
-import Data.Codec.Argonaut (JsonCodec, string) as CA
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
-import Data.Generic.Rep (class Generic)
-import Data.Newtype (unwrap)
-import Data.Profunctor (dimap)
-import Data.Show.Generic (genericShow)
-import Data.Tuple.Nested (type (/\), (/\))
-import Data.Variant (inj, match) as Variant
+import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExceptT)
+import Control.Monad.Trans.Class (lift)
+import Ctl.Internal.BalanceTx.RedeemerIndex
+  ( attachIndexedRedeemers
+  , indexRedeemers
+  , mkRedeemersContext
+  )
+import Data.Argonaut (Json, encodeJson)
+import Data.Codec.Argonaut (JsonCodec) as CA
+import Data.Codec.Argonaut.Generic (nullarySum) as CAG
+import Data.Map (fromFoldable) as Map
 import DelegateServer.App (runContract, runContractLift)
 import DelegateServer.HydraNodeApi.Http (commit)
-import DelegateServer.HydraNodeApi.Types.Commit
-  ( CommitUtxoMap
-  , mkCollateralCommit
-  , mkStandingBidCommit
-  )
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
-import DelegateServer.Lib.Transaction (reSignTransaction)
+import DelegateServer.Lib.Transaction (reSignTransaction, setAuxDataHash)
 import DelegateServer.Lib.Wallet (withWallet)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
+import DelegateServer.Types.HydraCommitRequest (mkFullCommitRequest, mkSimpleCommitRequest)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
-import HydraAuctionOffchain.Contract.Types (StandingBidState)
+import HydraAuctionOffchain.Contract.Types
+  ( AuctionInfoRec
+  , AuctionTerms(AuctionTerms)
+  , StandingBidRedeemer(MoveToHydraRedeemer)
+  , StandingBidState
+  , Utxo
+  )
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
 import HydraAuctionOffchain.Lib.Json (printJson)
 import HydraAuctionOffchain.Service.Common (ServiceError)
+import JS.BigInt (fromInt) as BigInt
 import Type.Proxy (Proxy(Proxy))
 
-data CommitStandingBidError
-  = CommitBid_CouldNotFindStandingBidUtxo
-  | CommitBid_CouldNotBuildCommit
-  | CommitBid_CommitRequestFailed String
+postCommitRequest :: forall m. AppBase m => Json -> ExceptT ServiceError m TransactionHash
+postCommitRequest commitRequest = do
+  { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+  let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
+  draftCommitTx <- ExceptT $ liftAff $ commit serverConfig commitRequest
+  runContractLift do
+    -- FIXME: auxiliary data hash set by hydra-node seems to be
+    -- invalid, so we recompute it here
+    commitTx <- BalancedSignedTransaction <$> setAuxDataHash draftCommitTx.cborHex
+    signedTx <-
+      (withWallet cardanoSk <<< signTransaction)
+        =<< reSignTransaction commitTx
+    txHash <- submit signedTx
+    pure txHash
 
-derive instance Generic CommitStandingBidError _
-derive instance Eq CommitStandingBidError
+----------------------------------------------------------------------
+-- Commit only collateral
 
-instance Show CommitStandingBidError where
-  show = genericShow
-
-commitStandingBidErrorCodec :: CA.JsonCodec CommitStandingBidError
-commitStandingBidErrorCodec =
-  dimap toVariant fromVariant
-    ( CAV.variantMatch
-        { "CouldNotFindStandingBidUtxo": Left unit
-        , "CouldNotBuildCommit": Left unit
-        , "CommitRequestFailed": Right CA.string
-        }
-    )
-  where
-  toVariant = case _ of
-    CommitBid_CouldNotFindStandingBidUtxo ->
-      Variant.inj (Proxy :: _ "CouldNotFindStandingBidUtxo") unit
-    CommitBid_CouldNotBuildCommit ->
-      Variant.inj (Proxy :: _ "CouldNotBuildCommit") unit
-    CommitBid_CommitRequestFailed x ->
-      Variant.inj (Proxy :: _ "CommitRequestFailed") x
-
-  fromVariant = Variant.match
-    { "CouldNotFindStandingBidUtxo": const CommitBid_CouldNotFindStandingBidUtxo
-    , "CouldNotBuildCommit": const CommitBid_CouldNotBuildCommit
-    , "CommitRequestFailed": CommitBid_CommitRequestFailed
-    }
-
-commitStandingBid
-  :: forall m
-   . AppInit m
-  => ExceptT CommitStandingBidError m
-       (StandingBidState /\ TransactionHash)
-commitStandingBid = do
-  auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
-  collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
-  standingBidValidator <-
-    runContractLift $
-      mkStandingBidValidator auctionInfo.auctionId auctionInfo.auctionTerms
-  bidUtxo /\ standingBid <- runContract (queryStandingBidUtxo auctionInfo)
-    !? CommitBid_CouldNotFindStandingBidUtxo
-  bidCommit <- mkStandingBidCommit bidUtxo standingBidValidator
-    ?? CommitBid_CouldNotBuildCommit
-  logDebug' $ "Ready to commit standing bid: " <> printJson (encodeJson bidCommit)
-  txHash <-
-    withExceptT (CommitBid_CommitRequestFailed <<< show)
-      (commitUtxos $ bidCommit <> mkCollateralCommit collateralUtxo)
-  pure $ standingBid /\ txHash
-
-data CommitCollateralError = CommitCollateral_CommitRequestFailed ServiceError
+data CommitCollateralError = CommitCollateral_Error_CommitRequestFailed ServiceError
 
 derive instance Generic CommitCollateralError _
 
@@ -116,19 +95,124 @@ instance Show CommitCollateralError where
 commitCollateral :: forall m. AppInit m => ExceptT CommitCollateralError m TransactionHash
 commitCollateral = do
   collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
-  withExceptT CommitCollateral_CommitRequestFailed
-    (commitUtxos $ mkCollateralCommit collateralUtxo)
+  let
+    utxos = Map.fromFoldable [ collateralUtxo ]
+    commitRequest = encodeJson $ mkSimpleCommitRequest utxos
+  logDebug' $ "Collateral commit request: " <> printJson commitRequest
+  withExceptT CommitCollateral_Error_CommitRequestFailed $
+    postCommitRequest commitRequest
 
-commitUtxos :: forall m. AppBase m => CommitUtxoMap -> ExceptT ServiceError m TransactionHash
-commitUtxos utxos = do
-  { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
-  let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
-  draftCommitTx <- ExceptT $ liftAff $ commit serverConfig utxos
-  runContractLift do
-    let commitTx = BalancedSignedTransaction draftCommitTx.cborHex
-    signedTx <-
-      (withWallet cardanoSk <<< signTransaction)
-        =<< reSignTransaction commitTx
-    txHash <- submit signedTx
-    logInfo' $ "Submitted commit tx: " <> show txHash <> "."
-    pure txHash
+----------------------------------------------------------------------
+-- Commit standing bid and collateral
+
+data CommitStandingBidError
+  = CommitBid_Error_CurrentTimeBeforeBiddingStart
+  | CommitBid_Error_CurrentTimeAfterBiddingEnd
+  | CommitBid_Error_CouldNotFindStandingBidUtxo
+  | CommitBid_Error_CouldNotIndexRedeemers
+  | CommitBid_Error_CommitRequestFailed
+
+derive instance Generic CommitStandingBidError _
+derive instance Eq CommitStandingBidError
+
+instance Show CommitStandingBidError where
+  show = genericShow
+
+commitStandingBidErrorCodec :: CA.JsonCodec CommitStandingBidError
+commitStandingBidErrorCodec =
+  CAG.nullarySum "CommitStandingBidError"
+
+commitStandingBid
+  :: forall m
+   . AppInit m
+  => ExceptT CommitStandingBidError m
+       (StandingBidState /\ TransactionHash)
+commitStandingBid = do
+  auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
+  collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
+  { blueprintTx, standingBid, standingBidUtxo } <-
+    mapExceptT runContract $
+      moveToHydraUnbalancedTx auctionInfo collateralUtxo
+  let utxos = Map.fromFoldable [ standingBidUtxo, collateralUtxo ]
+  commitRequest <- liftEffect $ encodeJson <$> mkFullCommitRequest blueprintTx utxos
+  logDebug' $ "Standing bid commit request: " <> printJson commitRequest
+  txHash <-
+    withExceptT (const CommitBid_Error_CommitRequestFailed) $
+      postCommitRequest commitRequest
+  pure $ standingBid /\ txHash
+
+moveToHydraUnbalancedTx
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
+  -> Utxo
+  -> ExceptT CommitStandingBidError Contract
+       { blueprintTx :: Transaction
+       , standingBid :: StandingBidState
+       , standingBidUtxo :: Utxo
+       }
+moveToHydraUnbalancedTx auctionInfo collateralUtxo = do
+  let
+    auctionCs = auctionInfo.auctionId
+    auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfo.auctionTerms
+
+  -- Check that the current time is within the bidding period:
+  nowTime <- lift currentTime
+  when (nowTime < auctionTermsRec.biddingStart) $
+    throwError CommitBid_Error_CurrentTimeBeforeBiddingStart
+  when (nowTime >= auctionTermsRec.biddingEnd) $
+    throwError CommitBid_Error_CurrentTimeAfterBiddingEnd
+
+  -- Query standing bid utxo:
+  standingBidUtxo /\ standingBid <- queryStandingBidUtxo auctionInfo
+    !? CommitBid_Error_CouldNotFindStandingBidUtxo
+
+  -- Build standing bid validator:
+  -- TODO: pre-build validator or use reference script 
+  standingBidValidator <- lift $ mkStandingBidValidator auctionCs auctionTerms
+
+  let
+    -- StandingBid ---------------------------------------------------
+
+    standingBidOref :: TransactionInput
+    standingBidOref = fst standingBidUtxo
+
+    standingBidRedeemer :: Redeemer
+    standingBidRedeemer = wrap $ toData MoveToHydraRedeemer
+
+    -- Collateral ----------------------------------------------------
+
+    collateralOref :: TransactionInput
+    collateralOref = fst collateralUtxo
+
+    --
+
+    txValidRange :: POSIXTimeRange
+    txValidRange = to $ auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000)
+
+    constraints :: TxConstraints
+    constraints = mconcat
+      [ -- Spend standing bid utxo:
+        Constraints.mustSpendScriptOutput standingBidOref standingBidRedeemer
+
+      -- Spend collateral utxo:
+      , Constraints.mustSpendPubKeyOutput collateralOref
+
+      , -- Set transaction validity interval to bidding period: 
+        Constraints.mustValidateIn txValidRange
+      ]
+
+    lookups :: ScriptLookups
+    lookups = mconcat
+      [ Lookups.unspentOutputs $ Map.fromFoldable [ standingBidUtxo, collateralUtxo ]
+      , Lookups.validator standingBidValidator
+      ]
+
+  UnbalancedTx { transaction, redeemers } <- lift $ mkUnbalancedTx lookups constraints
+  indexedRedeemers <-
+    hush (indexRedeemers (mkRedeemersContext transaction) redeemers)
+      ?? CommitBid_Error_CouldNotIndexRedeemers
+  pure
+    { blueprintTx: attachIndexedRedeemers indexedRedeemers transaction
+    , standingBid
+    , standingBidUtxo
+    }

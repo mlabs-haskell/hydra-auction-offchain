@@ -11,14 +11,13 @@ import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
 import Contract.Config (ServerConfig)
 import Ctl.Internal.Affjax (request) as Affjax
 import Ctl.Internal.ServerConfig (mkHttpUrl)
-import Data.Argonaut (Json, encodeJson)
+import Data.Argonaut (Json)
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (Either(Left, Right))
 import Data.HTTP.Method (Method(POST))
 import Data.Maybe (Maybe(Just))
 import Data.Newtype (wrap)
-import DelegateServer.HydraNodeApi.Types.Commit (CommitUtxoMap)
 import DelegateServer.HydraNodeApi.Types.DraftCommitTx (DraftCommitTx, draftCommitTxCodec)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
@@ -26,11 +25,11 @@ import HydraAuctionOffchain.Service.Common
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
   )
 
-commit :: ServerConfig -> CommitUtxoMap -> Aff (Either ServiceError DraftCommitTx)
-commit serverConfig utxos = do
+commit :: ServerConfig -> Json -> Aff (Either ServiceError DraftCommitTx)
+commit serverConfig commitRequest = do
   let endpoint = mkHttpUrl serverConfig <> "/commit"
   handleResponse draftCommitTxCodec <$>
-    postRequest endpoint (Just $ encodeJson utxos)
+    postRequest endpoint (Just commitRequest)
 
 postRequest :: Affjax.URL -> Maybe Json -> Aff (Either Affjax.Error (Affjax.Response String))
 postRequest endpoint mPayload =
