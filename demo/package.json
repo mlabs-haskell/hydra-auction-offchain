@@ -6,7 +6,7 @@
     "serve": "node bundle.js && http-server . -a 0.0.0.0 -p 8080 -c-1 -P http://localhost:1443 --cors"
   },
   "dependencies": {
-    "hydra-auction-offchain": "git+ssh://git@github.com:mlabs-haskell/hydra-auction-offchain#dshuiski/npm-package"
+    "hydra-auction-offchain": "file:.."
   },
   "devDependencies": {
     "esbuild": "0.18.11",

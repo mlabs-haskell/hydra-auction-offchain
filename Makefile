@@ -18,6 +18,12 @@ format:
 check:
 	@nix build .#checks.x86_64-linux.all
 
+build: requires-nix-shell
+	spago build --purs-args ${purs-args}
+
+bundle: build requires-nix-shell
+	node bundle.js && tsc --emitDeclarationOnly
+
 bundle-docker:
 	docker rm -f ${ha-frontend-api}
 	docker build -t ${ha-frontend-api} -f docker/frontend-api/Dockerfile .
@@ -25,14 +31,8 @@ bundle-docker:
 	docker cp ${ha-frontend-api}:/app/dist .
 	docker rm -f ${ha-frontend-api}
 
-build: requires-nix-shell
-	spago build --purs-args ${purs-args}
-
-bundle: build requires-nix-shell
-	node bundle.js && tsc --emitDeclarationOnly
-
-serve: bundle requires-nix-shell
-	cd demo && npm run serve
+serve:
+	cd demo && npm install --package-lock-only=false && npm run serve
 
 repl: requires-nix-shell
 	spago repl
