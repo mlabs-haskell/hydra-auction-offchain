@@ -19,6 +19,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Contract.Address (Address, scriptHashAddress)
+import Contract.Config (NetworkId)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Scripts (Validator, validatorHash)
@@ -34,8 +35,7 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V)
-import HydraAuctionOffchain.Codec (class HasJson, addressCodec, currencySymbolCodec, orefCodec)
-import HydraAuctionOffchain.Config (config)
+import HydraAuctionOffchain.Codec (addressCodec, currencySymbolCodec, orefCodec)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms
   , auctionTermsCodec
@@ -46,6 +46,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.DelegateInfo
   )
 import HydraAuctionOffchain.Contract.Validators (AuctionValidators)
 import HydraAuctionOffchain.Helpers (errV)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import Record (merge) as Record
 import Type.Proxy (Proxy(Proxy))
 
@@ -94,19 +95,19 @@ instance FromData AuctionInfo where
         wrap <$> fromDataRec auctionInfoSchema pd
   fromData _ = Nothing
 
-instance HasJson AuctionInfo where
-  jsonCodec = const auctionInfoCodec
+instance HasJson AuctionInfo NetworkId where
+  jsonCodec network = const (auctionInfoCodec network)
 
-auctionInfoCodec :: CA.JsonCodec AuctionInfo
-auctionInfoCodec =
+auctionInfoCodec :: NetworkId -> CA.JsonCodec AuctionInfo
+auctionInfoCodec network =
   wrapIso AuctionInfo $ CA.object "AuctionInfo" $ CAR.record
     { auctionId: currencySymbolCodec
-    , auctionTerms: auctionTermsCodec
+    , auctionTerms: auctionTermsCodec network
     , delegateInfo: CA.maybe delegateInfoCodec
-    , auctionEscrowAddr: addressCodec config.network
-    , bidderDepositAddr: addressCodec config.network
-    , feeEscrowAddr: addressCodec config.network
-    , standingBidAddr: addressCodec config.network
+    , auctionEscrowAddr: addressCodec network
+    , bidderDepositAddr: addressCodec network
+    , feeEscrowAddr: addressCodec network
+    , standingBidAddr: addressCodec network
     }
 
 ----------------------------------------------------------------------
@@ -149,19 +150,19 @@ instance FromData AuctionInfoExtended where
         wrap <$> fromDataRec auctionInfoExtendedSchema pd
   fromData _ = Nothing
 
-instance HasJson AuctionInfoExtended where
-  jsonCodec = const auctionInfoExtendedCodec
+instance HasJson AuctionInfoExtended NetworkId where
+  jsonCodec network = const (auctionInfoExtendedCodec network)
 
-auctionInfoExtendedCodec :: CA.JsonCodec AuctionInfoExtended
-auctionInfoExtendedCodec =
+auctionInfoExtendedCodec :: NetworkId -> CA.JsonCodec AuctionInfoExtended
+auctionInfoExtendedCodec network =
   wrapIso AuctionInfoExtended $ CA.object "AuctionInfoExtended" $ CAR.record
     { auctionId: currencySymbolCodec
-    , auctionTerms: auctionTermsCodec
+    , auctionTerms: auctionTermsCodec network
     , delegateInfo: CA.maybe delegateInfoCodec
-    , auctionEscrowAddr: addressCodec config.network
-    , bidderDepositAddr: addressCodec config.network
-    , feeEscrowAddr: addressCodec config.network
-    , standingBidAddr: addressCodec config.network
+    , auctionEscrowAddr: addressCodec network
+    , bidderDepositAddr: addressCodec network
+    , feeEscrowAddr: addressCodec network
+    , standingBidAddr: addressCodec network
     , metadataOref: CA.maybe orefCodec
     }
 

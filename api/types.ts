@@ -132,15 +132,24 @@ export type StandingBidState = BidTerms | null;
 
 // Common ------------------------------------------------------------
 
-export type WalletApp =
-  | "Nami"
-  | "Gero"
-  | "Flint"
-  | "Eternl"
-  | "Lode"
-  | "NuFi"
-  | "Lace"
-  | "Plutip";
+export type Network = "Preview" | "Preprod" | "Mainnet";
+
+export type WalletApp = "Nami" | "Gero" | "Flint" | "Eternl" | "Lode" | "NuFi" | "Lace";
+
+export type ContractConfig = ContractConfigNetwork | ContractConfigPlutipEnv;
+
+export type ContractConfigNetwork = {
+  tag: "network";
+  network: Network;
+  blockfrostApiKey: string;
+  walletApp: WalletApp | null;
+};
+
+export type ContractConfigPlutipEnv = {
+  tag: "plutip";
+  demoHostPort: string;
+  plutipEnvHostPort: string;
+};
 
 export type ContractOutput<T> = ContractOutputResult<T> | ContractOutputError;
 

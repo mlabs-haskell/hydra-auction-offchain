@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Contract.DiscoverBidders
 
 import Contract.Prelude hiding (oneOf)
 
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
@@ -17,13 +18,14 @@ import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec)
+import HydraAuctionOffchain.Codec (bigIntCodec)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended(AuctionInfoExtended)
   , BidderInfo
   , bidderInfoCodec
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import JS.BigInt (BigInt)
 
 newtype BidderInfoCandidate = BidderInfoCandidate
@@ -39,14 +41,14 @@ derive instance Eq BidderInfoCandidate
 instance Show BidderInfoCandidate where
   show = genericShow
 
-instance HasJson BidderInfoCandidate where
-  jsonCodec = const bidderInfoCandidateCodec
+instance HasJson BidderInfoCandidate NetworkId where
+  jsonCodec network = const (bidderInfoCandidateCodec network)
 
-bidderInfoCandidateCodec :: CA.JsonCodec BidderInfoCandidate
-bidderInfoCandidateCodec =
+bidderInfoCandidateCodec :: NetworkId -> CA.JsonCodec BidderInfoCandidate
+bidderInfoCandidateCodec network =
   wrapIso BidderInfoCandidate $ CA.object "BidderInfoCandidate" $
     CAR.record
-      { bidderInfo: bidderInfoCodec
+      { bidderInfo: bidderInfoCodec network
       , depositAmount: bigIntCodec
       , isValid: CA.boolean
       }

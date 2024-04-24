@@ -1,15 +1,10 @@
 module HydraAuctionOffchain.Codec
-  ( class HasJson
-  , addressCodec
+  ( addressCodec
   , addressWithNetworkTagCodec
   , bigIntCodec
   , bigIntCodecNum
   , byteArrayCodec
   , currencySymbolCodec
-  , fromJs
-  , jsonCodec
-  , liftAff1
-  , liftAff2
   , logLevelCodec
   , orefCodec
   , portCodec
@@ -17,9 +12,9 @@ module HydraAuctionOffchain.Codec
   , pubKeyHashCodec
   , serverConfigCodec
   , sysStartCodec
-  , toJs
   , tokenNameCodec
   , transactionHashCodec
+  , txCodec
   , valueCodec
   ) where
 
@@ -36,7 +31,8 @@ import Contract.Config (NetworkId, ServerConfig)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Time (POSIXTime(POSIXTime), SystemStart)
 import Contract.Transaction
-  ( TransactionHash(TransactionHash)
+  ( Transaction
+  , TransactionHash(TransactionHash)
   , TransactionInput(TransactionInput)
   )
 import Contract.Value
@@ -49,17 +45,14 @@ import Contract.Value
   , mkTokenName
   )
 import Contract.Value (flattenValue, singleton) as Value
-import Control.Promise (Promise, fromAff)
+import Ctl.Internal.Deserialization.Transaction (deserializeTransaction)
+import Ctl.Internal.Serialization (convertTransaction, toBytes)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes, ed25519KeyHashToBytes)
-import Data.Argonaut (Json)
 import Data.Codec.Argonaut
   ( JsonCodec
   , array
   , boolean
-  , decode
-  , encode
   , int
-  , json
   , number
   , object
   , prismaticCodec
@@ -77,12 +70,10 @@ import Data.Profunctor (dimap, wrapIso)
 import Data.Tuple.Nested ((/\))
 import Data.UInt (UInt)
 import Data.UInt (fromInt', fromString, toInt, toString) as UInt
-import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Unsafe (unsafePerformEffect)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
-import Type.Proxy (Proxy(Proxy))
 import URI.Port (Port)
 import URI.Port (fromInt, toInt) as Port
 
@@ -175,6 +166,14 @@ tokenNameCodec =
 transactionHashCodec :: CA.JsonCodec TransactionHash
 transactionHashCodec = wrapIso TransactionHash byteArrayCodec
 
+txCodec :: CA.JsonCodec Transaction
+txCodec =
+  CA.prismaticCodec
+    "Transaction"
+    (hush <<< deserializeTransaction <<< wrap)
+    (unwrap <<< toBytes <<< unsafePerformEffect <<< convertTransaction)
+    byteArrayCodec
+
 uintCodec :: CA.JsonCodec UInt
 uintCodec = CA.prismaticCodec "UInt" UInt.fromInt' UInt.toInt CA.int
 
@@ -199,69 +198,3 @@ valueEntryCodec = CA.object "ValueEntry" $ CAR.record
   , tn: tokenNameCodec
   , quantity: bigIntCodec
   }
-
---------------------------------------------------------------------------------
--- HasJson
---------------------------------------------------------------------------------
-
-class HasJson a where
-  jsonCodec :: Proxy a -> CA.JsonCodec a
-
-toJs :: forall (a :: Type). HasJson a => a -> Json
-toJs = CA.encode (jsonCodec (Proxy :: Proxy a))
-
-fromJs :: forall (a :: Type). HasJson a => Json -> a
-fromJs = fromJustWithErr "fromJs" <<< hush <<< CA.decode (jsonCodec (Proxy :: Proxy a))
-
-liftAff1
-  :: forall (a :: Type) (b :: Type)
-   . HasJson a
-  => HasJson b
-  => (a -> Aff b)
-  -> Json
-  -> Effect (Promise Json)
-liftAff1 f a = fromAff $ toJs <$> f (fromJs a)
-
-liftAff2
-  :: forall (a :: Type) (b :: Type) (c :: Type)
-   . HasJson a
-  => HasJson b
-  => HasJson c
-  => (a -> b -> Aff c)
-  -> Json
-  -> Json
-  -> Effect (Promise Json)
-liftAff2 f a b = fromAff $ toJs <$> f (fromJs a) (fromJs b)
-
-instance HasJson Json where
-  jsonCodec = const CA.json
-
-instance HasJson Boolean where
-  jsonCodec = const CA.boolean
-
-instance HasJson String where
-  jsonCodec = const CA.string
-
-instance HasJson Number where
-  jsonCodec = const CA.number
-
-instance HasJson Int where
-  jsonCodec = const CA.int
-
-instance HasJson a => HasJson (Array a) where
-  jsonCodec = const $ CA.array $ jsonCodec (Proxy :: Proxy a)
-
-instance HasJson a => HasJson (Maybe a) where
-  jsonCodec = const $ CA.maybe $ jsonCodec (Proxy :: Proxy a)
-
-instance HasJson BigInt where
-  jsonCodec = const bigIntCodec
-
-instance HasJson ByteArray where
-  jsonCodec = const byteArrayCodec
-
-instance HasJson TransactionHash where
-  jsonCodec = const transactionHashCodec
-
-instance HasJson TokenName where
-  jsonCodec = const tokenNameCodec

@@ -20,16 +20,15 @@ module HydraAuctionOffchain.Api
 
 import Prelude
 
+import Contract.Address (getNetworkId)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract, runContract)
 import Contract.Transaction (TransactionHash)
 import Contract.Transaction (awaitTxConfirmed) as Contract
 import Control.Promise (Promise, fromAff)
 import Data.Argonaut (Json)
-import Data.Maybe (Maybe(Just))
 import Effect (Effect)
 import Effect.Class (liftEffect)
-import HydraAuctionOffchain.Codec (class HasJson, fromJs, toJs)
-import HydraAuctionOffchain.Config (mkContractParams)
 import HydraAuctionOffchain.Contract
   ( announceAuctionContract
   , authorizeBiddersContract
@@ -47,20 +46,24 @@ import HydraAuctionOffchain.Contract
   , startBiddingContract
   ) as Contract
 import HydraAuctionOffchain.Contract.Types (AuctionInfo, ContractOutput(ContractOutputResult))
+import HydraAuctionOffchain.Lib.Codec (class HasJson, fromJs, toJs)
+import HydraAuctionOffchain.Types.ContractConfig (mkContractParams)
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (randomSampleOne)
 
 contractGeneric
   :: forall a b
-   . HasJson a
-  => HasJson b
+   . HasJson a NetworkId
+  => HasJson b NetworkId
   => (a -> Contract b)
   -> Json
   -> Json
   -> Effect (Promise Json)
-contractGeneric contract walletApp params = fromAff do
-  contractParams <- mkContractParams $ fromJs walletApp
-  toJs <$> runContract contractParams (contract $ fromJs params)
+contractGeneric contract contractConfig params = fromAff do
+  contractParams <- mkContractParams $ fromJs unit contractConfig
+  runContract contractParams do
+    network <- getNetworkId
+    toJs network <$> contract (fromJs network params)
 
 ----------------------------------------------------------------------
 -- Auctions
@@ -119,12 +122,12 @@ contractStub _ = do
 -- Helpers
 
 awaitTxConfirmed :: Json -> Json -> Effect (Promise Unit)
-awaitTxConfirmed walletApp txHash = fromAff do
-  contractParams <- mkContractParams $ fromJs walletApp
-  runContract contractParams $ Contract.awaitTxConfirmed $ fromJs txHash
+awaitTxConfirmed contractConfig txHash = fromAff do
+  contractParams <- mkContractParams $ fromJs unit contractConfig
+  runContract contractParams $ Contract.awaitTxConfirmed $ fromJs unit txHash
 
 mintTokenUsingAlwaysMints :: Json -> Json -> Json -> Effect (Promise Json)
-mintTokenUsingAlwaysMints walletApp tokenName quantity = fromAff do
-  contractParams <- mkContractParams $ Just $ fromJs walletApp
-  toJs <$> runContract contractParams
-    (Contract.mintTokenUsingAlwaysMints (fromJs tokenName) (fromJs quantity))
+mintTokenUsingAlwaysMints contractConfig tokenName quantity = fromAff do
+  contractParams <- mkContractParams $ fromJs unit contractConfig
+  toJs unit <$> runContract contractParams
+    (Contract.mintTokenUsingAlwaysMints (fromJs unit tokenName) (fromJs unit quantity))

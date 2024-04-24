@@ -18,7 +18,7 @@ module HydraAuctionOffchain.Wallet
 
 import Prelude
 
-import Contract.Address (Address, PubKeyHash, toPubKeyHash)
+import Contract.Address (Address, PubKeyHash, getNetworkId, toPubKeyHash)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray, CborBytes, byteArrayFromAscii)
 import Contract.Wallet (getWalletAddress, signData)
@@ -34,7 +34,6 @@ import Data.Newtype (unwrap, wrap)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
 import Effect.Class (liftEffect)
-import HydraAuctionOffchain.Config (config)
 import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyBytes, vkeyFromBytes)
 import HydraAuctionOffchain.Helpers ((!*))
 import HydraAuctionOffchain.Lib.Cose (getCoseSign1Signature, mkSigStructure)
@@ -88,7 +87,8 @@ signMessage :: ByteArray -> ExceptT SignMessageError Contract SignMessageResult
 signMessage payload = do
   -- Get wallet address:
   addrPlutus <- getWalletAddress !? CouldNotGetWalletAddressError
-  let addr = fromPlutusAddress config.network addrPlutus
+  network <- lift getNetworkId
+  let addr = fromPlutusAddress network addrPlutus
 
   -- Sign data, extract vkey and signature:
   { key, signature: coseSign1 } <- lift $ signData addr (wrap payload)
@@ -104,7 +104,8 @@ signMessage payload = do
   when (Just pkh /= hashVk vkeyBytes') $ throwError VkPkhMismatchError
 
   -- Verify signature:
-  sigStruct <- liftEffect (mkSigStructure addrPlutus payload) !* CouldNotBuildSigStructError
+  sigStruct <- liftEffect (mkSigStructure network addrPlutus payload)
+    !* CouldNotBuildSigStructError
   success <- liftEffect (verifySignature vkeyBytes' sigStruct signature)
     !* CouldNotVerifySignatureError
   unless success $ throwError InvalidSignatureError

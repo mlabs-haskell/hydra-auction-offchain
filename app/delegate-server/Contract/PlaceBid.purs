@@ -131,7 +131,7 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 
-  networkId <- lift getNetworkId
+  network <- lift getNetworkId
 
   -- Check that the current time is within the bidding period:
   nowTime <- lift currentTime
@@ -150,7 +150,7 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
 
   -- Check bid state transition:
   let newBidState = wrap $ Just bidTerms
-  success <- liftEffect $ validateNewBid auctionCs auctionTerms oldBidState newBidState
+  success <- liftEffect $ validateNewBid network auctionCs auctionTerms oldBidState newBidState
   unless success $ throwError PlaceBidL2_Error_InvalidBidStateTransition
 
   -- Build validators:
@@ -187,7 +187,7 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
     balancerConstraints :: BalanceTxConstraintsBuilder
     balancerConstraints = mconcat
       [ BalancerConstraints.mustUseCoinSelectionStrategy SelectionStrategyMinimal
-      , BalancerConstraints.mustUseUtxosAtAddresses networkId []
+      , BalancerConstraints.mustUseUtxosAtAddresses network []
       , BalancerConstraints.mustUseCollateralUtxos $ Map.fromFoldable [ collateralUtxo ]
       , BalancerConstraints.mustUseAdditionalUtxos spendableUtxos
       ]

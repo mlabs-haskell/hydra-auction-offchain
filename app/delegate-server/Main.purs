@@ -8,6 +8,7 @@ import Prelude
 
 import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
+import Contract.Address (getNetworkId)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Contract.Monad (ContractEnv, stopContractEnv)
 import Data.Foldable (foldMap)
@@ -77,10 +78,10 @@ import Effect.Console (log)
 import Effect.Exception (message)
 import Effect.Timer (TimeoutId)
 import Effect.Timer (clearTimeout) as Timer
-import HydraAuctionOffchain.Config (printHostPort)
 import HydraAuctionOffchain.Contract.Types (auctionInfoExtendedCodec)
 import HydraAuctionOffchain.Helpers (waitSeconds)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
+import HydraAuctionOffchain.Types.HostPort (printHostPort)
 import Node.ChildProcess (ChildProcess, defaultSpawnOptions, kill, spawn, stderr, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal, onUncaughtException)
@@ -180,7 +181,8 @@ setAuction = do
   { auctionMetadataOref } <- unwrap <$> access (Proxy :: _ "config")
   auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
   setAuctionInfo auctionInfo
-  logInfo' $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
+  network <- runContract getNetworkId
+  logInfo' $ "Got valid auction: " <> printJsonUsingCodec (auctionInfoExtendedCodec network)
     auctionInfo
 
 prepareCollateralUtxo :: forall m. AppInit m => m Unit

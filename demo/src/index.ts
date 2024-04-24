@@ -10,18 +10,19 @@ import {
   discoverSellerSignature,
   enterAuction,
   mintTokenUsingAlwaysMints,
-  placeBid,
+  moveBidL2,
+  placeBidL2,
   queryAuctions,
   queryStandingBidState,
   startBidding
 } from "hydra-auction-offchain";
 import type {
   AnnounceAuctionContractParams,
+  ContractConfig,
   ContractOutput,
   POSIXTime,
   TokenName,
-  TransactionHash,
-  WalletApp
+  TransactionHash
 } from "hydra-auction-offchain";
 
 function delay(ms: number) {
@@ -30,120 +31,149 @@ function delay(ms: number) {
 
 async function logConfirmContract<T extends { txHash: TransactionHash }>(
   label: string,
-  walletApp: WalletApp,
+  config: ContractConfig,
   output: ContractOutput<T | TransactionHash>
 ): Promise<void> {
   console.log(label + ":", output);
   if (output.tag !== "result") {
     throw new Error(label + " contract failed.");
   }
-  await awaitTxConfirmed(walletApp, output.value.txHash ?? output.value);
+  await awaitTxConfirmed(config, output.value.txHash ?? output.value);
 }
 
 (async () => {
   await delay(1000); // need some time for cardano object to be injected
-  const walletApp: WalletApp = "Plutip";
-  const preBiddingPeriod = walletApp === "Plutip" ? 15000 : 90000;
-  const biddingPeriod = preBiddingPeriod;
+  const config: ContractConfig = {
+    tag: "network",
+    network: "Preview",
+    blockfrostApiKey: process.env.BLOCKFROST_API_KEY,
+    walletApp: "Nami"
+  };
+  const preBiddingPeriod = config.tag === "plutip" ? 15000 : 90000;
+  const biddingPeriod = 600000; // 10 min
 
   const tokenName: TokenName = "4d6f6e614c697361"; // MonaLisa
-  const mintTxHash = await mintTokenUsingAlwaysMints(walletApp, tokenName, "1");
-  await awaitTxConfirmed(walletApp, mintTxHash);
+  const mintTxHash = await mintTokenUsingAlwaysMints(config, tokenName, "1");
+  await awaitTxConfirmed(config, mintTxHash);
 
   // seller: announceAuction
   const announceAuctionResult = await runAnnounceAuction(
-    walletApp,
+    config,
     tokenName,
     preBiddingPeriod,
     biddingPeriod
   );
-  await logConfirmContract("AnnounceAuction", walletApp, announceAuctionResult);
+  await logConfirmContract("AnnounceAuction", config, announceAuctionResult);
   const auctionInfo = announceAuctionResult.value.auctionInfo;
+  const auctionCs = auctionInfo.auctionId;
+  const auctionTerms = auctionInfo.auctionTerms;
+  const delegateInfo = auctionInfo.delegateInfo;
 
   // seller: queryAuctions
-  const sellerAuctions = await queryAuctions(walletApp, { myRole: "ActorRoleSeller" });
+  const sellerAuctions = await queryAuctions(config, { myRole: "ActorRoleSeller" });
   console.log("Seller auctions:", sellerAuctions);
 
   // bidder: queryAuctions
-  const auctions = await queryAuctions(walletApp);
+  const auctions = await queryAuctions(config);
   console.log("All auctions:", auctions);
 
   // bidder: enterAuction
   const depositAmount = "2800000";
-  const enterAuctionResult = await enterAuction(walletApp, { auctionInfo, depositAmount });
-  await logConfirmContract("EnterAuction", walletApp, enterAuctionResult);
+  const enterAuctionResult = await enterAuction(config, { auctionInfo, depositAmount });
+  await logConfirmContract("EnterAuction", config, enterAuctionResult);
 
   // bidder: queryAuctions
-  const bidderAuctions = await queryAuctions(walletApp, { myRole: "ActorRoleBidder" });
+  const bidderAuctions = await queryAuctions(config, { myRole: "ActorRoleBidder" });
   console.log("Bidder auctions:", bidderAuctions);
 
   // seller: discoverBidders
-  const bidders = await discoverBidders(walletApp, auctionInfo);
+  const bidders = await discoverBidders(config, auctionInfo);
   console.log("Candidate bidders:", bidders);
 
   // seller: authorizeBidders
-  const auctionCs = auctionInfo.auctionId;
   const biddersToAuthorize = bidders.map((bidder) => bidder.bidderInfo.bidderVk);
   const authBiddersParams = { auctionCs, biddersToAuthorize };
-  const authBiddersResult = await authorizeBidders(walletApp, authBiddersParams);
-  await logConfirmContract("AuthorizeBidders", walletApp, authBiddersResult);
+  const authBiddersResult = await authorizeBidders(config, authBiddersParams);
+  await logConfirmContract("AuthorizeBidders", config, authBiddersResult);
 
   // bidder: discoverSellerSignature
   const sellerAddress = auctionInfo.auctionTerms.sellerAddress;
-  const sellerSignature = await discoverSellerSignature(walletApp, {
+  const sellerSignature = await discoverSellerSignature(config, {
     auctionCs,
     sellerAddress
   });
   console.log("Seller signature:", sellerSignature);
 
   // seller: startBidding
-  await delay(preBiddingPeriod + 2000);
-  const startBiddingResult = await startBidding(walletApp, { auctionInfo });
-  await logConfirmContract("StartBidding", walletApp, startBiddingResult);
+  document.getElementById("startBidding")?.addEventListener("click", async (event) => {
+    const startBiddingResult = await startBidding(config, { auctionInfo });
+    await logConfirmContract("StartBidding", config, startBiddingResult);
+  });
 
-  // bidder: placeBid
-  if (sellerSignature.tag === "result") {
+  document.getElementById("moveBidL2")?.addEventListener("click", async (event) => {
+    // anyone: moveBidL2
+    const moveBidParams = { auctionCs, auctionTerms, delegateInfo };
+    const moveBidResult = await moveBidL2(config, moveBidParams);
+    console.log("MoveBid:", moveBidResult);
+  });
+
+  document.getElementById("placeBidL2")?.addEventListener("click", async (event) => {
+    // bidder: placeBidL2
     const placeBidParams = {
-      auctionInfo,
+      auctionCs,
+      auctionTerms,
+      delegateInfo,
       sellerSignature: sellerSignature.value,
-      bidAmount: "10000000"
+      bidAmount: document.getElementById("bidLovelace")?.value
     };
-    const placeBidResult = await placeBid(walletApp, placeBidParams);
-    await logConfirmContract("PlaceBid", walletApp, placeBidResult);
-  }
+    const placeBidResult = await placeBidL2(config, placeBidParams);
+    console.log("PlaceBid:", placeBidResult);
+  });
 
+  document.getElementById("claimAuctionLot")?.addEventListener("click", async (event) => {
+    // bidder: queryStandingBidState
+    const bidState = await queryStandingBidState(config, auctionInfo);
+    console.log("Standing bid:", bidState);
+
+    // bidder: claimAuctionLotBidder
+    const claimAuctionLotBidderResult = await claimAuctionLotBidder(config, auctionInfo);
+    await logConfirmContract("ClaimAuctionLotBidder", config, claimAuctionLotBidderResult);
+  });
+
+  /*
   // bidder: queryStandingBidState
-  const bidState = await queryStandingBidState(walletApp, auctionInfo);
+  const bidState = await queryStandingBidState(config, auctionInfo);
   console.log("Standing bid:", bidState);
 
   // bidder: claimAuctionLotBidder
   await delay(biddingPeriod + 2000);
-  const claimAuctionLotBidderResult = await claimAuctionLotBidder(walletApp, auctionInfo);
-  await logConfirmContract("ClaimAuctionLotBidder", walletApp, claimAuctionLotBidderResult);
+  const claimAuctionLotBidderResult = await claimAuctionLotBidder(config, auctionInfo);
+  await logConfirmContract("ClaimAuctionLotBidder", config, claimAuctionLotBidderResult);
 
   // bidder: claimDepositLoser (stub)
-  const claimDepositLoserResult = await claimDepositLoser(walletApp, auctionInfo);
+  const claimDepositLoserResult = await claimDepositLoser(config, auctionInfo);
   console.log("ClaimDepositLoser:", claimDepositLoserResult);
 
   // seller: claimAuctionLotSeller (stub)
-  const claimAuctionLotSellerResult = await claimAuctionLotSeller(walletApp, auctionInfo);
+  const claimAuctionLotSellerResult = await claimAuctionLotSeller(config, auctionInfo);
   console.log("ClaimAuctionLotSeller:", claimAuctionLotSellerResult);
 
   // anyone: cleanupAuction (stub)
-  const cleanupAuctionResult = await cleanupAuction(walletApp, auctionInfo);
+  const cleanupAuctionResult = await cleanupAuction(config, auctionInfo);
   console.log("CleanupAuction:", cleanupAuctionResult);
+  */
 })();
 
 async function runAnnounceAuction(
-  walletApp: WalletApp,
+  config: ContractConfig,
   tokenName: TokenName,
   preBiddingPeriod: number,
   biddingPeriod: number
 ): Promise<ContractOutput<TransactionHash>> {
   const nowTime = Date.now();
   const biddingStart = nowTime + preBiddingPeriod;
-  const biddingEnd = biddingStart + biddingPeriod;
-  const purchaseDeadline = biddingEnd + 60000;
+  const biddingEnd = biddingStart + biddingPeriod + 3600000;
+  const purchaseDeadline = biddingEnd + 3600000;
   const cleanup = purchaseDeadline + 60000;
   const params: AnnounceAuctionContractParams = {
     auctionTerms: {
@@ -154,17 +184,24 @@ async function runAnnounceAuction(
           quantity: "1"
         }
       ],
-      delegates: ["2bcc4ca387f39d2e792d7d08484c96d0d59b26cbfafc1fa4ffad486c"],
+      delegates: [
+        "ac55de689702d745e77050ce83b77ff9619383bb802e40fb90aa3be4",
+        "e17e5b8c19c89d663c66b3e4943972d7b6dd70a711fade4cf1a6a95a"
+      ],
       biddingStart: biddingStart.toString(),
       biddingEnd: biddingEnd.toString(),
       purchaseDeadline: purchaseDeadline.toString(),
       cleanup: cleanup.toString(),
-      auctionFeePerDelegate: "5000000",
-      startingBid: "6000000",
+      auctionFeePerDelegate: "3000000",
+      startingBid: "8000000",
       minBidIncrement: "1000000",
       minDepositAmount: "3000000"
     },
+    delegateInfo: {
+      httpServers: ["http://127.0.0.1:7010", "http://127.0.0.1:7011"],
+      wsServers: ["ws://127.0.0.1:7020", "ws://127.0.0.1:7021"]
+    },
     additionalAuctionLotOrefs: []
   };
-  return await announceAuction(walletApp, params);
+  return await announceAuction(config, params);
 }

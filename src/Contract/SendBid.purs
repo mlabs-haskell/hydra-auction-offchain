@@ -19,7 +19,9 @@ import Affjax (Error, Response, defaultRequest) as Affjax
 import Affjax.RequestBody (RequestBody(Json)) as Affjax
 import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
 import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
+import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Value (CurrencySymbol)
@@ -35,12 +37,7 @@ import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidResponseCodec)
-import HydraAuctionOffchain.Codec
-  ( class HasJson
-  , bigIntCodec
-  , byteArrayCodec
-  , currencySymbolCodec
-  )
+import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec, currencySymbolCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
@@ -59,6 +56,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   , validateDelegateInfo
   )
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import HydraAuctionOffchain.Service.Common
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
@@ -81,15 +79,15 @@ derive instance Eq SendBidContractParams
 instance Show SendBidContractParams where
   show = genericShow
 
-instance HasJson SendBidContractParams where
-  jsonCodec = const sendBidContractParamsCodec
+instance HasJson SendBidContractParams NetworkId where
+  jsonCodec network = const (sendBidContractParamsCodec network)
 
-sendBidContractParamsCodec :: CA.JsonCodec SendBidContractParams
-sendBidContractParamsCodec =
+sendBidContractParamsCodec :: NetworkId -> CA.JsonCodec SendBidContractParams
+sendBidContractParamsCodec network =
   wrapIso SendBidContractParams $ CA.object "SendBidContractParams" $
     CAR.record
       { auctionCs: currencySymbolCodec
-      , auctionTerms: auctionTermsCodec
+      , auctionTerms: auctionTermsCodec network
       , delegateInfo: delegateInfoCodec
       , sellerSignature: byteArrayCodec
       , bidAmount: bigIntCodec
@@ -141,17 +139,21 @@ mkSendBidContractWithErrors (SendBidContractParams params) = do
       }
 
   delegateHttpServer <- randomHttpServer delegateInfo
-  let sendBidToDelegate' = ExceptT $ liftAff $ sendBidToDelegate delegateHttpServer bidTerms
+  network <- lift getNetworkId
+  let
+    sendBidToDelegate' = ExceptT $ liftAff $ sendBidToDelegate network delegateHttpServer
+      bidTerms
   withExceptT SendBid_Error_PlaceBidRequestServiceError
     sendBidToDelegate'
 
-sendBidToDelegate :: String -> BidTerms -> Aff (Either ServiceError PlaceBidResponse)
-sendBidToDelegate httpServer bidTerms = do
+sendBidToDelegate
+  :: NetworkId -> String -> BidTerms -> Aff (Either ServiceError PlaceBidResponse)
+sendBidToDelegate network httpServer bidTerms = do
   handleResponse <$> Affjax.request
     ( Affjax.defaultRequest
         { method = Left POST
         , url = httpServer <> "/placeBid"
-        , content = Just $ Affjax.Json $ CA.encode bidTermsCodec bidTerms
+        , content = Just $ Affjax.Json $ CA.encode (bidTermsCodec network) bidTerms
         , responseFormat = Affjax.ResponseFormat.string
         }
     )

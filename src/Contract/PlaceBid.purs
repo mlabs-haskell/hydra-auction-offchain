@@ -19,7 +19,9 @@ module HydraAuctionOffchain.Contract.PlaceBid
 
 import Contract.Prelude
 
+import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.Prim.ByteArray (ByteArray)
@@ -56,7 +58,7 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (fromFoldable) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
+import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
@@ -82,6 +84,7 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
@@ -99,14 +102,14 @@ derive instance Eq PlaceBidContractParams
 instance Show PlaceBidContractParams where
   show = genericShow
 
-instance HasJson PlaceBidContractParams where
-  jsonCodec = const placeBidContractParamsCodec
+instance HasJson PlaceBidContractParams NetworkId where
+  jsonCodec network = const (placeBidContractParamsCodec network)
 
-placeBidContractParamsCodec :: CA.JsonCodec PlaceBidContractParams
-placeBidContractParamsCodec =
+placeBidContractParamsCodec :: NetworkId -> CA.JsonCodec PlaceBidContractParams
+placeBidContractParamsCodec network =
   wrapIso PlaceBidContractParams $ CA.object "PlaceBidContractParams" $
     CAR.record
-      { auctionInfo: auctionInfoExtendedCodec
+      { auctionInfo: auctionInfoExtendedCodec network
       , sellerSignature: byteArrayCodec
       , bidAmount: bigIntCodec
       }
@@ -169,7 +172,8 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
       , bidderSignature
       , sellerSignature: params.sellerSignature
       }
-  success <- liftEffect $ validateNewBid auctionCs auctionTerms oldBidState newBidState
+  network <- lift getNetworkId
+  success <- liftEffect $ validateNewBid network auctionCs auctionTerms oldBidState newBidState
   unless success $ throwError PlaceBid_Error_InvalidBidStateTransition
 
   let

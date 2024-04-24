@@ -186,7 +186,7 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
                 \bidTerms ->
                   withRandomAppHandle \appHandle -> do
                     env <- wrap <$> runContract (patchContractEnv MainnetId)
-                    let body = caEncodeString bidTermsCodec bidTerms
+                    let body = caEncodeString (bidTermsCodec MainnetId) bidTerms
                     local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
 
             , getAppExitReason:

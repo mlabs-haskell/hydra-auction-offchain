@@ -3,22 +3,23 @@
 FROM node:18
 WORKDIR /app
 
+COPY package.json package-lock.json .
+RUN npm clean-install --production=false --loglevel=verbose
+RUN npm install purescript@0.15.8
+RUN npm install spago@0.21.0
+
+COPY packages.dhall spago.dhall .
+RUN npx --no-install spago install
+
+COPY scripts scripts
 COPY api api
 COPY app/delegate-server app/delegate-server
 COPY src src
-COPY scripts scripts
-COPY package.json packages.dhall spago.dhall .
 
-ARG CARDANO_NETWORK
-RUN test -n "$CARDANO_NETWORK"
-ARG BLOCKFROST_API_KEY
-RUN test -n "$BLOCKFROST_API_KEY"
-
-RUN npx handpick --target=bundleDependencies
-RUN npx spago build
+RUN npx --no-install spago build
 
 COPY bundle.js .
 RUN node ./bundle.js
 
 COPY tsconfig.json .
-RUN npx tsc --emitDeclarationOnly
+RUN npx --no-install tsc --emitDeclarationOnly

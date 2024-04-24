@@ -12,8 +12,8 @@ import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (class HasJson)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionActor (ActorRole, actorRoleCodec)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 
 newtype AuctionFilters = AuctionFilters
   { myRole :: Maybe ActorRole
@@ -26,8 +26,8 @@ derive instance Eq AuctionFilters
 instance Show AuctionFilters where
   show = genericShow
 
-instance HasJson AuctionFilters where
-  jsonCodec = const auctionFiltersCodec
+instance HasJson AuctionFilters anyParams where
+  jsonCodec _ = const auctionFiltersCodec
 
 auctionFiltersCodec :: CA.JsonCodec AuctionFilters
 auctionFiltersCodec =

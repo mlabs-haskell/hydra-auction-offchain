@@ -17,7 +17,6 @@ import Contract.Config
 import Contract.Transaction (TransactionInput)
 import Control.Alt ((<|>))
 import Data.Array (fromFoldable) as Array
-import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec, array, int, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -33,7 +32,6 @@ import Data.String (null) as String
 import Data.UInt (fromInt) as UInt
 import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
-import DelegateServer.Lib.Codec (fixTaggedSumCodec)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
 import DelegateServer.Types.QueryBackendParamsSimple
   ( QueryBackendParamsSimple
@@ -43,12 +41,14 @@ import DelegateServer.Types.QueryBackendParamsSimple
 import Effect (Effect)
 import Effect.Exception (throw)
 import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
-import HydraAuctionOffchain.Config (HostPort, hostPortCodec, readHostPort)
-import HydraAuctionOffchain.Lib.Json (caDecodeFile, caDecodeString)
+import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
+import HydraAuctionOffchain.Lib.Json (caDecodeFile)
+import HydraAuctionOffchain.Lib.Optparse (jsonReader, parserReader)
+import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec, parseHostPort)
 import Node.Path (FilePath)
 import Options.Applicative as Optparse
 import Options.Applicative.Types (optional) as Optparse
-import Parsing (Parser, runParser)
+import Parsing (Parser)
 import Parsing.String (rest, string)
 import Type.Proxy (Proxy(Proxy))
 import URI.Host (parser, print) as Host
@@ -371,31 +371,14 @@ parseOref =
   Optparse.eitherReader $ \str ->
     note ("Can't parse as TransactionInput: `" <> str <> "`") $ readOref str
 
-parseHostPort :: Optparse.ReadM HostPort
-parseHostPort =
-  Optparse.eitherReader $ \str ->
-    note ("Can't parse as HostPort: `" <> str <> "`") $ readHostPort str
-
-parserReader :: forall a. String -> Parser String a -> Optparse.ReadM a
-parserReader typeName parser =
-  Optparse.eitherReader $ \str ->
-    runParser str parser # lmap \err ->
-      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> show err
-
 parsePort :: Optparse.ReadM Port
 parsePort = parserReader "Port" Port.parser
 
-parseJson :: forall (a :: Type). String -> CA.JsonCodec a -> Optparse.ReadM a
-parseJson typeName codec =
-  Optparse.eitherReader $ \str ->
-    caDecodeString codec str # lmap \err ->
-      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> err
-
 parseHydraHeadPeer :: Optparse.ReadM HydraHeadPeer
-parseHydraHeadPeer = parseJson "HydraHeadPeer" hydraHeadPeerCodec
+parseHydraHeadPeer = jsonReader "HydraHeadPeer" hydraHeadPeerCodec
 
 parseLogLevel :: Optparse.ReadM LogLevel
-parseLogLevel = parseJson "LogLevel" logLevelCodec
+parseLogLevel = jsonReader "LogLevel" logLevelCodec
 
 parseServerConfig :: Optparse.ReadM ServerConfig
 parseServerConfig = parserReader "ServerConfig" httpServerConfigParser
