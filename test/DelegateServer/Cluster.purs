@@ -32,7 +32,7 @@ import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
 import Data.Log.Level (LogLevel(Info))
 import Data.Map (singleton) as Map
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (modify, unwrap, wrap)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
@@ -81,7 +81,7 @@ import Test.Helpers
 import Test.Plutip.Config (plutipConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)
 import Type.Proxy (Proxy(Proxy))
-import URI.Port (unsafeFromInt) as Port
+import URI.Port (toInt, unsafeFromInt) as Port
 
 type TestAppHandle =
   { getActiveAuction :: Contract (Maybe AuctionInfoExtended)
@@ -280,6 +280,12 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
               { hydraNode: ops.mkHydraNode idx'
               , hydraVk: ops.mkHydraVk workdir'
               , cardanoVk: ops.mkCardanoVk workdir'
+              , httpServer:
+                  { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
+                  , host: localhost
+                  , secure: false
+                  , path: Nothing
+                  }
               }
       , nodeSocket: clusterConfig.plutipClusterParams.nodeSocketPath
       , network: Mainnet

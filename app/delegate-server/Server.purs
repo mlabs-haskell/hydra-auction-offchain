@@ -10,6 +10,7 @@ import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppLogger, AppM, AppState, runApp, runAppEff)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
+import DelegateServer.Handlers.SignCommitTx (signCommitTxHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import Effect.Aff.Class (liftAff)
 import HTTPure
@@ -49,6 +50,10 @@ routerCors ws { method: Post, path: [ "moveBid" ] } =
 routerCors ws { body, method: Post, path: [ "placeBid" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   placeBidHandler ws bodyStr
+
+routerCors _ { body, method: Post, path: [ "signCommitTx" ] } = do
+  bodyStr <- liftAff $ HTTPure.toString body
+  signCommitTxHandler bodyStr
 
 routerCors _ _ = HTTPure.notFound
 

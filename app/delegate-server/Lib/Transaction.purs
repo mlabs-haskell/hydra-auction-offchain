@@ -1,8 +1,10 @@
 module DelegateServer.Lib.Transaction
-  ( reSignTransaction
+  ( appendTxSignatures
+  , reSignTransaction
   , setAuxDataHash
   , setExUnitsToMax
   , setTxValid
+  , txSignatures
   ) where
 
 import Prelude
@@ -14,6 +16,7 @@ import Contract.Transaction
   ( BalancedSignedTransaction
   , Language(PlutusV2)
   , Transaction
+  , Vkeywitness
   , _auxiliaryDataHash
   , _body
   , _isValid
@@ -24,7 +27,7 @@ import Contract.Transaction
   )
 import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
 import Ctl.Internal.Transaction (setScriptDataHash)
-import Data.Lens ((^.), (%~), (.~))
+import Data.Lens (view, (%~), (.~), (^.))
 import Data.Lens.Common (simple)
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (filterKeys) as Map
@@ -63,3 +66,11 @@ setExUnitsToMax tx = do
     setScriptDataHash costModels (fromMaybe mempty $ ws ^. _redeemers)
       (wrap <$> fromMaybe mempty (ws ^. _plutusData))
       evaluatedTx
+
+txSignatures :: Transaction -> Array Vkeywitness
+txSignatures = fromMaybe mempty <<< view (_witnessSet <<< _vkeys)
+
+appendTxSignatures :: Array Vkeywitness -> Transaction -> Transaction
+appendTxSignatures signatures =
+  _witnessSet <<< _vkeys %~
+    pure <<< append signatures <<< fromMaybe mempty

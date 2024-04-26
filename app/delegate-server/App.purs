@@ -26,7 +26,7 @@ import Contract.Config
   , emptyHooks
   )
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
-import Control.Monad.Error.Class (class MonadThrow)
+import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Trans (class MonadLogger, LoggerT(LoggerT), runLoggerT)
 import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, ask, asks, runReaderT)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
@@ -90,6 +90,7 @@ derive newtype instance MonadAff AppM
 derive newtype instance MonadAsk AppState AppM
 derive newtype instance MonadReader AppState AppM
 derive newtype instance MonadThrow Error AppM
+derive newtype instance MonadError Error AppM
 derive newtype instance MonadLogger AppM
 
 type AppLogger = Message -> ReaderT AppState Aff Unit

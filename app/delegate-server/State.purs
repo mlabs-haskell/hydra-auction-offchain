@@ -20,7 +20,7 @@ module DelegateServer.State
 import Prelude
 
 import Contract.Monad (ContractEnv)
-import Control.Monad.Error.Class (class MonadThrow)
+import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Class (class MonadLogger)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
 import Data.Newtype (class Newtype)
@@ -81,6 +81,7 @@ instance
 class
   ( MonadAff m
   , MonadThrow Error m
+  , MonadError Error m
   , MonadLogger m
   , MonadAccess m "config" AppConfig
   , MonadAccess m "contractEnv" ContractEnvWrapper
