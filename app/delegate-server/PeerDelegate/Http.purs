@@ -9,7 +9,6 @@ import Affjax.RequestBody (RequestBody(Json)) as Affjax
 import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
 import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
 import Contract.Config (ServerConfig)
-import Contract.Transaction (Transaction)
 import Ctl.Internal.Affjax (request) as Affjax
 import Ctl.Internal.ServerConfig (mkHttpUrl)
 import Data.Argonaut (Json)
@@ -19,19 +18,27 @@ import Data.Either (Either(Left, Right))
 import Data.HTTP.Method (Method(POST))
 import Data.Maybe (Maybe(Just))
 import Data.Newtype (wrap)
-import DelegateServer.Handlers.SignCommitTx (SignCommitTxResponse, signCommitTxResponseCodec)
+import DelegateServer.Handlers.SignCommitTx
+  ( SignCommitTxRequestPayload
+  , SignCommitTxResponse
+  , signCommitTxRequestPayloadCodec
+  , signCommitTxResponseCodec
+  )
 import Effect.Aff (Aff)
-import HydraAuctionOffchain.Codec (txCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import HydraAuctionOffchain.Service.Common
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
   )
 
-signCommitTx :: ServerConfig -> Transaction -> Aff (Either ServiceError SignCommitTxResponse)
-signCommitTx serverConfig commitTx = do
+signCommitTx
+  :: ServerConfig
+  -> SignCommitTxRequestPayload
+  -> Aff (Either ServiceError SignCommitTxResponse)
+signCommitTx serverConfig reqPayload = do
   let endpoint = mkHttpUrl serverConfig <> "/signCommitTx"
   handleResponse <$>
-    postRequest endpoint (Just $ CA.encode txCodec commitTx)
+    postRequest endpoint
+      (Just $ CA.encode signCommitTxRequestPayloadCodec reqPayload)
 
 postRequest :: Affjax.URL -> Maybe Json -> Aff (Either Affjax.Error (Affjax.Response String))
 postRequest endpoint mPayload =

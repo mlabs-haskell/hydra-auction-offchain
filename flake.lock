@@ -11337,16 +11337,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1713783901,
-        "narHash": "sha256-pCza2+SJJwlWkIMDWOPG393x1pQdDVJJOQPC1DZphFs=",
+        "lastModified": 1714476441,
+        "narHash": "sha256-AOjoy0r7jmAAlCu21O8pAUiHwIVifg7KWZ9qXTTwFv8=",
         "owner": "input-output-hk",
         "repo": "hydra",
-        "rev": "dcc8e1fd9e40dbec8bb64596298d68cddec6bcf2",
+        "rev": "fbffd68d04ac3ed2c3fe9d0385cd0304712f0aaa",
         "type": "github"
       },
       "original": {
         "owner": "input-output-hk",
-        "ref": "commit-blueprint-tx",
+        "ref": "master",
         "repo": "hydra",
         "type": "github"
       }

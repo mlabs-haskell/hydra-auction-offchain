@@ -13,6 +13,7 @@ module DelegateServer.State
   , setAuctionInfo
   , setCollateralUtxo
   , setCommitStatus
+  , setHeadCs
   , setHeadStatus
   , setSnapshot
   ) where
@@ -20,6 +21,7 @@ module DelegateServer.State
 import Prelude
 
 import Contract.Monad (ContractEnv)
+import Contract.Value (CurrencySymbol)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Class (class MonadLogger)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
@@ -95,6 +97,7 @@ class
 -- We don't need access to the hydra snapshot until the head is open.
 class
   ( AppBase m
+  , MonadAccess m "headCs" (AVar CurrencySymbol)
   , MonadAccess m "collateralUtxo" (AVar Utxo)
   , MonadAccess m "commitStatus" (AVar CommitStatus)
   ) <=
@@ -161,6 +164,14 @@ setCollateralUtxo
   => Utxo
   -> m Unit
 setCollateralUtxo = putAppState (Proxy :: _ "collateralUtxo")
+
+setHeadCs
+  :: forall m
+   . MonadAccess m "headCs" (AVar CurrencySymbol)
+  => MonadAff m
+  => CurrencySymbol
+  -> m Unit
+setHeadCs = putAppState (Proxy :: _ "headCs")
 
 setHeadStatus
   :: forall m

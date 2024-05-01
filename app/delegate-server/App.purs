@@ -26,6 +26,7 @@ import Contract.Config
   , emptyHooks
   )
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
+import Contract.Value (CurrencySymbol)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Trans (class MonadLogger, LoggerT(LoggerT), runLoggerT)
 import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, ask, asks, runReaderT)
@@ -160,6 +161,7 @@ type AppState =
   , headStatus :: AVar HydraHeadStatus
   , livePeers :: AVar (Set String)
   , exitSem :: AVar AppExitReason
+  , headCs :: AVar CurrencySymbol
   , collateralUtxo :: AVar Utxo
   , commitStatus :: AVar CommitStatus
   , snapshot :: AVar HydraSnapshot
@@ -183,6 +185,9 @@ instance MonadAccess AppM "livePeers" (AVar (Set String)) where
 instance MonadAccess AppM "exitSem" (AVar AppExitReason) where
   access _ = asks _.exitSem
 
+instance MonadAccess AppM "headCs" (AVar CurrencySymbol) where
+  access _ = asks _.headCs
+
 instance MonadAccess AppM "collateralUtxo" (AVar Utxo) where
   access _ = asks _.collateralUtxo
 
@@ -199,6 +204,7 @@ initApp config = do
   headStatus <- AVar.new HeadStatus_Unknown
   livePeers <- AVar.new Set.empty
   exitSem <- AVar.empty
+  headCs <- AVar.empty
   collateralUtxo <- AVar.empty
   commitStatus <- AVar.new ShouldCommitCollateral
   snapshot <- AVar.new emptySnapshot
@@ -209,6 +215,7 @@ initApp config = do
     , headStatus
     , livePeers
     , exitSem
+    , headCs
     , collateralUtxo
     , commitStatus
     , snapshot

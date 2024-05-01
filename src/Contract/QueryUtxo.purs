@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.QueryUtxo
   ( findStandingBidUtxo
+  , isStandingBidUtxo
   , queryAuctionEscrowUtxo
   , queryBidderDepositUtxo
   , queryStandingBidUtxo
@@ -66,16 +67,19 @@ findStandingBidUtxo
   -> Maybe (Utxo /\ StandingBidState)
 findStandingBidUtxo auctionInfo utxos = do
   let getTxOut = _.output <<< unwrap <<< snd
-  standingBidUtxo <- Array.find (isStandingBidUtxo <<< getTxOut) $ Map.toUnfoldable utxos
+  standingBidUtxo <-
+    Array.find (isStandingBidUtxo auctionInfo <<< getTxOut)
+      (Map.toUnfoldable utxos)
   Tuple standingBidUtxo <$> getInlineDatum (getTxOut standingBidUtxo)
-  where
-  auctionCs :: CurrencySymbol
-  auctionCs = auctionInfo.auctionId
 
-  isStandingBidUtxo :: TransactionOutput -> Boolean
-  isStandingBidUtxo txOut =
-    (unwrap txOut).address == auctionInfo.standingBidAddr
-      && (Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one)
+isStandingBidUtxo
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
+  -> TransactionOutput
+  -> Boolean
+isStandingBidUtxo auctionInfo txOut =
+  (unwrap txOut).address == auctionInfo.standingBidAddr
+    && (Value.valueOf (unwrap txOut).amount auctionInfo.auctionId standingBidTokenName == one)
 
 ----------------------------------------------------------------------
 -- BidderDeposit

@@ -22,10 +22,39 @@ import DelegateServer.App (AppM, getAppEffRunner)
 import DelegateServer.Config (AppConfig'(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
+import DelegateServer.Lib.AVar (modifyAVar_)
+import DelegateServer.State
+  ( class App
+  , class AppBase
+  , class AppInit
+  , class AppOpen
+  , accessRec
+  , exitWithReason
+  , readAppState
+  , setCommitStatus
+  , setHeadCs
+  , setHeadStatus
+  , setSnapshot
+  )
+import DelegateServer.Types.AppExitReason (AppExitReason(AppExitReason_HeadFinalized))
+import DelegateServer.Types.CommitStatus
+  ( CommitStatus(ShouldCommitCollateral, ShouldCommitStandingBid)
+  )
+import DelegateServer.Types.HydraHeadStatus
+  ( HydraHeadStatus
+      ( HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Closed
+      , HeadStatus_FanoutPossible
+      , HeadStatus_Final
+      )
+  , printHeadStatus
+  )
 import DelegateServer.Types.HydraNodeApiMessage
   ( CommittedMessage
   , GreetingsMessage
   , HeadClosedMessage
+  , HeadFinalizedMessage
   , HeadOpenMessage
   , HydraNodeApi_InMessage
       ( In_Greetings
@@ -44,38 +73,12 @@ import DelegateServer.Types.HydraNodeApiMessage
   , HydraNodeApi_OutMessage(Out_Init, Out_Abort, Out_NewTx, Out_Close, Out_Contest, Out_Fanout)
   , PeerConnMessage
   , SnapshotConfirmedMessage
-  , HeadFinalizedMessage
+  , HeadInitMessage
   , hydraNodeApiInMessageCodec
   , hydraNodeApiOutMessageCodec
   )
-import DelegateServer.Lib.AVar (modifyAVar_)
-import DelegateServer.State
-  ( class App
-  , class AppBase
-  , class AppInit
-  , class AppOpen
-  , accessRec
-  , exitWithReason
-  , readAppState
-  , setCommitStatus
-  , setHeadStatus
-  , setSnapshot
-  )
-import DelegateServer.Types.AppExitReason (AppExitReason(AppExitReason_HeadFinalized))
-import DelegateServer.Types.CommitStatus
-  ( CommitStatus(ShouldCommitCollateral, ShouldCommitStandingBid)
-  )
-import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus
-      ( HeadStatus_Initializing
-      , HeadStatus_Open
-      , HeadStatus_Closed
-      , HeadStatus_FanoutPossible
-      , HeadStatus_Final
-      )
-  , printHeadStatus
-  )
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
+import DelegateServer.Types.HydraTx (mkHydraTx)
 import DelegateServer.WebSocket (WebSocket, mkWebSocket)
 import DelegateServer.WsServer
   ( DelegateWebSocketServer
@@ -115,7 +118,7 @@ mkHydraNodeApiWebSocket wsServer onConnect = do
         { baseWs: ws
         , initHead: ws.send Out_Init
         , abortHead: ws.send Out_Abort
-        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ }
+        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ } <=< mkHydraTx
         , closeHead: ws.send Out_Close
         , challengeSnapshot: ws.send Out_Contest
         , fanout: ws.send Out_Fanout
@@ -146,7 +149,7 @@ messageHandler ws wsServer = case _ of
   In_Greetings msg -> msgGreetingsHandler wsServer msg
   In_PeerConnected msg -> msgPeerConnectedHandler msg
   In_PeerDisconnected msg -> msgPeerDisconnectedHandler msg
-  In_HeadIsInitializing -> msgHeadIsInitializingHandler wsServer
+  In_HeadIsInitializing msg -> msgHeadIsInitializingHandler wsServer msg
   In_Committed msg -> msgCommittedHandler msg
   In_HeadIsAborted -> msgHeadAbortedHandler wsServer
   In_HeadIsOpen msg -> msgHeadOpenHandler wsServer msg
@@ -198,8 +201,14 @@ msgPeerDisconnectedHandler { peer } = do
         pure livePeers'
       _, _ -> pure livePeers
 
-msgHeadIsInitializingHandler :: forall m. AppInit m => DelegateWebSocketServer -> m Unit
-msgHeadIsInitializingHandler wsServer = do
+msgHeadIsInitializingHandler
+  :: forall m
+   . AppInit m
+  => DelegateWebSocketServer
+  -> HeadInitMessage
+  -> m Unit
+msgHeadIsInitializingHandler wsServer { headId } = do
+  setHeadCs headId
   setHeadStatus' wsServer HeadStatus_Initializing
   commitStatus <- readAppState (Proxy :: _ "commitStatus")
   when (commitStatus == ShouldCommitStandingBid) do

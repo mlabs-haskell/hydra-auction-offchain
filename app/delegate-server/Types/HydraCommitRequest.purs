@@ -1,6 +1,5 @@
 module DelegateServer.Types.HydraCommitRequest
   ( HydraCommitRequest(SimpleCommitRequest, FullCommitRequest)
-  , HydraBlueprintTx
   , HydraFullCommitRequest
   , hydraFullCommitRequestCodec
   , mkFullCommitRequest
@@ -9,21 +8,17 @@ module DelegateServer.Types.HydraCommitRequest
 
 import Prelude
 
-import Contract.Prim.ByteArray (ByteArray)
-import Contract.Transaction (Transaction, TransactionHash)
+import Contract.Transaction (Transaction)
 import Contract.Utxos (UtxoMap)
-import Ctl.Internal.Hashing (transactionHash)
-import Ctl.Internal.Serialization (convertTransaction, toBytes)
 import Data.Argonaut (class EncodeJson)
-import Data.Codec.Argonaut (JsonCodec, encode, object, string) as CA
+import Data.Codec.Argonaut (JsonCodec, encode, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Generic.Rep (class Generic)
-import Data.Newtype (unwrap)
 import Data.Show.Generic (genericShow)
+import DelegateServer.Types.HydraTx (HydraTx, hydraTxCodec, mkHydraTx)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
 import DelegateServer.Types.HydraUtxoMap (fromUtxoMap) as HydraUtxoMap
 import Effect (Effect)
-import HydraAuctionOffchain.Codec (byteArrayCodec, transactionHashCodec)
 
 data HydraCommitRequest
   = SimpleCommitRequest HydraUtxoMap
@@ -48,41 +43,20 @@ mkSimpleCommitRequest = SimpleCommitRequest <<< HydraUtxoMap.fromUtxoMap
 
 mkFullCommitRequest :: Transaction -> UtxoMap -> Effect HydraCommitRequest
 mkFullCommitRequest tx utxos =
-  convertTransaction tx <#> \cslTx ->
+  mkHydraTx tx <#> \blueprintTx ->
     FullCommitRequest
-      { blueprintTx:
-          { cborHex: unwrap $ toBytes cslTx
-          , description: ""
-          , txId: transactionHash cslTx
-          , "type": "Tx BabbageEra"
-          }
+      { blueprintTx
       , utxo: HydraUtxoMap.fromUtxoMap utxos
       }
 
 type HydraFullCommitRequest =
-  { blueprintTx :: HydraBlueprintTx
+  { blueprintTx :: HydraTx
   , utxo :: HydraUtxoMap
   }
 
 hydraFullCommitRequestCodec :: CA.JsonCodec HydraFullCommitRequest
 hydraFullCommitRequestCodec =
   CA.object "HydraFullCommitRequest" $ CAR.record
-    { blueprintTx: hydraBlueprintTxCodec
+    { blueprintTx: hydraTxCodec
     , utxo: hydraUtxoMapCodec
-    }
-
-type HydraBlueprintTx =
-  { cborHex :: ByteArray
-  , description :: String
-  , txId :: TransactionHash
-  , "type" :: String
-  }
-
-hydraBlueprintTxCodec :: CA.JsonCodec HydraBlueprintTx
-hydraBlueprintTxCodec =
-  CA.object "HydraBlueprintTx" $ CAR.record
-    { cborHex: byteArrayCodec
-    , description: CA.string
-    , txId: transactionHashCodec
-    , "type": CA.string
     }

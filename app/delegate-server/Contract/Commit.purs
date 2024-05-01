@@ -8,6 +8,7 @@ module DelegateServer.Contract.Commit
       , CommitBid_Error_CurrentTimeAfterBiddingEnd
       , CommitBid_Error_CouldNotFindStandingBidUtxo
       , CommitBid_Error_CouldNotIndexRedeemers
+      , CommitBid_Error_CouldNotGetOwnPubKeyHash
       , CommitBid_Error_CommitRequestFailed
       , CommitBid_Error_CommitMultiSignFailed
       , CommitBid_Error_SubmitTxFailed
@@ -42,6 +43,7 @@ import Contract.TxConstraints
   , mustValidateIn
   ) as Constraints
 import Contract.UnbalancedTx (UnbalancedTx(UnbalancedTx), mkUnbalancedTx)
+import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -132,6 +134,7 @@ data CommitStandingBidError
   | CommitBid_Error_CurrentTimeAfterBiddingEnd
   | CommitBid_Error_CouldNotFindStandingBidUtxo
   | CommitBid_Error_CouldNotIndexRedeemers
+  | CommitBid_Error_CouldNotGetOwnPubKeyHash
   | CommitBid_Error_CommitRequestFailed
   | CommitBid_Error_CommitMultiSignFailed
   | CommitBid_Error_SubmitTxFailed
@@ -176,10 +179,14 @@ multiSignCommitTx
   -> Transaction
   -> ExceptT CommitStandingBidError m Transaction
 multiSignCommitTx peers commitTx = do
-  responses <-
+  { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+  responses <- do
+    pkh <- runContract (withWallet cardanoSk $ ownPaymentPubKeyHash)
+      !? CommitBid_Error_CouldNotGetOwnPubKeyHash
+    let reqPayload = { commitTx, commitLeader: unwrap pkh }
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       -- TODO: use parTraverse
-      traverse (ExceptT <<< liftAff <<< flip signCommitTx commitTx <<< _.httpServer)
+      traverse (ExceptT <<< liftAff <<< flip signCommitTx reqPayload <<< _.httpServer)
         peers
   signatures <-
     traverse
