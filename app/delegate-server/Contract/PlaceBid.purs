@@ -28,7 +28,7 @@ import Contract.PlutusData (Datum, OutputDatum(NoOutputDatum), Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
-import Contract.Time (POSIXTimeRange, to)
+import Contract.Time (POSIXTimeRange, mkFiniteInterval)
 import Contract.Transaction
   ( FinalizedTransaction
   , Transaction
@@ -163,7 +163,9 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
     validatorHashes = unwrap $ validatorHash <$> validators
 
     txValidRange :: POSIXTimeRange
-    txValidRange = to $ auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000)
+    txValidRange =
+      mkFiniteInterval nowTime
+        (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
 
     spendableUtxos :: UtxoMap
     spendableUtxos = Map.fromFoldable [ collateralUtxo, standingBidUtxo ]
