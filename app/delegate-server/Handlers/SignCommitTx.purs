@@ -58,13 +58,11 @@ import Data.Generic.Rep (class Generic)
 import Data.Lens ((^.))
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, isNothing)
 import Data.Newtype (unwrap)
-import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (sequence)
 import Data.Tuple (Tuple(Tuple), snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Validation.Semigroup (V, validation)
-import Data.Variant (inj, match) as Variant
 import DelegateServer.App (runContract)
 import DelegateServer.Lib.Transaction (txSignatures)
 import DelegateServer.Lib.Wallet (withWallet)
@@ -82,6 +80,7 @@ import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (isStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoRec)
 import HydraAuctionOffchain.Helpers (errV, fromJustWithErr)
+import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import Type.Proxy (Proxy(Proxy))
 
@@ -187,7 +186,7 @@ instance Show SignCommitTxError where
 
 signCommitTxErrorCodec :: CA.JsonCodec SignCommitTxError
 signCommitTxErrorCodec =
-  dimap toVariant fromVariant
+  sumGenericCodec "SignCommitTxError"
     ( CAV.variantMatch
         { "CommitTxDecodingFailed": Right CA.string
         , "CommitTxCouldNotResolveInputs": Left unit
@@ -196,27 +195,6 @@ signCommitTxErrorCodec =
         , "CommitTxSigningFailed": Right CA.string
         }
     )
-  where
-  toVariant = case _ of
-    CommitTxDecodingFailed x ->
-      Variant.inj (Proxy :: _ "CommitTxDecodingFailed") x
-    CommitTxCouldNotResolveInputs ->
-      Variant.inj (Proxy :: _ "CommitTxCouldNotResolveInputs") unit
-    CommitTxCouldNotResolveCollateralInputs ->
-      Variant.inj (Proxy :: _ "CommitTxCouldNotResolveCollateralInputs") unit
-    CommitTxValidationFailed x ->
-      Variant.inj (Proxy :: _ "CommitTxValidationFailed") x
-    CommitTxSigningFailed x ->
-      Variant.inj (Proxy :: _ "CommitTxSigningFailed") x
-
-  fromVariant = Variant.match
-    { "CommitTxDecodingFailed": CommitTxDecodingFailed
-    , "CommitTxCouldNotResolveInputs": const CommitTxCouldNotResolveInputs
-    , "CommitTxCouldNotResolveCollateralInputs":
-        const CommitTxCouldNotResolveCollateralInputs
-    , "CommitTxValidationFailed": CommitTxValidationFailed
-    , "CommitTxSigningFailed": CommitTxSigningFailed
-    }
 
 ----------------------------------------------------------------------
 -- CommitTx validation
