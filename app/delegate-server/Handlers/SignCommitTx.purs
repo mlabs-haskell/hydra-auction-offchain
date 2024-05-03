@@ -11,6 +11,7 @@ module DelegateServer.Handlers.SignCommitTx
   , SignCommitTxError
       ( CommitTxDecodingFailed
       , CommitTxCouldNotResolveInputs
+      , CommitTxCouldNotResolveCollateralInputs
       , CommitTxValidationFailed
       , CommitTxSigningFailed
       )
@@ -25,16 +26,16 @@ module DelegateServer.Handlers.SignCommitTx
 
 import Prelude
 
-import Contract.Address (PubKeyHash, pubKeyHashAddress, toPubKeyHash, toStakingCredential)
+import Contract.Address (PubKeyHash, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
 import Contract.Transaction
   ( FinalizedTransaction(FinalizedTransaction)
-  , OutputDatum(NoOutputDatum)
   , Transaction
   , TransactionInput
   , TransactionOutput(TransactionOutput)
   , Vkeywitness
   , _body
+  , _collateral
   , _inputs
   , signTransaction
   )
@@ -52,11 +53,11 @@ import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
-import Data.Foldable (and, fold)
+import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
 import Data.Lens ((^.))
-import Data.Maybe (Maybe(Just, Nothing), isJust, isNothing)
-import Data.Newtype (unwrap, wrap)
+import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, isNothing)
+import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (sequence)
@@ -118,15 +119,17 @@ signCommitTxHandlerImpl bodyStr = do
       hydraHeadCs <- readAppState (Proxy :: _ "headCs")
       { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
       runContract $ withWallet cardanoSk do
-        let commitTxInputs = Array.fromFoldable $ commitTx ^. _body <<< _inputs
-        resolvedInputs' <-
-          sequence <$>
-            parTraverse (\inp -> map (Tuple inp) <$> getUtxo inp)
-              commitTxInputs
-        case resolvedInputs' of
-          Nothing ->
-            pure $ ServerResponseError CommitTxCouldNotResolveInputs
-          Just resolvedInputs -> do
+        let txBody = commitTx ^. _body
+        mResolvedInputs <- resolveInputs (Array.fromFoldable $ txBody ^. _inputs)
+        mResolvedCollateralInputs <- resolveInputs (fromMaybe mempty $ txBody ^. _collateral)
+        case mResolvedInputs, mResolvedCollateralInputs of
+          Nothing, _ ->
+            pure $ ServerResponseError
+              CommitTxCouldNotResolveInputs
+          _, Nothing ->
+            pure $ ServerResponseError
+              CommitTxCouldNotResolveCollateralInputs
+          Just resolvedInputs, Just resolvedCollateralInputs -> do
             verifier <- unwrap <$> liftedM "Could not get verifier pkh" ownPaymentPubKeyHash
             let
               validationParams =
@@ -136,6 +139,7 @@ signCommitTxHandlerImpl bodyStr = do
                 , auctionInfo
                 , hydraHeadCs
                 , resolvedInputs
+                , resolvedCollateralInputs
                 }
             validateCommitTx validationParams #
               validation (pure <<< ServerResponseError <<< CommitTxValidationFailed) \_ ->
@@ -147,11 +151,21 @@ signCommitTxHandlerImpl bodyStr = do
                       <<< Error.message
                   )
 
+type ResolvedInputs = Array (TransactionInput /\ TransactionOutput)
+
+resolveInputs :: Array TransactionInput -> Contract (Maybe ResolvedInputs)
+resolveInputs =
+  map sequence <<<
+    parTraverse (\inp -> map (Tuple inp) <$> getUtxo inp)
+
 signTxReturnSignature :: Transaction -> Contract CommitTxSignature
 signTxReturnSignature tx = do
   let wrappedTx = FinalizedTransaction tx
   signedTx <- unwrap <$> signTransaction wrappedTx
   case Array.difference (txSignatures signedTx) (txSignatures tx) of
+    -- Impossible: Two new signatures would indicate that the
+    -- transaction was also signed using the stake key, breaking
+    -- CommitTx validation.
     [ signature ] -> pure signature
     _ -> throwError $ error "Could not find signature after signing."
 
@@ -161,6 +175,7 @@ signTxReturnSignature tx = do
 data SignCommitTxError
   = CommitTxDecodingFailed String
   | CommitTxCouldNotResolveInputs
+  | CommitTxCouldNotResolveCollateralInputs
   | CommitTxValidationFailed (Array CommitTxValidationError)
   | CommitTxSigningFailed String
 
@@ -176,6 +191,7 @@ signCommitTxErrorCodec =
     ( CAV.variantMatch
         { "CommitTxDecodingFailed": Right CA.string
         , "CommitTxCouldNotResolveInputs": Left unit
+        , "CommitTxCouldNotResolveCollateralInputs": Left unit
         , "CommitTxValidationFailed": Right $ CA.array commitTxValidationErrorCodec
         , "CommitTxSigningFailed": Right CA.string
         }
@@ -186,6 +202,8 @@ signCommitTxErrorCodec =
       Variant.inj (Proxy :: _ "CommitTxDecodingFailed") x
     CommitTxCouldNotResolveInputs ->
       Variant.inj (Proxy :: _ "CommitTxCouldNotResolveInputs") unit
+    CommitTxCouldNotResolveCollateralInputs ->
+      Variant.inj (Proxy :: _ "CommitTxCouldNotResolveCollateralInputs") unit
     CommitTxValidationFailed x ->
       Variant.inj (Proxy :: _ "CommitTxValidationFailed") x
     CommitTxSigningFailed x ->
@@ -194,6 +212,8 @@ signCommitTxErrorCodec =
   fromVariant = Variant.match
     { "CommitTxDecodingFailed": CommitTxDecodingFailed
     , "CommitTxCouldNotResolveInputs": const CommitTxCouldNotResolveInputs
+    , "CommitTxCouldNotResolveCollateralInputs":
+        const CommitTxCouldNotResolveCollateralInputs
     , "CommitTxValidationFailed": CommitTxValidationFailed
     , "CommitTxSigningFailed": CommitTxSigningFailed
     }
@@ -231,7 +251,8 @@ type CommitTxValidationParams (r :: Row Type) =
   , verifier :: PubKeyHash
   , auctionInfo :: Record (AuctionInfoRec r)
   , hydraHeadCs :: CurrencySymbol
-  , resolvedInputs :: Array (TransactionInput /\ TransactionOutput)
+  , resolvedInputs :: ResolvedInputs
+  , resolvedCollateralInputs :: ResolvedInputs
   }
 
 validateCommitTx
@@ -278,21 +299,18 @@ validateCommitTx p = do
   checkHydraInitInput :: Boolean
   checkHydraInitInput = Array.length hydraInitInputPartition.yes == one
 
-  -- Check that all other inputs come from pkh addresses not belonging
-  -- to the verifier and do not contain datums or reference scripts.
+  -- Check that all other inputs, including collateral inputs, come
+  -- from pkh addresses not owned by the verifier.
   checkOtherInputs :: Boolean
   checkOtherInputs =
     Array.all
       ( \(_ /\ TransactionOutput out) ->
-          and
-            [ isJust $ toPubKeyHash out.address
-            , isNothing $ toStakingCredential out.address
-            , out.address /= pubKeyHashAddress (wrap p.verifier) Nothing
-            , out.datum == NoOutputDatum
-            , isNothing out.referenceScript
-            ]
+          isJust (toPubKeyHash out.address)
+            && (toPubKeyHash out.address /= Just p.verifier)
       )
-      hydraInitInputPartition.no
+      ( hydraInitInputPartition.no
+          <> p.resolvedCollateralInputs
+      )
 
   -- Check that no tokens are minted or burned.
   checkMint :: Boolean
