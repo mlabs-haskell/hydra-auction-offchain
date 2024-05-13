@@ -15,25 +15,22 @@ import Prelude
 import Contract.Config
   ( ContractParams
   , LogLevel(Trace)
-  , NetworkId(TestnetId)
+  , NetworkId(TestnetId, MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
   , WalletSpec(UseKeys)
-  , blockfrostPublicPreprodServerConfig
-  , defaultConfirmTxDelay
   , defaultTimeParams
   , disabledSynchronizationParams
   , emptyHooks
-  , mkBlockfrostBackendParams
   )
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Reader (class MonadAsk, ReaderT, asks, runReaderT)
+import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig)
+import DelegateServer.Config (AppConfig, Network(Testnet, Mainnet))
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -44,6 +41,7 @@ import DelegateServer.State
   , ContractEnvWrapper
   , access
   )
+import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.CommitStatus (CommitStatus(ShouldCommitCollateral))
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, emptySnapshot)
@@ -84,6 +82,7 @@ derive newtype instance Monad AppM
 derive newtype instance MonadEffect AppM
 derive newtype instance MonadAff AppM
 derive newtype instance MonadAsk AppState AppM
+derive newtype instance MonadReader AppState AppM
 derive newtype instance MonadThrow Error AppM
 
 runApp :: forall a. AppState -> AppM a -> Aff a
@@ -123,6 +122,7 @@ type AppState =
   , auctionInfo :: AVar AuctionInfoExtended
   , headStatus :: AVar HydraHeadStatus
   , livePeers :: AVar (Set String)
+  , exitSem :: AVar AppExitReason
   , collateralUtxo :: AVar Utxo
   , commitStatus :: AVar CommitStatus
   , snapshot :: AVar HydraSnapshot
@@ -143,6 +143,9 @@ instance MonadAccess AppM "headStatus" (AVar HydraHeadStatus) where
 instance MonadAccess AppM "livePeers" (AVar (Set String)) where
   access _ = asks _.livePeers
 
+instance MonadAccess AppM "exitSem" (AVar AppExitReason) where
+  access _ = asks _.exitSem
+
 instance MonadAccess AppM "collateralUtxo" (AVar Utxo) where
   access _ = asks _.collateralUtxo
 
@@ -158,6 +161,7 @@ initApp config = do
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeers <- AVar.new Set.empty
+  exitSem <- AVar.empty
   collateralUtxo <- AVar.empty
   commitStatus <- AVar.new ShouldCommitCollateral
   snapshot <- AVar.new emptySnapshot
@@ -167,6 +171,7 @@ initApp config = do
     , auctionInfo
     , headStatus
     , livePeers
+    , exitSem
     , collateralUtxo
     , commitStatus
     , snapshot
@@ -174,13 +179,11 @@ initApp config = do
 
 mkContractParams :: AppConfig -> ContractParams
 mkContractParams config =
-  { backendParams:
-      mkBlockfrostBackendParams
-        { blockfrostConfig: blockfrostPublicPreprodServerConfig
-        , blockfrostApiKey: Just (unwrap config).blockfrostApiKey
-        , confirmTxDelay: defaultConfirmTxDelay
-        }
-  , networkId: TestnetId
+  { backendParams: (unwrap config).queryBackend
+  , networkId:
+      case (unwrap config).network of
+        Testnet _ -> TestnetId
+        Mainnet -> MainnetId
   , logLevel: Trace
   , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile (unwrap config).walletSk) Nothing
   , customLogger: Nothing

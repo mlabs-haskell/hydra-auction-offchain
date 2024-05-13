@@ -1,7 +1,6 @@
 module HydraAuctionOffchain.Wallet
   ( SignMessageError
       ( CouldNotGetWalletAddressError
-      , SignDataFailedError
       , CouldNotGetSigFromCoseSign1Error
       , CouldNotDecodeCoseKeyError
       , CouldNotGetPubKeyFromCoseKeyError
@@ -25,6 +24,7 @@ import Contract.Prim.ByteArray (ByteArray, CborBytes, byteArrayFromAscii)
 import Contract.Wallet (getWalletAddress, signData)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError)
+import Control.Monad.State.Trans (lift)
 import Ctl.Internal.FfiHelpers (MaybeFfiHelper, maybeFfiHelper)
 import Ctl.Internal.Plutus.Conversion (fromPlutusAddress)
 import Ctl.Internal.Plutus.Types.Address (getAddress)
@@ -54,7 +54,6 @@ type SignMessageResult =
 
 data SignMessageError
   = CouldNotGetWalletAddressError
-  | SignDataFailedError
   | CouldNotGetSigFromCoseSign1Error
   | CouldNotDecodeCoseKeyError
   | CouldNotGetPubKeyFromCoseKeyError
@@ -92,7 +91,7 @@ signMessage payload = do
   let addr = fromPlutusAddress config.network addrPlutus
 
   -- Sign data, extract vkey and signature:
-  { key, signature: coseSign1 } <- signData addr (wrap payload) !? SignDataFailedError
+  { key, signature: coseSign1 } <- lift $ signData addr (wrap payload)
   signature <- liftEffect (getCoseSign1Signature $ unwrap coseSign1)
     !* CouldNotGetSigFromCoseSign1Error
   coseKey <- liftEffect (fromBytesCoseKey key) !* CouldNotDecodeCoseKeyError

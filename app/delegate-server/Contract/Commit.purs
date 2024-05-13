@@ -50,6 +50,7 @@ data CommitStandingBidError
   | CommitBid_CommitRequestFailed ServiceError
 
 derive instance Generic CommitStandingBidError _
+derive instance Eq CommitStandingBidError
 
 instance Show CommitStandingBidError where
   show = genericShow

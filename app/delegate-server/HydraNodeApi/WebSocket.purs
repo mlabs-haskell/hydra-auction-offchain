@@ -51,11 +51,13 @@ import DelegateServer.State
   , class AppInit
   , class AppOpen
   , accessRec
+  , exitWithReason
   , readAppState
   , setCommitStatus
   , setHeadStatus
   , setSnapshot
   )
+import DelegateServer.Types.AppExitReason (AppExitReason(AppExitReason_HeadFinalized))
 import DelegateServer.Types.CommitStatus
   ( CommitStatus(ShouldCommitCollateral, ShouldCommitStandingBid)
   )
@@ -245,7 +247,7 @@ msgReadyToFanoutHandler ws = do
 msgHeadFinalizedHandler :: forall m. AppBase m => HeadFinalizedMessage -> m Unit
 msgHeadFinalizedHandler _ = do
   setHeadStatus' HeadStatus_Final
-  throwError $ error $ "Head is finalized, stopping delegate-server."
+  exitWithReason AppExitReason_HeadFinalized
 
 --
 

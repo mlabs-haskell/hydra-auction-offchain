@@ -9,6 +9,7 @@ module HydraAuctionOffchain.Helpers
   , mkPosixTimeUnsafe
   , nowPosix
   , tokenNameFromAsciiUnsafe
+  , waitSeconds
   , withEmptyPlutusV2Script
   , withoutRefScript
   , (!*)
@@ -37,13 +38,16 @@ import Data.Bifunctor (lmap)
 import Data.DateTime (DateTime)
 import Data.DateTime.Instant (instant, toDateTime, unInstant)
 import Data.Either (Either)
+import Data.Int (toNumber) as Int
 import Data.Map (toUnfoldable) as Map
 import Data.Maybe (Maybe(Just, Nothing), fromJust, fromMaybe')
 import Data.Newtype (unwrap, wrap)
-import Data.Time.Duration (class Duration, fromDuration)
+import Data.Time.Duration (class Duration, Seconds(Seconds), fromDuration)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Data.Validation.Semigroup (V, invalid)
+import Effect.Aff (delay)
+import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
 import Effect.Now (now)
@@ -95,6 +99,9 @@ mkPosixTimeUnsafe dur =
 
 nowPosix :: forall (m :: Type -> Type). MonadEffect m => m POSIXTime
 nowPosix = liftEffect $ now <#> mkPosixTimeUnsafe <<< unInstant
+
+waitSeconds :: forall m. MonadAff m => Int -> m Unit
+waitSeconds seconds = liftAff $ delay $ fromDuration $ Seconds $ Int.toNumber seconds
 
 withoutRefScript :: TransactionOutput -> TransactionOutputWithRefScript
 withoutRefScript output = wrap

@@ -211,11 +211,11 @@ let
 
     "cardano-transaction-lib" = pkgs.stdenv.mkDerivation {
         name = "cardano-transaction-lib";
-        version = "5cef4dea87d917327161ac09d493824928d9fe80";
+        version = "63485e328b6008b5bea336269b9d6036d04c7c7b";
         src = pkgs.fetchgit {
           url = "https://github.com/Plutonomicon/cardano-transaction-lib.git";
-          rev = "5cef4dea87d917327161ac09d493824928d9fe80";
-          sha256 = "1y86jnagsl1d5aa9b62cri1n2xi7skb2qy9lfkhpi5ax05g5ills";
+          rev = "63485e328b6008b5bea336269b9d6036d04c7c7b";
+          sha256 = "0danhnq3793f2ymdp7njjxkqkkrbviakd9ka49fdyq0q0kfw9203";
         };
         phases = "installPhase";
         installPhase = "ln -s $src $out";
@@ -240,6 +240,30 @@ let
           url = "https://github.com/natefaubion/purescript-checked-exceptions.git";
           rev = "6ece020df25d01ee95474f7545f28e75dcfb0f0c";
           sha256 = "0z5n73n8za8w7d26xbdpkm8d70dlz08gm267rhb9ixxv25acjd36";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
+    "cip30" = pkgs.stdenv.mkDerivation {
+        name = "cip30";
+        version = "8f1b34b48825fcec5e9c67f33e255770b1e0bc45";
+        src = pkgs.fetchgit {
+          url = "https://github.com/mlabs-haskell/purescript-cip30";
+          rev = "8f1b34b48825fcec5e9c67f33e255770b1e0bc45";
+          sha256 = "1rb7kv99rd50b6vhl90sirmzh43wgnyafpmn7w45n3d4nrvf1046";
+        };
+        phases = "installPhase";
+        installPhase = "ln -s $src $out";
+      };
+
+    "cip30-typesafe" = pkgs.stdenv.mkDerivation {
+        name = "cip30-typesafe";
+        version = "d72e51fbc0255eb3246c9132d295de7f65e16a99";
+        src = pkgs.fetchgit {
+          url = "https://github.com/mlabs-haskell/purescript-cip30-typesafe";
+          rev = "d72e51fbc0255eb3246c9132d295de7f65e16a99";
+          sha256 = "0mlmifd1svi0havf2wgxzq23ycsqbhlvh4n35g3z7nqr7hhwh8s3";
         };
         phases = "installPhase";
         installPhase = "ln -s $src $out";

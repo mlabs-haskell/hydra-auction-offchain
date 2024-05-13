@@ -9,7 +9,7 @@
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     liqwid-nix.url = "github:mlabs-haskell/liqwid-nix/aciceri/fix-new-ctl";
-    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/5cef4dea87d917327161ac09d493824928d9fe80";
+    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/63485e328b6008b5bea336269b9d6036d04c7c7b";
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/standing-bid-validator";

@@ -1,5 +1,15 @@
 module DelegateServer.Handlers.MoveBid
-  ( moveBidHandler
+  ( MoveBidError
+      ( MoveBidError_InvalidHeadStatus
+      , MoveBidError_CouldNotCommitStandingBid
+      )
+  , MoveBidResponse
+  , MoveBidSuccess
+      ( MoveBidSuccess_SentInitHeadRequest
+      , MoveBidSuccess_CommittedStandingBid
+      )
+  , moveBidHandler
+  , moveBidHandlerImpl
   ) where
 
 import Prelude
@@ -9,15 +19,20 @@ import Control.Monad.Except (runExceptT)
 import Data.Argonaut (class EncodeJson, encodeJson)
 import Data.Codec.Argonaut (encode) as CA
 import Data.Either (Either(Left, Right))
+import Data.Generic.Rep (class Generic)
+import Data.Show.Generic (genericShow)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.Contract.Commit (CommitStandingBidError, commitStandingBid)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
-import DelegateServer.Lib.ServerResponse (respBadRequest, respCreated)
 import DelegateServer.State (class AppInit, readAppState, setCommitStatus)
 import DelegateServer.Types.CommitStatus (CommitStatus(ShouldCommitStandingBid))
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus(HeadStatus_Idle, HeadStatus_Initializing)
   , printHeadStatus
+  )
+import DelegateServer.Types.ServerResponse
+  ( ServerResponse(ServerResponseSuccess, ServerResponseError)
+  , respCreatedOrBadRequest
   )
 import Effect.Class (liftEffect)
 import HTTPure (Response) as HTTPure
@@ -25,9 +40,17 @@ import HydraAuctionOffchain.Codec (transactionHashCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
 import Type.Proxy (Proxy(Proxy))
 
+type MoveBidResponse = ServerResponse MoveBidSuccess MoveBidError
+
 data MoveBidSuccess
   = MoveBidSuccess_SentInitHeadRequest
   | MoveBidSuccess_CommittedStandingBid StandingBidState TransactionHash
+
+derive instance Generic MoveBidSuccess _
+derive instance Eq MoveBidSuccess
+
+instance Show MoveBidSuccess where
+  show = genericShow
 
 instance EncodeJson MoveBidSuccess where
   encodeJson = case _ of
@@ -46,6 +69,12 @@ data MoveBidError
   = MoveBidError_InvalidHeadStatus HydraHeadStatus
   | MoveBidError_CouldNotCommitStandingBid CommitStandingBidError
 
+derive instance Generic MoveBidError _
+derive instance Eq MoveBidError
+
+instance Show MoveBidError where
+  show = genericShow
+
 instance EncodeJson MoveBidError where
   encodeJson = case _ of
     MoveBidError_InvalidHeadStatus status ->
@@ -58,21 +87,24 @@ instance EncodeJson MoveBidError where
         }
 
 moveBidHandler :: forall m. AppInit m => HydraNodeApiWebSocket -> m HTTPure.Response
-moveBidHandler ws = do
+moveBidHandler = respCreatedOrBadRequest <=< moveBidHandlerImpl
+
+moveBidHandlerImpl :: forall m. AppInit m => HydraNodeApiWebSocket -> m MoveBidResponse
+moveBidHandlerImpl ws = do
   setCommitStatus ShouldCommitStandingBid
   headStatus <- readAppState (Proxy :: _ "headStatus")
   case headStatus of
     HeadStatus_Idle -> do
       liftEffect ws.initHead
-      respCreated MoveBidSuccess_SentInitHeadRequest
+      pure $ ServerResponseSuccess MoveBidSuccess_SentInitHeadRequest
     HeadStatus_Initializing ->
-      runExceptT commitStandingBid >>= case _ of
+      runExceptT commitStandingBid <#> case _ of
         Left err ->
-          respBadRequest $
+          ServerResponseError $
             MoveBidError_CouldNotCommitStandingBid err
         Right (standingBid /\ txHash) ->
-          respCreated $
+          ServerResponseSuccess $
             MoveBidSuccess_CommittedStandingBid standingBid txHash
     _ ->
-      respBadRequest $
+      pure $ ServerResponseError $
         MoveBidError_InvalidHeadStatus headStatus
