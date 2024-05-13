@@ -3,8 +3,10 @@ module HydraAuctionOffchain.Contract.Types.ContractResult
   , ContractResult'
   , ContractResultRow
   , SubmitTxData
+  , buildTx
   , emptySubmitTxData
   , getTotalExUnits
+  , submitTx
   , submitTxReturningContractResult
   ) where
 
@@ -15,12 +17,11 @@ import Contract.BalanceTxConstraints (BalanceTxConstraintsBuilder)
 import Contract.CborBytes (cborByteLength)
 import Contract.Log (logWarn')
 import Contract.Metadata (GeneralTransactionMetadata)
-import Contract.Monad (Contract, liftedE)
-import Contract.PlutusData (class IsData)
+import Contract.Monad (Contract)
 import Contract.ScriptLookups (ScriptLookups)
-import Contract.Scripts (class ValidatorTypes)
 import Contract.Transaction
   ( ExUnits
+  , FinalizedTransaction
   , Redeemer
   , Transaction
   , TransactionHash
@@ -34,7 +35,6 @@ import Contract.TxConstraints (TxConstraints)
 import Contract.UnbalancedTx (mkUnbalancedTx)
 import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
 import Ctl.Internal.Serialization (convertTransaction, toBytes)
-import Data.BigInt (BigInt)
 import Data.Foldable (foldl)
 import Data.Lens ((^.))
 import Data.Maybe (Maybe(Nothing), fromMaybe, maybe)
@@ -42,6 +42,7 @@ import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Effect (Effect)
 import Effect.Class (liftEffect)
+import JS.BigInt (BigInt)
 import Prim.Row (class Nub, class Union) as Row
 import Record (merge) as Record
 
@@ -58,14 +59,14 @@ type ContractResultRow (extra :: Row Type) =
   | extra
   )
 
-type SubmitTxData (validator :: Type) (redeemer :: Type) (datum :: Type) =
-  { lookups :: ScriptLookups validator
-  , constraints :: TxConstraints redeemer datum
+type SubmitTxData =
+  { lookups :: ScriptLookups
+  , constraints :: TxConstraints
   , balancerConstraints :: BalanceTxConstraintsBuilder
   , metadata :: Maybe GeneralTransactionMetadata
   }
 
-emptySubmitTxData :: SubmitTxData Void Void Void
+emptySubmitTxData :: SubmitTxData
 emptySubmitTxData =
   { lookups: mempty
   , constraints: mempty
@@ -74,29 +75,44 @@ emptySubmitTxData =
   }
 
 submitTxReturningContractResult
-  :: forall (validator :: Type) (datum :: Type) (redeemer :: Type) (extra :: Row Type)
-   . ValidatorTypes validator datum redeemer
-  => IsData datum
-  => IsData redeemer
-  => Row.Union extra (ContractResultRow ()) (ContractResultRow extra)
+  :: forall (extra :: Row Type)
+   . Row.Union extra (ContractResultRow ()) (ContractResultRow extra)
   => Row.Nub (ContractResultRow extra) (ContractResultRow extra)
   => Record extra
-  -> SubmitTxData validator redeemer datum
+  -> SubmitTxData
   -> Contract (ContractResult' extra)
-submitTxReturningContractResult extra rec = do
-  unbalancedTx' <- liftedE $ mkUnbalancedTx rec.lookups rec.constraints
+submitTxReturningContractResult extra rec =
+  submitTx extra =<< buildTx rec
+
+buildTx
+  :: SubmitTxData
+  -> Contract FinalizedTransaction
+buildTx rec = do
+  unbalancedTx' <- mkUnbalancedTx rec.lookups rec.constraints
   unbalancedTxWithMetadata <- traverse (setGeneralTxMetadata unbalancedTx') rec.metadata
   let unbalancedTx = fromMaybe unbalancedTx' unbalancedTxWithMetadata
-  balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx rec.balancerConstraints
+  balancedTx <- balanceTxWithConstraints unbalancedTx rec.balancerConstraints
+  pure balancedTx
+
+submitTx
+  :: forall (extra :: Row Type)
+   . Row.Union extra (ContractResultRow ()) (ContractResultRow extra)
+  => Row.Nub (ContractResultRow extra) (ContractResultRow extra)
+  => Record extra
+  -> FinalizedTransaction
+  -> Contract (ContractResult' extra)
+submitTx extra balancedTx = do
   balancedSignedTx <- signTransaction balancedTx
   txSize <- liftEffect $ getTxSize $ unwrap balancedSignedTx
   logWarn' $ "Tx size: " <> show txSize <> " bytes"
+  let txExUnits = getTotalExUnits $ unwrap balancedSignedTx
+  logWarn' $ "Ex units: " <> show txExUnits
   txHash <- submit balancedSignedTx
   pure $ Record.merge extra $
     { balancedSignedTx: unwrap balancedSignedTx
     , txHash
     , txFinalFee: getTxFinalFee balancedSignedTx
-    , txExUnits: getTotalExUnits $ unwrap balancedSignedTx
+    , txExUnits
     , txSize
     }
 

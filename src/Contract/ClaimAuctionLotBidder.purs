@@ -54,7 +54,6 @@ import Control.Error.Util (bool, (!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (singleton) as Array
-import Data.BigInt (fromInt) as BigInt
 import Data.Map (fromFoldable) as Map
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Contract.MintingPolicies
@@ -88,6 +87,7 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
+import JS.BigInt (fromInt) as BigInt
 
 claimAuctionLotBidderContract
   :: AuctionInfoExtended -> Contract (ContractOutput TransactionHash)
@@ -210,7 +210,7 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
       mkFiniteInterval nowTime
         (auctionTermsRec.purchaseDeadline - wrap (BigInt.fromInt 1000))
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ -- Spend auction escrow utxo:
         Constraints.mustSpendScriptOutput auctionEscrowOref auctionEscrowRedeemer
@@ -246,7 +246,7 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
         Constraints.mustValidateIn txValidRange
       ]
 
-    lookups :: ScriptLookups Void
+    lookups :: ScriptLookups
     lookups = mconcat
       [ Lookups.unspentOutputs $ Map.fromFoldable
           ( [ auctionEscrowUtxo, standingBidUtxo ]

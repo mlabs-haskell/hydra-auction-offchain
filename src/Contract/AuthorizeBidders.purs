@@ -104,7 +104,7 @@ mkAuthorizeBiddersContractWithErrors (AuthBiddersContractParams params) = do
     auctionAuthDatum :: Datum
     auctionAuthDatum = wrap $ toData $ AuctionAuth { auctionCs, signatures }
 
-    constraints :: TxConstraints Void Void
+    constraints :: TxConstraints
     constraints = mconcat
       [ Constraints.mustPayToScript (wrap $ sellerOracle.nativeScriptHash) auctionAuthDatum
           DatumInline

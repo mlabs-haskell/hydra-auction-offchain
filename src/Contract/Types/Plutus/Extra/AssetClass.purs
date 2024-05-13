@@ -10,12 +10,12 @@ import Prelude
 import Contract.PlutusData (class FromData, class ToData, PlutusData(List), fromData, toData)
 import Contract.Value (CurrencySymbol, TokenName, Value)
 import Contract.Value (singleton) as Value
-import Data.BigInt (BigInt)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple.Nested (type (/\), (/\))
+import JS.BigInt (BigInt)
 
 newtype AssetClass = AssetClass
   { currencySymbol :: CurrencySymbol
