@@ -47,7 +47,7 @@ import DelegateServer.State
   , setCollateralUtxo
   )
 import DelegateServer.Types.AppExitReason
-  ( AppExitReason(AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus)
+  ( AppExitReason(AppExitReason_BiddingTimeExpired_HeadIdle)
   )
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus
@@ -57,6 +57,7 @@ import DelegateServer.Types.HydraHeadStatus
       , HeadStatus_Open
       )
   , isHeadClosed
+  , printHeadStatus
   )
 import DelegateServer.WsServer (DelegateWebSocketServer, wsServer)
 import Effect (Effect)
@@ -224,13 +225,16 @@ closeHeadAtBiddingEnd ws = do
           HeadStatus_Open -> do
             logInfo' "Bidding time expired, closing the head."
             liftEffect ws.closeHead
+          HeadStatus_Idle ->
+            exitWithReason AppExitReason_BiddingTimeExpired_HeadIdle
           _ | isHeadClosed headStatus ->
             -- No-op if the head is already closed.
             pure unit
           _ ->
-            exitWithReason $
-              AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus
-                headStatus
+            logWarn' $ "Bidding time expired, missing handler for head status "
+              <> printHeadStatus headStatus
+              <> "."
+
   liftEffect $ scheduleAt biddingEnd action
 
 initHydraApiWsConn :: DelegateWebSocketServer -> AppM HydraNodeApiWebSocket
