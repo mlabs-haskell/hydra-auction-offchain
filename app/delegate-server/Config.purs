@@ -16,9 +16,10 @@ import Control.Alt ((<|>))
 import Data.Array (fromFoldable) as Array
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec) as CA
-import Data.Either (note)
+import Data.Either (Either(Left, Right), note)
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
+import Data.Log.Level (LogLevel(Trace, Debug, Info, Warn, Error))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
@@ -40,6 +41,7 @@ import URI.Port (parser, toInt) as Port
 newtype AppConfig = AppConfig
   { auctionMetadataOref :: TransactionInput
   , serverPort :: Port
+  , wsServerPort :: Port
   , hydraNodeId :: String
   , hydraNode :: HostPort
   , hydraNodeApi :: HostPort
@@ -53,6 +55,7 @@ newtype AppConfig = AppConfig
   , queryBackend :: QueryBackendParams
   , hydraScriptsTxHash :: String
   , hydraContestPeriod :: Int
+  , logLevel :: LogLevel
   }
 
 derive instance Newtype AppConfig _
@@ -72,6 +75,13 @@ configParser = ado
     , Optparse.metavar "PORT"
     , Optparse.help
         "Listen port for incoming client connections to this \
+        \delegate server."
+    ]
+  wsServerPort <- Optparse.option parsePort $ fold
+    [ Optparse.long "ws-server-port"
+    , Optparse.metavar "PORT"
+    , Optparse.help
+        "Listen port for incoming WebSocket connections to this \
         \delegate server."
     ]
   hydraNodeId <- Optparse.strOption $ fold
@@ -163,10 +173,16 @@ configParser = ado
         \value needs to make sense compared to the current network \
         \we are running."
     ]
+  logLevel <- Optparse.option parseLogLevel $ fold
+    [ Optparse.long "log-level"
+    , Optparse.metavar "LOGLEVEL"
+    , Optparse.value Info
+    ]
   in
     wrap
       { auctionMetadataOref
       , serverPort
+      , wsServerPort
       , hydraNodeId
       , hydraNode
       , hydraNodeApi
@@ -180,6 +196,7 @@ configParser = ado
       , queryBackend
       , hydraScriptsTxHash
       , hydraContestPeriod
+      , logLevel
       }
 
 queryBackendParser :: Optparse.Parser QueryBackendParams
@@ -255,6 +272,16 @@ testnetParser =
 
 ----------------------------------------------------------------------
 -- Readers
+
+parseLogLevel :: Optparse.ReadM LogLevel
+parseLogLevel =
+  Optparse.eitherReader $ case _ of
+    "trace" -> Right Trace
+    "debug" -> Right Debug
+    "info" -> Right Info
+    "warn" -> Right Warn
+    "error" -> Right Error
+    str -> Left $ "Can't parse as LogLevel: `" <> str <> "`"
 
 parseOref :: Optparse.ReadM TransactionInput
 parseOref =

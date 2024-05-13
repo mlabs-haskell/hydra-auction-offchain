@@ -168,7 +168,7 @@ openHead appHandle { autoInit } = do
       appHandle.getHeadStatus
     appHandle.moveBidToL2 >>=
       flip shouldSatisfy case _ of
-        ServerResponseSuccess (MoveBidSuccess_CommittedStandingBid _ _) -> true
+        ServerResponseSuccess (MoveBidSuccess_CommittedStandingBid _) -> true
         _ -> false
   else do
     untilM (eq HeadStatus_Idle)

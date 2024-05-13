@@ -1,18 +1,17 @@
 module DelegateServer.Server
-  ( server
+  ( httpServer
   ) where
 
 import Prelude
 
+import Contract.Log (logInfo')
 import Data.Newtype (unwrap)
 import Data.Tuple.Nested ((/\))
-import DelegateServer.App (AppState, AppM, runApp)
+import DelegateServer.App (AppLogger, AppM, AppState, runApp, runAppEff)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
-import DelegateServer.Handlers.QueryBid (queryBidHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import Effect.Aff.Class (liftAff)
-import Effect.Console (log)
 import HTTPure
   ( Headers
   , Request
@@ -25,15 +24,16 @@ import HTTPure
   , serve
   , toString
   ) as HTTPure
-import HTTPure (Method(Get, Options, Post), (!?), (!@))
+import HTTPure (Method(Options, Post), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
 import URI.Port (toInt) as Port
 
-server :: AppState -> HydraNodeApiWebSocket -> HTTPure.ServerM
-server appState ws = do
+httpServer :: AppState -> AppLogger -> HydraNodeApiWebSocket -> HTTPure.ServerM
+httpServer appState appLogger ws = do
   let port = Port.toInt (unwrap appState.config).serverPort
-  HTTPure.serve port (runApp appState <<< router ws) do
-    log $ "Http server now accepts connections on port " <> show port <> "."
+  HTTPure.serve port (runApp appState appLogger <<< router ws) do
+    runAppEff appState appLogger do
+      logInfo' $ "Http server now accepts connections on port " <> show port <> "."
 
 router :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
 router _ { method: Options, headers }
@@ -49,9 +49,6 @@ routerCors ws { method: Post, path: [ "moveBid" ] } =
 routerCors ws { body, method: Post, path: [ "placeBid" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   placeBidHandler ws bodyStr
-
-routerCors _ { method: Get, path: [ "queryBid" ] } =
-  queryBidHandler
 
 routerCors _ _ = HTTPure.notFound
 

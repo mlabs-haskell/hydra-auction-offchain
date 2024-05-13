@@ -1,6 +1,10 @@
 module DelegateServer.App
-  ( AppM(AppM)
+  ( AppLogger
+  , AppM(AppM)
   , AppState
+  , appLoggerDefault
+  , getAppEffRunner
+  , getAppRunner
   , initApp
   , runApp
   , runAppEff
@@ -14,7 +18,6 @@ import Prelude
 
 import Contract.Config
   ( ContractParams
-  , LogLevel(Trace)
   , NetworkId(TestnetId, MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
   , WalletSpec(UseKeys)
@@ -24,13 +27,16 @@ import Contract.Config
   )
 import Contract.Monad (Contract, mkContractEnv, runContractInEnv)
 import Control.Monad.Error.Class (class MonadThrow)
-import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, asks, runReaderT)
+import Control.Monad.Logger.Trans (class MonadLogger, LoggerT(LoggerT), runLoggerT)
+import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, ask, asks, runReaderT)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
+import Data.Log.Formatter.Pretty (prettyFormatter)
+import Data.Log.Message (Message)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig, Network(Testnet, Mainnet))
+import DelegateServer.Config (AppConfig(AppConfig), Network(Testnet, Mainnet))
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -66,7 +72,7 @@ import Type.Proxy (Proxy(Proxy))
 ----------------------------------------------------------------------
 -- AppM
 
-newtype AppM (a :: Type) = AppM (ReaderT AppState Aff a)
+newtype AppM (a :: Type) = AppM (LoggerT (ReaderT AppState Aff) a)
 
 instance AppBase AppM
 instance AppInit AppM
@@ -84,12 +90,42 @@ derive newtype instance MonadAff AppM
 derive newtype instance MonadAsk AppState AppM
 derive newtype instance MonadReader AppState AppM
 derive newtype instance MonadThrow Error AppM
+derive newtype instance MonadLogger AppM
 
-runApp :: forall a. AppState -> AppM a -> Aff a
-runApp s = flip runReaderT s <<< unwrap
+type AppLogger = Message -> ReaderT AppState Aff Unit
 
-runAppEff :: forall a. AppState -> AppM a -> Effect Unit
-runAppEff s = void <<< launchAff <<< flip runReaderT s <<< unwrap
+appLoggerDefault :: AppLogger
+appLoggerDefault message = do
+  appLogLevel <- ask <#> _.logLevel <<< unwrap <<< _.config
+  when (message.level >= appLogLevel) do
+    messageFormatted <- prettyFormatter message
+    liftEffect $ log messageFormatted
+
+runApp :: forall a. AppState -> AppLogger -> AppM a -> Aff a
+runApp appState logger =
+  flip runReaderT appState
+    <<< flip runLoggerT logger
+    <<< unwrap
+
+runAppEff :: forall a. AppState -> AppLogger -> AppM a -> Effect Unit
+runAppEff appState logger =
+  void
+    <<< launchAff
+    <<< runApp appState logger
+
+getAppRunner :: AppM (forall a. AppM a -> Aff a)
+getAppRunner =
+  wrap $
+    LoggerT \logger ->
+      ask <#> \appState ->
+        runApp appState logger
+
+getAppEffRunner :: AppM (forall a. AppM a -> Effect Unit)
+getAppEffRunner =
+  wrap $
+    LoggerT \logger ->
+      ask <#> \appState ->
+        runAppEff appState logger
 
 runContract :: forall m a. AppBase m => Contract a -> m a
 runContract contract = do
@@ -178,14 +214,14 @@ initApp config = do
     }
 
 mkContractParams :: AppConfig -> ContractParams
-mkContractParams config =
-  { backendParams: (unwrap config).queryBackend
+mkContractParams (AppConfig appConfig) =
+  { backendParams: appConfig.queryBackend
   , networkId:
-      case (unwrap config).network of
+      case appConfig.network of
         Testnet _ -> TestnetId
         Mainnet -> MainnetId
-  , logLevel: Trace
-  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile (unwrap config).walletSk) Nothing
+  , logLevel: appConfig.logLevel
+  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile appConfig.walletSk) Nothing
   , customLogger: Nothing
   , suppressLogs: true
   , hooks: emptyHooks

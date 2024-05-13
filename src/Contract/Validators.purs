@@ -22,6 +22,7 @@ import HydraAuctionOffchain.Contract.Validators.AuctionValidators
       , MkBidderDepositValidatorError
       )
   , mkAuctionValidators
+  , mkAuctionValidatorsErrorCodec
   ) as ExportAuctionValidators
 
 import HydraAuctionOffchain.Contract.Validators.BidderDeposit
