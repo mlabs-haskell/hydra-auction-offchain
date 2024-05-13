@@ -149,7 +149,6 @@ data MoveBidContractError
   | MoveBid_Error_MoveBidRequestServiceError ServiceError
 
 derive instance Generic MoveBidContractError _
-derive instance Eq MoveBidContractError
 
 instance Show MoveBidContractError where
   show = genericShow

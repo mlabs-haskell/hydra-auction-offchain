@@ -185,7 +185,6 @@ data SendBidContractError
   | SendBid_Error_PlaceBidRequestServiceError ServiceError
 
 derive instance Generic SendBidContractError _
-derive instance Eq SendBidContractError
 
 instance Show SendBidContractError where
   show = genericShow
