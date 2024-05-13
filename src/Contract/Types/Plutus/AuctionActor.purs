@@ -16,14 +16,14 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo (AuctionInfo)
+import HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo (AuctionInfoExtended)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------
 -- AuctionActor
 
 newtype AuctionActor = AuctionActor
-  { auctionInfo :: AuctionInfo
+  { auctionInfo :: AuctionInfoExtended
   , role :: ActorRole
   }
 
@@ -35,7 +35,7 @@ instance Show AuctionActor where
   show = genericShow
 
 type AuctionActorSchema =
-  ("auctionInfo" :~: AuctionInfo)
+  ("auctionInfo" :~: AuctionInfoExtended)
     :$: ("role" :~: ActorRole)
     :$: Nil
 

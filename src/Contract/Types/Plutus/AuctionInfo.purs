@@ -1,5 +1,8 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
   ( AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
+  , AuctionInfoExtendedRec
+  , AuctionInfoRec
   , AuctionInfoValidationError
       ( AuctionEscrowAddressMismatchError
       , BidderDepositAddressMismatchError
@@ -7,6 +10,8 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
       , StandingBidAddressMismatchError
       )
   , auctionInfoCodec
+  , auctionInfoExtendedCodec
+  , mkAuctionInfoExtended
   , validateAuctionInfo
   ) where
 
@@ -17,8 +22,10 @@ import Contract.Address (Address, scriptHashAddress)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Scripts (Validator, validatorHash)
+import Contract.Transaction (TransactionInput)
 import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
@@ -27,7 +34,7 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V)
-import HydraAuctionOffchain.Codec (class HasJson, addressCodec, currencySymbolCodec)
+import HydraAuctionOffchain.Codec (class HasJson, addressCodec, currencySymbolCodec, orefCodec)
 import HydraAuctionOffchain.Config (config)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms
@@ -35,16 +42,23 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (AuctionValidators)
 import HydraAuctionOffchain.Helpers (errV)
+import Record (merge) as Record
 import Type.Proxy (Proxy(Proxy))
 
-newtype AuctionInfo = AuctionInfo
-  { auctionId :: CurrencySymbol
+----------------------------------------------------------------------
+-- AuctionInfo
+
+type AuctionInfoRec (r :: Row Type) =
+  ( auctionId :: CurrencySymbol
   , auctionTerms :: AuctionTerms
   , auctionEscrowAddr :: Address
   , bidderDepositAddr :: Address
   , feeEscrowAddr :: Address
   , standingBidAddr :: Address
-  }
+  | r
+  )
+
+newtype AuctionInfo = AuctionInfo (Record (AuctionInfoRec ()))
 
 derive instance Generic AuctionInfo _
 derive instance Newtype AuctionInfo _
@@ -88,9 +102,68 @@ auctionInfoCodec =
     , standingBidAddr: addressCodec config.network
     }
 
---------------------------------------------------------------------------------
+----------------------------------------------------------------------
+-- AuctionInfoExtended
+
+type AuctionInfoExtendedRec = AuctionInfoRec
+  ( metadataOref :: Maybe TransactionInput
+  )
+
+newtype AuctionInfoExtended = AuctionInfoExtended (Record AuctionInfoExtendedRec)
+
+derive instance Generic AuctionInfoExtended _
+derive instance Newtype AuctionInfoExtended _
+derive instance Eq AuctionInfoExtended
+
+instance Show AuctionInfoExtended where
+  show = genericShow
+
+type AuctionInfoExtendedSchema =
+  ("auctionId" :~: CurrencySymbol)
+    :$: ("auctionTerms" :~: AuctionTerms)
+    :$: ("auctionEscrowAddr" :~: Address)
+    :$: ("bidderDepositAddr" :~: Address)
+    :$: ("feeEscrowAddr" :~: Address)
+    :$: ("standingBidAddr" :~: Address)
+    :$: ("metadataOref" :~: Maybe TransactionInput)
+    :$: Nil
+
+auctionInfoExtendedSchema :: Proxy AuctionInfoExtendedSchema
+auctionInfoExtendedSchema = Proxy
+
+instance ToData AuctionInfoExtended where
+  toData (AuctionInfoExtended rec) =
+    Constr BigNum.zero $ toDataRec auctionInfoExtendedSchema rec
+
+instance FromData AuctionInfoExtended where
+  fromData (Constr n pd)
+    | n == BigNum.zero && recLength (Proxy :: Proxy AuctionInfoExtended) == length pd =
+        wrap <$> fromDataRec auctionInfoExtendedSchema pd
+  fromData _ = Nothing
+
+instance HasJson AuctionInfoExtended where
+  jsonCodec = const auctionInfoExtendedCodec
+
+auctionInfoExtendedCodec :: CA.JsonCodec AuctionInfoExtended
+auctionInfoExtendedCodec =
+  wrapIso AuctionInfoExtended $ CA.object "AuctionInfoExtended" $ CAR.record
+    { auctionId: currencySymbolCodec
+    , auctionTerms: auctionTermsCodec
+    , auctionEscrowAddr: addressCodec config.network
+    , bidderDepositAddr: addressCodec config.network
+    , feeEscrowAddr: addressCodec config.network
+    , standingBidAddr: addressCodec config.network
+    , metadataOref: CA.maybe orefCodec
+    }
+
+mkAuctionInfoExtended :: AuctionInfo -> Maybe TransactionInput -> AuctionInfoExtended
+mkAuctionInfoExtended auctionInfo metadataOref =
+  wrap $ Record.merge (unwrap auctionInfo)
+    { metadataOref
+    }
+
+----------------------------------------------------------------------
 -- Validation
---------------------------------------------------------------------------------
 
 data AuctionInfoValidationError
   = AuctionEscrowAddressMismatchError
@@ -105,17 +178,18 @@ instance Show AuctionInfoValidationError where
   show = genericShow
 
 validateAuctionInfo
-  :: AuctionInfo
+  :: forall (r :: Row Type)
+   . Record (AuctionInfoRec r)
   -> AuctionValidators Validator
   -> V (Array AuctionInfoValidationError) Unit
-validateAuctionInfo (AuctionInfo rec) validators = fold
-  [ (rec.auctionEscrowAddr == validatorAddresses.auctionEscrow)
+validateAuctionInfo auctionInfo validators = fold
+  [ (auctionInfo.auctionEscrowAddr == validatorAddresses.auctionEscrow)
       `errV` AuctionEscrowAddressMismatchError
-  , (rec.bidderDepositAddr == validatorAddresses.bidderDeposit)
+  , (auctionInfo.bidderDepositAddr == validatorAddresses.bidderDeposit)
       `errV` BidderDepositAddressMismatchError
-  , (rec.feeEscrowAddr == validatorAddresses.feeEscrow)
+  , (auctionInfo.feeEscrowAddr == validatorAddresses.feeEscrow)
       `errV` FeeEscrowAddressMismatchError
-  , (rec.standingBidAddr == validatorAddresses.standingBid)
+  , (auctionInfo.standingBidAddr == validatorAddresses.standingBid)
       `errV` StandingBidAddressMismatchError
   ]
   where

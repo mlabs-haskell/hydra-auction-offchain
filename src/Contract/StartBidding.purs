@@ -50,21 +50,19 @@ import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , standingBidTokenName
   )
-import HydraAuctionOffchain.Contract.QueryUtxo
-  ( queryAuctionEscrowUtxo
-  )
+import HydraAuctionOffchain.Contract.QueryUtxo (queryAuctionEscrowUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionEscrowRedeemer(StartBiddingRedeemer)
   , AuctionEscrowState(AuctionAnnounced, BiddingStarted)
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
   , AuctionInfoValidationError
   , AuctionTerms(AuctionTerms)
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult
   , StandingBidState(StandingBidState)
-  , auctionInfoCodec
+  , auctionInfoExtendedCodec
   , emptySubmitTxData
   , mkContractOutput
   , submitTxReturningContractResult
@@ -75,7 +73,7 @@ import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuc
 import Partial.Unsafe (unsafePartial)
 
 newtype StartBiddingContractParams = StartBiddingContractParams
-  { auctionInfo :: AuctionInfo
+  { auctionInfo :: AuctionInfoExtended
   }
 
 derive instance Generic StartBiddingContractParams _
@@ -92,7 +90,7 @@ startBiddingContractParamsCodec :: CA.JsonCodec StartBiddingContractParams
 startBiddingContractParamsCodec =
   wrapIso StartBiddingContractParams $ CA.object "StartBiddingContractParams" $
     CAR.record
-      { auctionInfo: auctionInfoCodec
+      { auctionInfo: auctionInfoExtendedCodec
       }
 
 startBiddingContract
@@ -106,7 +104,7 @@ mkStartBiddingContractWithErrors
   -> ExceptT StartBiddingContractError Contract ContractResult
 mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
   let
-    auctionInfo@(AuctionInfo auctionInfoRec) = params.auctionInfo
+    (AuctionInfoExtended auctionInfoRec) = params.auctionInfo
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
 
@@ -132,11 +130,11 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
       mkAuctionValidators auctionCs auctionTerms
 
   -- Check auction info:
-  validateAuctionInfo auctionInfo validators #
+  validateAuctionInfo auctionInfoRec validators #
     validation (throwError <<< StartBidding_Error_InvalidAuctionInfo) pure
 
   -- Query current auction escrow utxo:
-  auctionEscrowUtxo <- queryAuctionEscrowUtxo AuctionAnnounced auctionInfo
+  auctionEscrowUtxo <- queryAuctionEscrowUtxo AuctionAnnounced auctionInfoRec
     !? StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
 
   let

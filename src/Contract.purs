@@ -49,6 +49,8 @@ import HydraAuctionOffchain.Contract.ClaimAuctionLotBidder
       , ClaimAuctionLotBidder_Error_CurrentTimeAfterPurchaseDeadline
       , ClaimAuctionLotBidder_Error_CouldNotBuildAuctionValidators
       , ClaimAuctionLotBidder_Error_InvalidAuctionInfo
+      , ClaimAuctionLotBidder_Error_MissingMetadataOref
+      , ClaimAuctionLotBidder_Error_CouldNotQueryAuctionMetadataUtxo
       , ClaimAuctionLotBidder_Error_CouldNotFindAuctionEscrowUtxo
       , ClaimAuctionLotBidder_Error_CouldNotFindStandingBidUtxo
       , ClaimAuctionLotBidder_Error_EmptyStandingBid
@@ -65,6 +67,8 @@ import HydraAuctionOffchain.Contract.ClaimAuctionLotSeller
       , ClaimAuctionLotSeller_Error_CurrentTimeBeforePurchaseDeadline
       , ClaimAuctionLotSeller_Error_CouldNotBuildAuctionValidators
       , ClaimAuctionLotSeller_Error_InvalidAuctionInfo
+      , ClaimAuctionLotSeller_Error_MissingMetadataOref
+      , ClaimAuctionLotSeller_Error_CouldNotQueryAuctionMetadataUtxo
       , ClaimAuctionLotSeller_Error_CouldNotFindAuctionEscrowUtxo
       , ClaimAuctionLotSeller_Error_CouldNotFindStandingBidUtxo
       , ClaimAuctionLotSeller_Error_CouldNotFindBidderDepositUtxo
@@ -115,6 +119,8 @@ import HydraAuctionOffchain.Contract.PlaceBid
       , PlaceBid_Error_CouldNotGetOwnPubKeyHash
       , PlaceBid_Error_CouldNotSignBidderMessage
       , PlaceBid_Error_InvalidBidStateTransition
+      , PlaceBid_Error_MissingMetadataOref
+      , PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
       )
   , PlaceBidContractParams(PlaceBidContractParams)
   , placeBidContract

@@ -21,7 +21,7 @@ import Data.Array (find) as Array
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
-  , AuctionInfo(AuctionInfo)
+  , AuctionInfoExtended(AuctionInfoExtended)
   , AuctionTerms(AuctionTerms)
   , ContractOutput
   , StandingBidState
@@ -29,16 +29,16 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum, getTxOutsAt)
 
-queryStandingBidState :: AuctionInfo -> Contract (ContractOutput StandingBidState)
+queryStandingBidState :: AuctionInfoExtended -> Contract (ContractOutput StandingBidState)
 queryStandingBidState =
   mkContractOutput identity <<< queryStandingBidStateWithErrors
 
 queryStandingBidStateWithErrors
-  :: AuctionInfo
+  :: AuctionInfoExtended
   -> ExceptT QueryStandingBidStateError Contract StandingBidState
 queryStandingBidStateWithErrors auctionInfo = do
   let
-    AuctionInfo auctionInfoRec = auctionInfo
+    AuctionInfoExtended auctionInfoRec = auctionInfo
     auctionCs = auctionInfoRec.auctionId
     AuctionTerms auctionTermsRec = auctionInfoRec.auctionTerms
 

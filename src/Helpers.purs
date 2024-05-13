@@ -5,6 +5,8 @@ module HydraAuctionOffchain.Helpers
   , getTxOutsAt
   , liftEitherShow
   , tokenNameFromAsciiUnsafe
+  , withEmptyPlutusV2Script
+  , withoutRefScript
   , (!*)
   ) where
 
@@ -13,7 +15,13 @@ import Prelude
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, Datum(Datum), OutputDatum(OutputDatum), fromData)
 import Contract.Prim.ByteArray (byteArrayFromAscii)
-import Contract.Transaction (TransactionOutput)
+import Contract.Scripts (PlutusScript(PlutusScript))
+import Contract.Transaction
+  ( Language(PlutusV2)
+  , ScriptRef(PlutusScriptRef)
+  , TransactionOutput
+  , TransactionOutputWithRefScript
+  )
 import Contract.Utxos (utxosAt)
 import Contract.Value (TokenName, mkTokenName)
 import Control.Error.Util (hush, (!?))
@@ -23,9 +31,10 @@ import Ctl.Internal.Plutus.Types.Address (class PlutusAddress)
 import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Map (toUnfoldable) as Map
-import Data.Maybe (Maybe(Nothing), fromJust)
-import Data.Newtype (unwrap)
+import Data.Maybe (Maybe(Just, Nothing), fromJust)
+import Data.Newtype (unwrap, wrap)
 import Data.Tuple (snd)
+import Data.Tuple.Nested ((/\))
 import Data.Validation.Semigroup (V, invalid)
 import Effect.Exception (Error, error)
 import Partial.Unsafe (unsafePartial)
@@ -55,3 +64,19 @@ getTxOutsAt :: forall addr. PlutusAddress addr => addr -> Contract (Array Transa
 getTxOutsAt =
   map (map (_.output <<< unwrap <<< snd) <<< Map.toUnfoldable)
     <<< utxosAt
+
+withoutRefScript :: TransactionOutput -> TransactionOutputWithRefScript
+withoutRefScript output = wrap
+  { output
+  , scriptRef: Nothing
+  }
+
+withEmptyPlutusV2Script :: TransactionOutput -> TransactionOutputWithRefScript
+withEmptyPlutusV2Script output = wrap
+  { output
+  , scriptRef: Just scriptRefEmpty
+  }
+  where
+  scriptRefEmpty :: ScriptRef
+  scriptRefEmpty =
+    PlutusScriptRef $ PlutusScript (mempty /\ PlutusV2)
