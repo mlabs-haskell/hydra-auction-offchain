@@ -11100,16 +11100,16 @@
         "nixpkgs-latest": "nixpkgs-latest_2"
       },
       "locked": {
-        "lastModified": 1709920803,
-        "narHash": "sha256-oxKAw+XFNlRX7D3WBMFgJFu02+01V2NXDZoJQQFPgIU=",
+        "lastModified": 1715614580,
+        "narHash": "sha256-FP4xVn2NurSAdJuW1Nl8Pn3CvucJHGuFKpWz+bxf2tw=",
         "owner": "mlabs-haskell",
         "repo": "hydra-auction-onchain",
-        "rev": "ed8edaef1838053b2d90b35ba5ae591a36764c7e",
+        "rev": "235a3f4cfb46e046c41b00dc3fa4dcd3d79de101",
         "type": "github"
       },
       "original": {
         "owner": "mlabs-haskell",
-        "ref": "dshuiski/standing-bid-validator",
+        "ref": "dshuiski/standing-bid-validator2",
         "repo": "hydra-auction-onchain",
         "type": "github"
       }
