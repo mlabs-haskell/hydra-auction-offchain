@@ -16,7 +16,8 @@ import Data.Show.Generic (genericShow)
 import Data.Variant (inj, match) as Variant
 import HydraAuctionOffchain.Codec (class HasJson, jsonCodec)
 import HydraAuctionOffchain.Contract.Types.ContractError
-  ( class ToContractError
+  ( class GenericConstrIndex
+  , class ToContractError
   , ContractError
   , contractErrorCodec
   , toContractError
@@ -55,8 +56,10 @@ contractOutputCodec contractResultCodec =
     }
 
 mkContractOutput
-  :: forall (e :: Type) (m :: Type -> Type) (a :: Type) (b :: Type)
+  :: forall e rep m a b
    . ToContractError e
+  => Generic e rep
+  => GenericConstrIndex rep
   => Functor m
   => (a -> b)
   -> ExceptT e m a

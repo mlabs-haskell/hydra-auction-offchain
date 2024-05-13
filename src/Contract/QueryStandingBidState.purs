@@ -74,12 +74,10 @@ instance Show QueryStandingBidStateError where
   show = genericShow
 
 instance ToContractError QueryStandingBidStateError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "QueryStandingBidState"
+  errorMessage = case _ of
     QueryBidState_Error_CurrentTimeBeforeBiddingStart ->
-      { errorCode: "QueryStandingBidState01"
-      , message: "Standing bid cannot be queried before bidding start time."
-      }
+      "Standing bid cannot be queried before bidding start time."
+
     QueryBidState_Error_CouldNotFindStandingBidUtxo ->
-      { errorCode: "QueryStandingBidState02"
-      , message: "Could not find standing bid utxo."
-      }
+      "Could not find standing bid utxo."

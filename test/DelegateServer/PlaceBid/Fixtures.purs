@@ -170,6 +170,7 @@ auctionInfoFixture biddingStart = do
     auctionInfo = wrap
       { auctionId: auctionCsFixture
       , auctionTerms
+      , delegateInfo: Nothing
       , auctionEscrowAddr: validatorAddresses.auctionEscrow
       , bidderDepositAddr: validatorAddresses.bidderDeposit
       , feeEscrowAddr: validatorAddresses.feeEscrow

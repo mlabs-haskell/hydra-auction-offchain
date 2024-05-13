@@ -11,7 +11,6 @@ module Test.Helpers
   , mkVerificationKeyUnsafe
   , mkdirIfNotExists
   , publicPaymentKeyToFile
-  , randomElem
   , untilM
   , waitUntil
   ) where
@@ -34,22 +33,19 @@ import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
 import Ctl.Internal.Serialization.Address (addressFromBech32)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Ctl.Internal.Serialization.Keys (bytesFromPublicKey)
-import Data.Array (cons, drop, take, unsafeIndex)
-import Data.Foldable (length)
+import Data.Array (cons, drop, take)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Aff (delay)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
-import Effect.Random (randomInt)
 import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyFromBytes)
 import HydraAuctionOffchain.Helpers (fromJustWithErr, waitSeconds)
 import JS.BigInt (fromInt, toNumber) as BigInt
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (exists, mkdir, writeTextFile) as FSSync
 import Node.Path (FilePath)
-import Partial.Unsafe (unsafePartial)
 
 defDistribution :: InitialUTxOs
 defDistribution =
@@ -101,11 +97,6 @@ untilM p action =
     res <- action <#> bool Nothing (Just unit) <<< p
     waitSeconds one
     pure res
-
-randomElem :: forall m a. MonadEffect m => Array a -> m a
-randomElem xs =
-  liftEffect $ unsafePartial $
-    unsafeIndex xs <$> randomInt zero (length xs - one)
 
 chunksOf2 :: forall a. Array a -> Maybe (Array (a /\ a))
 chunksOf2 xs =

@@ -212,24 +212,19 @@ instance Show EnterAuctionContractError where
   show = genericShow
 
 instance ToContractError EnterAuctionContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "EnterAuction"
+  errorMessage = case _ of
     EnterAuction_Error_InvalidAuctionTerms errors ->
-      { errorCode: "EnterAuction01"
-      , message: "Invalid auction terms, errors: " <> show errors <> "."
-      }
+      "Invalid auction terms, errors: " <> show errors <> "."
+
     EnterAuction_Error_CurrentTimeAfterBiddingEnd ->
-      { errorCode: "EnterAuction02"
-      , message: "Tx cannot be submitted after bidding end time."
-      }
+      "Tx cannot be submitted after bidding end time."
+
     EnterAuction_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "EnterAuction03"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
+      "Could not build auction validators, error: " <> show err <> "."
+
     EnterAuction_Error_InvalidAuctionInfo errors ->
-      { errorCode: "EnterAuction04"
-      , message: "Invalid auction info, errors: " <> show errors <> "."
-      }
+      "Invalid auction info, errors: " <> show errors <> "."
+
     EnterAuction_Error_CouldNotGetOwnPubKey err ->
-      { errorCode: "EnterAuction05"
-      , message: "Could not get own public key, error: " <> show err <> "."
-      }
+      "Could not get own public key, error: " <> show err <> "."

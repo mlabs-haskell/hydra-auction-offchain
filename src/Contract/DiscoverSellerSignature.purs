@@ -117,12 +117,10 @@ instance Show DiscoverSellerSigContractError where
   show = genericShow
 
 instance ToContractError DiscoverSellerSigContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "DiscoverSellerSignature"
+  errorMessage = case _ of
     DiscoverSellerSig_Error_CouldNotGetSellerPubKeyHash ->
-      { errorCode: "DiscoverSellerSignature01"
-      , message: "Could not get seller pub key hash from address."
-      }
+      "Could not get seller pub key hash from address."
+
     DiscoverSellerSig_Error_CouldNotGetBidderPubKey err ->
-      { errorCode: "DiscoverSellerSignature02"
-      , message: "Could not get bidder pub key, error: " <> show err <> "."
-      }
+      "Could not get bidder pub key, error: " <> show err <> "."

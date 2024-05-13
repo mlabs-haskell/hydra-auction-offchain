@@ -57,6 +57,7 @@ import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
 import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
 import Data.Array (head) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
@@ -82,9 +83,11 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionTermsValidationError
   , ContractOutput
   , ContractResult'
+  , DelegateInfo
   , assetToValue
   , auctionInfoExtendedCodec
   , auctionTermsInputCodec
+  , delegateInfoCodec
   , emptySubmitTxData
   , mkAuctionInfoExtended
   , mkAuctionTerms
@@ -104,6 +107,7 @@ import Record (merge) as Record
 
 newtype AnnounceAuctionContractParams = AnnounceAuctionContractParams
   { auctionTerms :: AuctionTermsInput
+  , delegateInfo :: Maybe DelegateInfo
   -- Allows the user to provide additional utxos to cover auction lot Value. This can be useful
   -- if some portion of the Value is, for example, locked at a multi-signature address.
   , additionalAuctionLotOrefs :: Array TransactionInput
@@ -124,6 +128,7 @@ announceAuctionContractParamsCodec =
   wrapIso AnnounceAuctionContractParams $ CA.object "AnnounceAuctionContractParams" $
     CAR.record
       { auctionTerms: auctionTermsInputCodec
+      , delegateInfo: CA.maybe delegateInfoCodec
       , additionalAuctionLotOrefs: CA.array orefCodec
       }
 
@@ -248,6 +253,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     auctionInfo = wrap
       { auctionId: auctionCs
       , auctionTerms
+      , delegateInfo: params.delegateInfo
       , auctionEscrowAddr: validatorAddresses.auctionEscrow
       , bidderDepositAddr: validatorAddresses.bidderDeposit
       , feeEscrowAddr: validatorAddresses.feeEscrow
@@ -372,37 +378,28 @@ instance Show AnnounceAuctionContractError where
   show = genericShow
 
 instance ToContractError AnnounceAuctionContractError where
-  toContractError = wrap <<< case _ of
+  errorCodePrefix = const "AnnounceAuction"
+  errorMessage = case _ of
     AnnounceAuction_Error_InvalidAuctionTerms validationErrors ->
-      { errorCode: "AnnounceAuction01"
-      , message: "Invalid auction terms, errors: " <> show validationErrors <> "."
-      }
-    AnnounceAuction_Error_CouldNotGetWalletUtxos ->
-      { errorCode: "AnnounceAuction02"
-      , message: "Could not get wallet utxos."
-      }
-    AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos ->
-      { errorCode: "AnnounceAuction03"
-      , message: "Could not resolve provided action lot output references."
-      }
-    AnnounceAuction_Error_CouldNotCoverAuctionLot ->
-      { errorCode: "AnnounceAuction04"
-      , message: "Could not cover auction lot Value."
-      }
-    AnnounceAuction_Error_EmptyAuctionLotUtxoMap ->
-      { errorCode: "AnnounceAuction05"
-      , message: "Impossible: Auction lot utxo map cannot be empty."
-      }
-    AnnounceAuction_Error_CurrentTimeAfterBiddingStart ->
-      { errorCode: "AnnounceAuction06"
-      , message: "Tx cannot be submitted after bidding start time."
-      }
-    AnnounceAuction_Error_CouldNotBuildAuctionValidators err ->
-      { errorCode: "AnnounceAuction07"
-      , message: "Could not build auction validators, error: " <> show err <> "."
-      }
-    AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
-      { errorCode: "AnnounceAuction08"
-      , message: "Could not get own public key, error: " <> show err <> "."
-      }
+      "Invalid auction terms, errors: " <> show validationErrors <> "."
 
+    AnnounceAuction_Error_CouldNotGetWalletUtxos ->
+      "Could not get wallet utxos."
+
+    AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos ->
+      "Could not resolve provided action lot output references."
+
+    AnnounceAuction_Error_CouldNotCoverAuctionLot ->
+      "Could not cover auction lot Value."
+
+    AnnounceAuction_Error_EmptyAuctionLotUtxoMap ->
+      "Impossible: Auction lot utxo map cannot be empty."
+
+    AnnounceAuction_Error_CurrentTimeAfterBiddingStart ->
+      "Tx cannot be submitted after bidding start time."
+
+    AnnounceAuction_Error_CouldNotBuildAuctionValidators err ->
+      "Could not build auction validators, error: " <> show err <> "."
+
+    AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
+      "Could not get own public key, error: " <> show err <> "."

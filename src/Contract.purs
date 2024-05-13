@@ -7,9 +7,11 @@ module HydraAuctionOffchain.Contract
   , module ExportDiscoverSellerSignature
   , module ExportEnterAuction
   , module ExportMintTokens
+  , module ExportMoveBid
   , module ExportPlaceBid
   , module ExportQueryAuctions
   , module ExportQueryStandingBidState
+  , module ExportSendBid
   , module ExportStartBidding
   ) where
 
@@ -110,6 +112,19 @@ import HydraAuctionOffchain.Contract.MintTokens
   ( mintTokenUsingAlwaysMints
   ) as ExportMintTokens
 
+import HydraAuctionOffchain.Contract.MoveBid
+  ( MoveBidContractError
+      ( MoveBid_Error_InvalidAuctionTerms
+      , MoveBid_Error_InvalidDelegateInfo
+      , MoveBid_Error_CurrentTimeBeforeBiddingStart
+      , MoveBid_Error_CurrentTimeAfterBiddingEnd
+      , MoveBid_Error_MoveBidRequestServiceError
+      )
+  , MoveBidContractParams(MoveBidContractParams)
+  , moveBidContract
+  , mkMoveBidContractWithErrors
+  ) as ExportMoveBid
+
 import HydraAuctionOffchain.Contract.PlaceBid
   ( PlaceBidContractError
       ( PlaceBid_Error_InvalidAuctionTerms
@@ -128,6 +143,21 @@ import HydraAuctionOffchain.Contract.PlaceBid
   , mkPlaceBidContractWithErrors
   , placeBidContract
   ) as ExportPlaceBid
+
+import HydraAuctionOffchain.Contract.SendBid
+  ( SendBidContractError
+      ( SendBid_Error_InvalidAuctionTerms
+      , SendBid_Error_InvalidDelegateInfo
+      , SendBid_Error_CurrentTimeBeforeBiddingStart
+      , SendBid_Error_CurrentTimeAfterBiddingEnd
+      , SendBid_Error_CouldNotGetOwnPubKeyHash
+      , SendBid_Error_CouldNotSignBidderMessage
+      , SendBid_Error_PlaceBidRequestServiceError
+      )
+  , SendBidContractParams(SendBidContractParams)
+  , sendBidContract
+  , mkSendBidContractWithErrors
+  ) as ExportSendBid
 
 import HydraAuctionOffchain.Contract.QueryAuctions
   ( queryAuctions

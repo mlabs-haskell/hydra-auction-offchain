@@ -43,11 +43,11 @@ import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Transaction (reSignTransaction)
 import DelegateServer.Lib.Wallet (withWallet)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
-import DelegateServer.Types.ServiceError (ServiceError)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types (StandingBidState)
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
 import HydraAuctionOffchain.Lib.Json (printJson)
+import HydraAuctionOffchain.Service.Common (ServiceError)
 import Type.Proxy (Proxy(Proxy))
 
 data CommitStandingBidError
