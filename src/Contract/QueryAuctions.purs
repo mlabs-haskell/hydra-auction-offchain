@@ -16,9 +16,7 @@ import Contract.Value (valueOf) as Value
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
 import Control.Monad.Trans.Class (lift)
-import Ctl.Internal.Plutus.Types.Transaction (_output)
 import Data.Array (mapMaybe) as Array
-import Data.Lens ((^.))
 import Data.Map (toUnfoldable) as Map
 import Data.Newtype (modify)
 import Data.Validation.Semigroup (isValid) as V
@@ -63,7 +61,7 @@ queryAuctions filters =
         Nothing
     where
     txOut :: TransactionOutput
-    txOut = txOutWithRefScript ^. _output
+    txOut = (unwrap txOutWithRefScript).output
 
     validAuctionTerms :: AuctionTerms -> Boolean
     validAuctionTerms auctionTerms =
@@ -105,7 +103,7 @@ queryOwnAuctions actorRole =
                 )
     where
     txOut :: TransactionOutput
-    txOut = txOutWithRefScript ^. _output
+    txOut = (unwrap txOutWithRefScript).output
 
     authTokenPresent :: Boolean
     authTokenPresent =
