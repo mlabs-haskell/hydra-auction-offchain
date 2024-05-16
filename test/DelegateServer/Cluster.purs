@@ -27,7 +27,7 @@ import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty (fromArray, head, toArray) as NEArray
 import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
-import Data.Log.Level (LogLevel(Info))
+import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Maybe (Maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.TraversableWithIndex (traverseWithIndex)
@@ -288,6 +288,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
       , hydraScriptsTxHash
       , hydraContestPeriod: 5
       , logLevel: Info
+      , ctlLogLevel: Warn
       }
 
   createWorkdirsStoreKeys :: Aff (NonEmptyArray (Int /\ FilePath))

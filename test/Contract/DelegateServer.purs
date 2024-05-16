@@ -92,9 +92,8 @@ suite =
           withDelegateServerCluster auctionInfo \appHandle -> do
             let biddingStart = (unwrap (unwrap auctionInfo).auctionTerms).biddingStart
             waitUntil biddingStart
-            waitSeconds 5
-            appHandle.getHeadStatus
-              `shouldReturn` HeadStatus_Initializing
+            untilM (eq HeadStatus_Initializing)
+              appHandle.getHeadStatus
 
     test "delegates close head at bidding end time" do
       placeL2Bids (validBids { maxNumBids: 2 }) shortBiddingPeriod \rec -> do
