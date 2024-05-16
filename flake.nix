@@ -13,7 +13,7 @@
     nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
     nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/delegate-info";
-    hydra.url = "github:input-output-hk/hydra/master";
+    hydra.url = "github:input-output-hk/hydra/validate-tx-metadata";
   };
 
   outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; } ({ self, ... }: {

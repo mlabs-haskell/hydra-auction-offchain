@@ -93,8 +93,8 @@ buildCommitTx commitRequest = do
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
   draftCommitTx <- ExceptT $ liftAff $ commit serverConfig commitRequest
   runContractLift do
-    -- FIXME: auxiliary data hash set by hydra-node seems to be
-    -- invalid, so we recompute it here
+    -- NOTE: recompute auxiliary data hash, because auxiliary data
+    -- CBOR may be altered after re-serialization
     commitTx <- wrap <$> setAuxDataHash draftCommitTx.cborHex
     signedTx <-
       (withWallet cardanoSk <<< signTransaction)
