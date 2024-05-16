@@ -30,7 +30,7 @@ import Data.Codec.Argonaut (JsonCodec, array, int, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
-import Data.Log.Level (LogLevel(Info))
+import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Map (singleton) as Map
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (modify, unwrap, wrap)
@@ -299,6 +299,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
       , hydraScriptsTxHash
       , hydraContestPeriod: 5
       , logLevel: Info
+      , ctlLogLevel: Warn
       }
 
   createWorkdirsStoreKeys :: Aff (NonEmptyArray (Int /\ FilePath))

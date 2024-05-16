@@ -23,7 +23,7 @@ import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right), either, note)
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
-import Data.Log.Level (LogLevel(Info))
+import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (dimap, wrapIso)
@@ -75,6 +75,7 @@ newtype AppConfig' (backend :: Type) = AppConfig
   , hydraScriptsTxHash :: String
   , hydraContestPeriod :: Int
   , logLevel :: LogLevel
+  , ctlLogLevel :: LogLevel
   }
 
 derive instance Newtype (AppConfig' a) _
@@ -102,6 +103,7 @@ appConfigCodec =
     , hydraScriptsTxHash: CA.string
     , hydraContestPeriod: CA.int
     , logLevel: logLevelCodec
+    , ctlLogLevel: logLevelCodec
     }
 
 execAppConfigParser :: Optparse.ParserInfo Options -> Effect AppConfig
@@ -249,6 +251,11 @@ configParser = ado
     , Optparse.metavar "LOGLEVEL"
     , Optparse.value Info
     ]
+  ctlLogLevel <- Optparse.option parseLogLevel $ fold
+    [ Optparse.long "ctl-log-level"
+    , Optparse.metavar "LOGLEVEL"
+    , Optparse.value Warn
+    ]
   in
     wrap
       { auctionMetadataOref
@@ -268,6 +275,7 @@ configParser = ado
       , hydraScriptsTxHash
       , hydraContestPeriod
       , logLevel
+      , ctlLogLevel
       }
 
 queryBackendParser :: Optparse.Parser QueryBackendParams

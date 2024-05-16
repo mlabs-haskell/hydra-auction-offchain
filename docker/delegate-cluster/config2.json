@@ -27,6 +27,7 @@
     "hydraScriptsTxHash": "1f34e4ee2404a5e4fc8ef970b7b8717af34c1a5a22107b82cde79c5d11da93b9",
     "hydraContestPeriod": 60,
     "logLevel": "info",
+    "ctlLogLevel": "warn",
     "peers": [
         { 
             "hydraNode": "delegate-server-a:7000",

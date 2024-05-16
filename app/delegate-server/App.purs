@@ -228,7 +228,7 @@ mkContractParams (AppConfig appConfig) =
       case appConfig.network of
         Testnet _ -> TestnetId
         Mainnet -> MainnetId
-  , logLevel: appConfig.logLevel
+  , logLevel: appConfig.ctlLogLevel
   , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile appConfig.walletSk) Nothing
   , customLogger: Nothing
   , suppressLogs: true
