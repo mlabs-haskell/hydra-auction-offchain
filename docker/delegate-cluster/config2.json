@@ -1,5 +1,5 @@
 {
-    "auctionMetadataOref": "7c181d8cda75cf964efae7bccec6c8373256b03d1d066641cf0bff553de76c5d#0",
+    "auctionMetadataOref": "4ae36fd86f28c480c3616878e60fdd4a5e611d12ba24660c21e8a97fa81a6651#0",
     "serverPort": 7011,
     "wsServerPort": 7021,
     "hydraNodeId": "B",
@@ -24,14 +24,20 @@
         },
         "apiKey": null
     },
-    "hydraScriptsTxHash": "c21b70a719112f76d318abcfee95499a27556ef4a18b1c62bc38e4b9c07ae3a6",
+    "hydraScriptsTxHash": "1f34e4ee2404a5e4fc8ef970b7b8717af34c1a5a22107b82cde79c5d11da93b9",
     "hydraContestPeriod": 60,
     "logLevel": "info",
     "peers": [
         { 
             "hydraNode": "delegate-server-a:7000",
             "hydraVk": "keys/hydra.vk",
-            "cardanoVk": "keys/cardano.vk"
+            "cardanoVk": "keys/cardano.vk",
+            "httpServer": {
+              "port": 7010,
+              "host": "delegate-server-a",
+              "secure": false,
+              "path": null
+            }
         }
     ]
 }
