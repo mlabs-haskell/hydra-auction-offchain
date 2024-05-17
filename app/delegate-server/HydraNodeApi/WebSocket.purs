@@ -23,6 +23,7 @@ import DelegateServer.Config (AppConfig'(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Lib.AVar (modifyAVar_)
+import DelegateServer.Lib.Retry (retry)
 import DelegateServer.State
   ( class App
   , class AppBase
@@ -119,7 +120,20 @@ mkHydraNodeApiWebSocket wsServer onConnect = do
         , initHead: ws.send Out_Init
         , abortHead: ws.send Out_Abort
         , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ } <=< mkHydraTx
-        , closeHead: ws.send Out_Close
+        -- Close and Contest transactions may be silently dropped by cardano-node:
+        -- https://github.com/input-output-hk/hydra/blob/d12addeeec0a08d879b567556cb0686bef618936/docs/docs/getting-started/quickstart.md?plain=1#L196-L212
+        , closeHead:
+            runM $ retry
+              { actionName: "CloseHead"
+              , action: liftEffect $ ws.send Out_Close
+              , delaySec: 90
+              , maxRetries: top
+              , successPredicate: const
+                  ( readAppState (Proxy :: _ "headStatus") <#> \headStatus ->
+                      headStatus >= HeadStatus_Closed
+                  )
+              , failHandler: pure
+              }
         , challengeSnapshot: ws.send Out_Contest
         , fanout: ws.send Out_Fanout
         }
