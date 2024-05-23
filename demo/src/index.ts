@@ -9,6 +9,7 @@ import {
   discoverBidders,
   discoverSellerSignature,
   enterAuction,
+  getWalletVk,
   mintTokenUsingAlwaysMints,
   moveBidL2,
   placeBidL2,
@@ -98,9 +99,11 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
 
   // bidder: discoverSellerSignature
   const sellerAddress = auctionInfo.auctionTerms.sellerAddress;
+  const bidderVk = await getWalletVk(config);
   const sellerSignature = await discoverSellerSignature(config, {
     auctionCs,
-    sellerAddress
+    sellerAddress,
+    bidderVk: bidderVk.value
   });
   console.log("Seller signature:", sellerSignature);
 

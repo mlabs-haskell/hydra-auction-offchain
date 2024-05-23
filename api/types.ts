@@ -72,6 +72,7 @@ export type PlaceBidL2ContractParams = {
 export type DiscoverSellerSigContractParams = {
   auctionCs: CurrencySymbol;
   sellerAddress: Address;
+  bidderVk: VerificationKey | null;
 };
 
 // StartBidding ------------------------------------------------------

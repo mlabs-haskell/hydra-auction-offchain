@@ -18,6 +18,7 @@ import Contract.Prim.ByteArray
 import Data.Codec.Argonaut (JsonCodec, prismaticCodec) as CA
 import Data.Maybe (Maybe(Just, Nothing))
 import HydraAuctionOffchain.Codec (byteArrayCodec)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import Test.QuickCheck (class Arbitrary)
 import Test.QuickCheck.Gen (chooseInt, vectorOf)
 
@@ -30,6 +31,9 @@ derive newtype instance FromData VerificationKey
 
 instance Show VerificationKey where
   show (VerificationKey vkey) = "(VerificationKey " <> byteArrayToHex vkey <> ")"
+
+instance HasJson VerificationKey anyParams where
+  jsonCodec _ = const vkeyCodec
 
 instance Arbitrary VerificationKey where
   arbitrary =
