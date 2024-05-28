@@ -16,7 +16,9 @@ import Contract.Prelude
 import Affjax (Error, Response, defaultRequest) as Affjax
 import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
 import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
+import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.Value (CurrencySymbol)
 import Control.Monad.Except (ExceptT(ExceptT), throwError, withExceptT)
@@ -29,7 +31,7 @@ import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidResponseCodec)
-import HydraAuctionOffchain.Codec (class HasJson, currencySymbolCodec)
+import HydraAuctionOffchain.Codec (currencySymbolCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
@@ -44,6 +46,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   , validateDelegateInfo
   )
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import HydraAuctionOffchain.Service.Common
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
@@ -62,15 +65,15 @@ derive instance Eq MoveBidContractParams
 instance Show MoveBidContractParams where
   show = genericShow
 
-instance HasJson MoveBidContractParams where
-  jsonCodec = const moveBidContractParamsCodec
+instance HasJson MoveBidContractParams NetworkId where
+  jsonCodec network = const (moveBidContractParamsCodec network)
 
-moveBidContractParamsCodec :: CA.JsonCodec MoveBidContractParams
-moveBidContractParamsCodec =
+moveBidContractParamsCodec :: NetworkId -> CA.JsonCodec MoveBidContractParams
+moveBidContractParamsCodec network =
   wrapIso MoveBidContractParams $ CA.object "MoveBidContractParams" $
     CAR.record
       { auctionCs: currencySymbolCodec
-      , auctionTerms: auctionTermsCodec
+      , auctionTerms: auctionTermsCodec network
       , delegateInfo: delegateInfoCodec
       }
 
@@ -105,13 +108,14 @@ mkMoveBidContractWithErrors (MoveBidContractParams params) = do
 
   -- Send `moveBid` request to a randomly picked delegate:
   delegateHttpServer <- randomHttpServer delegateInfo
-  let moveBidRequest' = ExceptT $ liftAff $ moveBidRequest delegateHttpServer
+  network <- lift getNetworkId
+  let moveBidRequest' = ExceptT $ liftAff $ moveBidRequest network delegateHttpServer
   withExceptT MoveBid_Error_MoveBidRequestServiceError
     moveBidRequest'
 
-moveBidRequest :: String -> Aff (Either ServiceError MoveBidResponse)
-moveBidRequest httpServer = do
-  handleResponse <$> Affjax.request
+moveBidRequest :: NetworkId -> String -> Aff (Either ServiceError MoveBidResponse)
+moveBidRequest network httpServer = do
+  handleResponse network <$> Affjax.request
     ( Affjax.defaultRequest
         { method = Left POST
         , url = httpServer <> "/moveBid"
@@ -120,16 +124,17 @@ moveBidRequest httpServer = do
     )
 
 handleResponse
-  :: Either Affjax.Error (Affjax.Response String)
+  :: NetworkId
+  -> Either Affjax.Error (Affjax.Response String)
   -> Either ServiceError MoveBidResponse
-handleResponse = case _ of
+handleResponse network = case _ of
   Left affjaxError ->
     Left $ ServiceHttpError $ wrap affjaxError
   Right { status, body } ->
     case status of
       Affjax.StatusCode statusCode | statusCode == 201 || statusCode == 400 ->
         lmap (ServiceDecodeJsonError body) $
-          caDecodeString moveBidResponseCodec body
+          caDecodeString (moveBidResponseCodec network) body
       _ ->
         Left $ ServiceHttpResponseError status body
 

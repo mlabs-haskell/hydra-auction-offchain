@@ -36,7 +36,7 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig(AppConfig), Network(Testnet, Mainnet))
+import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), Network(Testnet, Mainnet))
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -220,7 +220,7 @@ mkContractParams (AppConfig appConfig) =
       case appConfig.network of
         Testnet _ -> TestnetId
         Mainnet -> MainnetId
-  , logLevel: appConfig.logLevel
+  , logLevel: appConfig.ctlLogLevel
   , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile appConfig.walletSk) Nothing
   , customLogger: Nothing
   , suppressLogs: true

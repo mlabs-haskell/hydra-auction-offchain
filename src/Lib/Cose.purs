@@ -6,11 +6,11 @@ module HydraAuctionOffchain.Lib.Cose
 import Prelude
 
 import Contract.Address (Address)
+import Contract.Config (NetworkId)
 import Contract.Prim.ByteArray (ByteArray, CborBytes)
 import Ctl.Internal.Plutus.Conversion (fromPlutusAddress)
 import Ctl.Internal.Serialization (toBytes)
 import Effect (Effect)
-import HydraAuctionOffchain.Config (config)
 
 foreign import getCoseSign1Signature :: ByteArray -> Effect ByteArray
 
@@ -24,12 +24,13 @@ foreign import newHeaderMap :: Effect HeaderMap
 foreign import setAlgHeaderToEdDsa :: HeaderMap -> Effect Unit
 foreign import setAddressHeader :: CborBytes -> HeaderMap -> Effect Unit
 
-mkSigStructure :: Address -> ByteArray -> Effect ByteArray
-mkSigStructure address payload = newSigStructure payload <$> headers
+mkSigStructure :: NetworkId -> Address -> ByteArray -> Effect ByteArray
+mkSigStructure network address payload =
+  newSigStructure payload <$> headers
   where
   headers :: Effect ProtectedHeaderMap
   headers = do
     headerMap <- newHeaderMap
     setAlgHeaderToEdDsa headerMap
-    setAddressHeader (toBytes $ fromPlutusAddress config.network address) headerMap
+    setAddressHeader (toBytes $ fromPlutusAddress network address) headerMap
     pure $ newProtectedHeaderMap headerMap

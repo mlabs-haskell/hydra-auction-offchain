@@ -27,6 +27,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Contract.Address (Address, PubKeyHash, toPubKeyHash)
+import Contract.Config (NetworkId)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Time (POSIXTime)
@@ -48,7 +49,6 @@ import HydraAuctionOffchain.Codec
   , pubKeyHashCodec
   , valueCodec
   )
-import HydraAuctionOffchain.Config (config)
 import HydraAuctionOffchain.Contract.Types.VerificationKey
   ( VerificationKey
   , vkeyBytes
@@ -159,11 +159,11 @@ instance FromData AuctionTerms where
 instance PlyTypeName AuctionTerms where
   plyTypeName _ = "HydraAuctionOnchain.Types.AuctionTerms:AuctionTerms"
 
-auctionTermsCodec :: CA.JsonCodec AuctionTerms
-auctionTermsCodec =
+auctionTermsCodec :: NetworkId -> CA.JsonCodec AuctionTerms
+auctionTermsCodec network =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
     { auctionLot: valueCodec
-    , sellerAddress: addressCodec config.network
+    , sellerAddress: addressCodec network
     , sellerVk: vkeyCodec
     , delegates: CA.array pubKeyHashCodec
     , biddingStart: posixTimeCodec

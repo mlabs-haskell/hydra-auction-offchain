@@ -11,6 +11,7 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Contract.Address (PubKeyHash, toPubKeyHash)
+import Contract.Config (NetworkId)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr), serializeData)
 import Contract.Prim.ByteArray (ByteArray, byteLength, hexToByteArrayUnsafe)
@@ -26,13 +27,14 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
-import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec, byteArrayCodec)
+import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
   , totalAuctionFees
   )
 import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidderInfoCodec)
 import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
 import HydraAuctionOffchain.Lib.Crypto (verifySignature)
 import JS.BigInt (BigInt)
@@ -71,13 +73,13 @@ instance FromData BidTerms where
         wrap <$> fromDataRec bidTermsSchema pd
   fromData _ = Nothing
 
-instance HasJson BidTerms where
-  jsonCodec = const bidTermsCodec
+instance HasJson BidTerms NetworkId where
+  jsonCodec network = const (bidTermsCodec network)
 
-bidTermsCodec :: CA.JsonCodec BidTerms
-bidTermsCodec =
+bidTermsCodec :: NetworkId -> CA.JsonCodec BidTerms
+bidTermsCodec network =
   wrapIso BidTerms $ CA.object "BidTerms" $ CAR.record
-    { bidder: bidderInfoCodec
+    { bidder: bidderInfoCodec network
     , price: bigIntCodec
     , bidderSignature: byteArrayCodec
     , sellerSignature: byteArrayCodec
@@ -91,8 +93,8 @@ sellerPayout auctionTerms bidTerms =
 -- Validation
 --------------------------------------------------------------------------------
 
-validateBidTerms :: CurrencySymbol -> AuctionTerms -> BidTerms -> Effect Boolean
-validateBidTerms auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
+validateBidTerms :: NetworkId -> CurrencySymbol -> AuctionTerms -> BidTerms -> Effect Boolean
+validateBidTerms network auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
   conj <$> verifySellerSignature <*> verifyBidderSignature
   where
   bidderInfo = unwrap bidTerms.bidder
@@ -102,14 +104,14 @@ validateBidTerms auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
     case bidderInfo.bidderAddress of
       bidderAddress | Just bidderPkh <- toPubKeyHash bidderAddress -> do
         let payload = bidderSignatureMessage auctionCs bidderPkh bidTerms.price
-        sigStruct <- mkSigStructure bidderAddress payload
+        sigStruct <- mkSigStructure network bidderAddress payload
         verifySignature (vkeyBytes bidderInfo.bidderVk) sigStruct bidTerms.bidderSignature
       _ -> pure false
 
   verifySellerSignature :: Effect Boolean
   verifySellerSignature = do
     let payload = sellerSignatureMessage auctionCs $ vkeyBytes bidderInfo.bidderVk
-    sigStruct <- mkSigStructure auctionTerms.sellerAddress payload
+    sigStruct <- mkSigStructure network auctionTerms.sellerAddress payload
     verifySignature (vkeyBytes auctionTerms.sellerVk) sigStruct bidTerms.sellerSignature
 
 -- Maximum (reasonable) size of the bidder signature message where

@@ -14,10 +14,11 @@ module HydraAuctionOffchain.Contract.EnterAuction
 import Contract.Prelude
 
 import Contract.Chain (currentTime)
+import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, toData)
 import Contract.Scripts (ValidatorHash, validatorHash)
-import Contract.Time (POSIXTimeRange, mkFiniteInterval)
+import Contract.Time (POSIXTimeRange, to)
 import Contract.Transaction (TransactionHash)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
@@ -36,7 +37,7 @@ import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (class HasJson, bigIntCodec)
+import HydraAuctionOffchain.Codec (bigIntCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -58,6 +59,7 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk')
 import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
@@ -74,14 +76,14 @@ derive instance Eq EnterAuctionContractParams
 instance Show EnterAuctionContractParams where
   show = genericShow
 
-instance HasJson EnterAuctionContractParams where
-  jsonCodec = const enterAuctionContractParamsCodec
+instance HasJson EnterAuctionContractParams NetworkId where
+  jsonCodec network = const (enterAuctionContractParamsCodec network)
 
-enterAuctionContractParamsCodec :: CA.JsonCodec EnterAuctionContractParams
-enterAuctionContractParamsCodec =
+enterAuctionContractParamsCodec :: NetworkId -> CA.JsonCodec EnterAuctionContractParams
+enterAuctionContractParamsCodec network =
   wrapIso EnterAuctionContractParams $ CA.object "EnterAuctionContractParams" $
     CAR.record
-      { auctionInfo: auctionInfoExtendedCodec
+      { auctionInfo: auctionInfoExtendedCodec network
       , depositAmount: CA.maybe bigIntCodec
       }
 
@@ -162,9 +164,7 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
     --
 
     txValidRange :: POSIXTimeRange
-    txValidRange =
-      mkFiniteInterval nowTime
-        (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
+    txValidRange = to $ auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000)
 
     constraints :: TxConstraints
     constraints = mconcat

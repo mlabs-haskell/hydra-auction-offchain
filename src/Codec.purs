@@ -1,22 +1,20 @@
 module HydraAuctionOffchain.Codec
-  ( class HasJson
-  , addressCodec
+  ( addressCodec
   , addressWithNetworkTagCodec
   , bigIntCodec
   , bigIntCodecNum
   , byteArrayCodec
   , currencySymbolCodec
-  , fromJs
-  , jsonCodec
-  , liftAff1
-  , liftAff2
+  , logLevelCodec
   , orefCodec
+  , portCodec
   , posixTimeCodec
   , pubKeyHashCodec
+  , serverConfigCodec
   , sysStartCodec
-  , toJs
   , tokenNameCodec
   , transactionHashCodec
+  , txCodec
   , valueCodec
   ) where
 
@@ -29,11 +27,12 @@ import Contract.Address
   , addressWithNetworkTagFromBech32
   , addressWithNetworkTagToBech32
   )
-import Contract.Config (NetworkId)
+import Contract.Config (NetworkId, ServerConfig)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Time (POSIXTime(POSIXTime), SystemStart)
 import Contract.Transaction
-  ( TransactionHash(TransactionHash)
+  ( Transaction
+  , TransactionHash(TransactionHash)
   , TransactionInput(TransactionInput)
   )
 import Contract.Value
@@ -46,17 +45,14 @@ import Contract.Value
   , mkTokenName
   )
 import Contract.Value (flattenValue, singleton) as Value
-import Control.Promise (Promise, fromAff)
+import Ctl.Internal.Deserialization.Transaction (deserializeTransaction)
+import Ctl.Internal.Serialization (convertTransaction, toBytes)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes, ed25519KeyHashToBytes)
-import Data.Argonaut (Json)
 import Data.Codec.Argonaut
   ( JsonCodec
   , array
   , boolean
-  , decode
-  , encode
   , int
-  , json
   , number
   , object
   , prismaticCodec
@@ -67,17 +63,19 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Foldable (foldMap)
 import Data.Formatter.DateTime (formatDateTime, unformatDateTime)
-import Data.Maybe (Maybe)
+import Data.Log.Level (LogLevel(Trace, Debug, Info, Warn, Error))
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Profunctor (dimap, wrapIso)
 import Data.Tuple.Nested ((/\))
-import Data.UInt (fromString, toString) as UInt
-import Effect (Effect)
-import Effect.Aff (Aff)
+import Data.UInt (UInt)
+import Data.UInt (fromInt', fromString, toInt, toString) as UInt
+import Effect.Unsafe (unsafePerformEffect)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
-import Type.Proxy (Proxy(Proxy))
+import URI.Port (Port)
+import URI.Port (fromInt, toInt) as Port
 
 addressCodec :: NetworkId -> CA.JsonCodec Address
 addressCodec network =
@@ -103,15 +101,25 @@ bigIntCodecNum = CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber CA
 byteArrayCodec :: CA.JsonCodec ByteArray
 byteArrayCodec = CA.prismaticCodec "ByteArray" hexToByteArray byteArrayToHex CA.string
 
-sysStartCodec :: CA.JsonCodec SystemStart
-sysStartCodec =
-  CA.prismaticCodec "SystemStart"
-    (map wrap <<< hush <<< unformatDateTime formatter)
-    (fromJustWithErr "sysStartCodec" <<< hush <<< formatDateTime formatter <<< unwrap)
-    CA.string
+logLevelCodec :: CA.JsonCodec LogLevel
+logLevelCodec = CA.prismaticCodec "LogLevel" readLogLevel printLogLevel CA.string
   where
-  formatter :: String
-  formatter = "YYYY-MM-DDTHH:mm:ssZ"
+  readLogLevel :: String -> Maybe LogLevel
+  readLogLevel = case _ of
+    "trace" -> Just Trace
+    "debug" -> Just Debug
+    "info" -> Just Info
+    "warn" -> Just Warn
+    "error" -> Just Error
+    _ -> Nothing
+
+  printLogLevel :: LogLevel -> String
+  printLogLevel = case _ of
+    Trace -> "trace"
+    Debug -> "debug"
+    Info -> "info"
+    Warn -> "warn"
+    Error -> "error"
 
 orefCodec :: CA.JsonCodec TransactionInput
 orefCodec =
@@ -119,6 +127,9 @@ orefCodec =
     { transactionId: transactionHashCodec
     , index: CA.prismaticCodec "UInt" UInt.fromString UInt.toString CA.string
     }
+
+portCodec :: CA.JsonCodec Port
+portCodec = CA.prismaticCodec "Port" Port.fromInt Port.toInt CA.int
 
 posixTimeCodec :: CA.JsonCodec POSIXTime
 posixTimeCodec = wrapIso POSIXTime bigIntCodec
@@ -129,12 +140,42 @@ pubKeyHashCodec =
     (unwrap <<< ed25519KeyHashToBytes <<< unwrap)
     byteArrayCodec
 
+serverConfigCodec :: CA.JsonCodec ServerConfig
+serverConfigCodec =
+  CA.object "ServerConfig" $ CAR.record
+    { port: uintCodec
+    , host: CA.string
+    , secure: CA.boolean
+    , path: CA.maybe CA.string
+    }
+
+sysStartCodec :: CA.JsonCodec SystemStart
+sysStartCodec =
+  CA.prismaticCodec "SystemStart"
+    (map wrap <<< hush <<< unformatDateTime formatter)
+    (fromJustWithErr "sysStartCodec" <<< hush <<< formatDateTime formatter <<< unwrap)
+    CA.string
+  where
+  formatter :: String
+  formatter = "YYYY-MM-DDTHH:mm:ssZ"
+
 tokenNameCodec :: CA.JsonCodec TokenName
 tokenNameCodec =
   CA.prismaticCodec "TokenName" mkTokenName getTokenName byteArrayCodec
 
 transactionHashCodec :: CA.JsonCodec TransactionHash
 transactionHashCodec = wrapIso TransactionHash byteArrayCodec
+
+txCodec :: CA.JsonCodec Transaction
+txCodec =
+  CA.prismaticCodec
+    "Transaction"
+    (hush <<< deserializeTransaction <<< wrap)
+    (unwrap <<< toBytes <<< unsafePerformEffect <<< convertTransaction)
+    byteArrayCodec
+
+uintCodec :: CA.JsonCodec UInt
+uintCodec = CA.prismaticCodec "UInt" UInt.fromInt' UInt.toInt CA.int
 
 valueCodec :: CA.JsonCodec Value
 valueCodec = dimap fromValue toValue $ CA.array valueEntryCodec
@@ -157,69 +198,3 @@ valueEntryCodec = CA.object "ValueEntry" $ CAR.record
   , tn: tokenNameCodec
   , quantity: bigIntCodec
   }
-
---------------------------------------------------------------------------------
--- HasJson
---------------------------------------------------------------------------------
-
-class HasJson a where
-  jsonCodec :: Proxy a -> CA.JsonCodec a
-
-toJs :: forall (a :: Type). HasJson a => a -> Json
-toJs = CA.encode (jsonCodec (Proxy :: Proxy a))
-
-fromJs :: forall (a :: Type). HasJson a => Json -> a
-fromJs = fromJustWithErr "fromJs" <<< hush <<< CA.decode (jsonCodec (Proxy :: Proxy a))
-
-liftAff1
-  :: forall (a :: Type) (b :: Type)
-   . HasJson a
-  => HasJson b
-  => (a -> Aff b)
-  -> Json
-  -> Effect (Promise Json)
-liftAff1 f a = fromAff $ toJs <$> f (fromJs a)
-
-liftAff2
-  :: forall (a :: Type) (b :: Type) (c :: Type)
-   . HasJson a
-  => HasJson b
-  => HasJson c
-  => (a -> b -> Aff c)
-  -> Json
-  -> Json
-  -> Effect (Promise Json)
-liftAff2 f a b = fromAff $ toJs <$> f (fromJs a) (fromJs b)
-
-instance HasJson Json where
-  jsonCodec = const CA.json
-
-instance HasJson Boolean where
-  jsonCodec = const CA.boolean
-
-instance HasJson String where
-  jsonCodec = const CA.string
-
-instance HasJson Number where
-  jsonCodec = const CA.number
-
-instance HasJson Int where
-  jsonCodec = const CA.int
-
-instance HasJson a => HasJson (Array a) where
-  jsonCodec = const $ CA.array $ jsonCodec (Proxy :: Proxy a)
-
-instance HasJson a => HasJson (Maybe a) where
-  jsonCodec = const $ CA.maybe $ jsonCodec (Proxy :: Proxy a)
-
-instance HasJson BigInt where
-  jsonCodec = const bigIntCodec
-
-instance HasJson ByteArray where
-  jsonCodec = const byteArrayCodec
-
-instance HasJson TransactionHash where
-  jsonCodec = const transactionHashCodec
-
-instance HasJson TokenName where
-  jsonCodec = const tokenNameCodec

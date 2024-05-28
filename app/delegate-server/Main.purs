@@ -8,6 +8,7 @@ import Prelude
 
 import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
+import Contract.Address (getNetworkId)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Contract.Monad (ContractEnv, stopContractEnv)
 import Data.Foldable (foldMap)
@@ -30,7 +31,14 @@ import DelegateServer.App
   , runContract
   , runContractExitOnErr
   )
-import DelegateServer.Config (AppConfig(AppConfig), Network(Testnet, Mainnet), configParser)
+import DelegateServer.Config
+  ( AppConfig
+  , AppConfig'(AppConfig)
+  , Network(Testnet, Mainnet)
+  , Options
+  , execAppConfigParser
+  , optionsParser
+  )
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (queryAuction)
@@ -71,10 +79,10 @@ import Effect.Console (log)
 import Effect.Exception (message)
 import Effect.Timer (TimeoutId)
 import Effect.Timer (clearTimeout) as Timer
-import HydraAuctionOffchain.Config (printHostPort)
 import HydraAuctionOffchain.Contract.Types (auctionInfoExtendedCodec)
 import HydraAuctionOffchain.Helpers (waitSeconds)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
+import HydraAuctionOffchain.Types.HostPort (printHostPort)
 import Node.ChildProcess (ChildProcess, defaultSpawnOptions, kill, spawn, stderr, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal, onUncaughtException)
@@ -85,7 +93,7 @@ import Type.Proxy (Proxy(Proxy))
 
 main :: Effect Unit
 main = launchAff_ do
-  appConfig <- liftEffect $ Optparse.execParser opts
+  appConfig <- liftEffect $ execAppConfigParser opts
   appHandle <- startDelegateServer appConfig
   liftEffect do
     onUncaughtException \err -> do
@@ -98,9 +106,9 @@ main = launchAff_ do
     log $ withGraphics (foreground Red) $ show exitReason
     appHandle.cleanupHandler
 
-opts :: Optparse.ParserInfo AppConfig
+opts :: Optparse.ParserInfo Options
 opts =
-  Optparse.info (configParser <**> Optparse.helper) $ Optparse.fullDesc
+  Optparse.info (optionsParser <**> Optparse.helper) $ Optparse.fullDesc
     <> Optparse.header "delegate-server"
 
 type AppHandle =
@@ -174,7 +182,8 @@ setAuction = do
   { auctionMetadataOref } <- unwrap <$> access (Proxy :: _ "config")
   auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
   setAuctionInfo auctionInfo
-  logInfo' $ "Got valid auction: " <> printJsonUsingCodec auctionInfoExtendedCodec
+  network <- runContract getNetworkId
+  logInfo' $ "Got valid auction: " <> printJsonUsingCodec (auctionInfoExtendedCodec network)
     auctionInfo
 
 prepareCollateralUtxo :: forall m. AppInit m => m Unit
@@ -274,7 +283,7 @@ startHydraNode (AppConfig appConfig) = do
   networkArgs :: Array String
   networkArgs =
     case appConfig.network of
-      Testnet magic ->
+      Testnet { magic } ->
         [ "--testnet-magic"
         , Int.toStringAs Int.decimal magic
         ]

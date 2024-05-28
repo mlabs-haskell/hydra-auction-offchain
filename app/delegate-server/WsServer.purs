@@ -9,6 +9,8 @@ module DelegateServer.WsServer
 
 import Prelude
 
+import Contract.Address (getNetworkId)
+import Contract.Config (NetworkId)
 import Data.Array (singleton, (:))
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -18,7 +20,7 @@ import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Tuple (snd)
 import Data.Variant (inj, match) as Variant
-import DelegateServer.App (AppM, getAppEffRunner)
+import DelegateServer.App (AppM, getAppEffRunner, runContract)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Lib.WebSocketServer
@@ -35,7 +37,8 @@ import URI.Port (toInt) as Port
 
 wsServer :: AppConfig -> AppM DelegateWebSocketServer
 wsServer appConfig = do
-  wss <- mkWebSocketServer delegateWsServerMessageCodec wsServerOptions
+  network <- runContract getNetworkId
+  wss <- mkWebSocketServer (delegateWsServerMessageCodec network) wsServerOptions
   runAppEff' <- getAppEffRunner
   liftEffect do
     wss.onConnect \sendMessages ->
@@ -59,12 +62,12 @@ data DelegateWebSocketServerMessage
   = HydraHeadStatus HydraHeadStatus
   | StandingBid StandingBidState
 
-delegateWsServerMessageCodec :: CA.JsonCodec DelegateWebSocketServerMessage
-delegateWsServerMessageCodec =
+delegateWsServerMessageCodec :: NetworkId -> CA.JsonCodec DelegateWebSocketServerMessage
+delegateWsServerMessageCodec network =
   dimap toVariant fromVariant
     ( CAV.variantMatch
         { "HydraHeadStatus": Right headStatusCodec
-        , "StandingBid": Right standingBidStateCodec
+        , "StandingBid": Right $ standingBidStateCodec network
         }
     )
   where

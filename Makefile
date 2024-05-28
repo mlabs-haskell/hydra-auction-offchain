@@ -1,18 +1,16 @@
-.PHONY: build bundle serve repl format check plutip-test plutip-env delegate-server-help delegate-server1 delegate-server2
+.PHONY: requires-nix-shell build bundle bundle-docker serve repl \
+			  format check plutip-test plutip-env delegate-server-help \
+        delegate-cluster delegate-cluster-cleanup
 
 purs-args := "--stash --censor-lib --censor-codes=ImplicitImport,ImplicitQualifiedImport,UserDefinedWarning"
+ha-frontend-api := ha-frontend-api
+delegate-cluster-docker-compose := docker/delegate-cluster/docker-compose.yaml
 
-build:
-	spago build --purs-args ${purs-args}
-
-bundle: build
-	node bundle.js && tsc --emitDeclarationOnly
-
-serve: bundle
-	cd demo && npm run serve
-
-repl:
-	spago repl
+requires-nix-shell:
+	@[ "$(IN_NIX_SHELL)" ] || \
+		( echo "The '$(MAKECMDGOALS)' target must be run from inside a nix shell, run 'nix develop' first." \
+				&& false \
+		)
 
 format:
 	@nix run .#pursFormat && nix run .#jsFormat && nix run .#nixFormat
@@ -20,49 +18,36 @@ format:
 check:
 	@nix build .#checks.x86_64-linux.all
 
-plutip-test:
+build: requires-nix-shell
+	spago build --purs-args ${purs-args}
+
+bundle: build requires-nix-shell
+	node bundle.js && tsc --emitDeclarationOnly
+
+bundle-docker:
+	docker rm -f ${ha-frontend-api}
+	docker build -t ${ha-frontend-api} -f docker/frontend-api/Dockerfile .
+	docker create --name ${ha-frontend-api} ${ha-frontend-api}
+	docker cp ${ha-frontend-api}:/app/dist .
+	docker rm -f ${ha-frontend-api}
+
+serve:
+	cd demo && npm install --package-lock-only=false && npm run serve
+
+repl: requires-nix-shell
+	spago repl
+
+plutip-test: requires-nix-shell
 	CARDANO_NETWORK=mainnet spago run --main Test.Plutip
 
-plutip-env:
+plutip-env: requires-nix-shell
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
 
-delegate-server-help:
+delegate-server-help: requires-nix-shell
 	spago run --main DelegateServer.Main --exec-args '--help'
 
-delegate-server1:
-	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref 27f76e09379706939605f2b60ea17b47a881c45fa4681878e9147f08603b437f#0 \
-		--server-port :7010 \
-		--ws-server-port :7020 \
-		--hydra-node-id A \
-		--hydra-node 127.0.0.1:7000 \
-		--hydra-node-api 127.0.0.1:7001 \
-		--hydra-persist-dir ./hydra-persist \
-		--hydra-sk hydra.sk \
-		--cardano-sk cardano.sk \
-		--wallet-sk wallet.sk \
-		--node-socket ~/state-node-preprod/node.socket \
-		--testnet-magic 1 \
-		--blockfrost-config https://cardano-preprod.blockfrost.io:443/api/v0 \
-		--blockfrost-api-key ${BLOCKFROST_API_KEY} \
-		--hydra-scripts-tx-id 8ce483e2d4b81f9254392afda1f85d1e123165665593228c39064691903f431a \
-		--peer '{ \"hydraNode\": \"127.0.0.1:7002\", \"hydraVk\": \"hydra2.vk\", \"cardanoVk\": \"cardano2.vk\" }'"
+delegate-cluster:
+	docker compose -f ${delegate-cluster-docker-compose} up --build
 
-delegate-server2:
-	spago run --main DelegateServer.Main --exec-args "\
-		--auction-metadata-oref 27f76e09379706939605f2b60ea17b47a881c45fa4681878e9147f08603b437f#0  \
-		--server-port :7011 \
-		--ws-server-port :7021 \
-		--hydra-node-id B \
-		--hydra-node 127.0.0.1:7002 \
-		--hydra-node-api 127.0.0.1:7003 \
-		--hydra-persist-dir ./hydra-persist \
-		--hydra-sk hydra2.sk \
-		--cardano-sk cardano2.sk \
-		--wallet-sk wallet2.sk \
-		--node-socket ~/state-node-preprod/node.socket \
-		--testnet-magic 1 \
-		--blockfrost-config https://cardano-preprod.blockfrost.io:443/api/v0 \
-		--blockfrost-api-key ${BLOCKFROST_API_KEY} \
-		--hydra-scripts-tx-id 8ce483e2d4b81f9254392afda1f85d1e123165665593228c39064691903f431a \
-		--peer '{ \"hydraNode\": \"127.0.0.1:7000\", \"hydraVk\": \"hydra.vk\", \"cardanoVk\": \"cardano.vk\" }'"
+delegate-cluster-cleanup:
+	docker compose -f ${delegate-cluster-docker-compose} rm --force --stop --volumes

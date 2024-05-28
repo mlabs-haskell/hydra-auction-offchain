@@ -15,6 +15,8 @@ module DelegateServer.Handlers.MoveBid
 
 import Prelude
 
+import Contract.Address (getNetworkId)
+import Contract.Config (NetworkId)
 import Contract.Transaction (TransactionHash)
 import Control.Monad.Except (runExceptT)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
@@ -26,6 +28,7 @@ import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple.Nested ((/\))
 import Data.Variant (inj, match) as Variant
+import DelegateServer.App (runContract)
 import DelegateServer.Contract.Commit
   ( CommitStandingBidError
   , commitStandingBid
@@ -45,17 +48,24 @@ import DelegateServer.Types.ServerResponse
   )
 import Effect.Class (liftEffect)
 import HTTPure (Response) as HTTPure
-import HydraAuctionOffchain.Codec (class HasJson, transactionHashCodec)
+import HydraAuctionOffchain.Codec (transactionHashCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import Type.Proxy (Proxy(Proxy))
 
 type MoveBidResponse = ServerResponse MoveBidSuccess MoveBidError
 
-moveBidResponseCodec :: CA.JsonCodec MoveBidResponse
-moveBidResponseCodec = serverResponseCodec moveBidSuccessCodec moveBidErrorCodec
+moveBidResponseCodec :: NetworkId -> CA.JsonCodec MoveBidResponse
+moveBidResponseCodec network =
+  serverResponseCodec
+    (moveBidSuccessCodec network)
+    moveBidErrorCodec
 
 moveBidHandler :: forall m. AppInit m => HydraNodeApiWebSocket -> m HTTPure.Response
-moveBidHandler = respCreatedOrBadRequest <=< moveBidHandlerImpl
+moveBidHandler ws = do
+  resp <- moveBidHandlerImpl ws
+  network <- runContract getNetworkId
+  respCreatedOrBadRequest (moveBidResponseCodec network) resp
 
 moveBidHandlerImpl :: forall m. AppInit m => HydraNodeApiWebSocket -> m MoveBidResponse
 moveBidHandlerImpl ws = do
@@ -92,17 +102,17 @@ derive instance Eq MoveBidSuccess
 instance Show MoveBidSuccess where
   show = genericShow
 
-instance HasJson MoveBidSuccess where
-  jsonCodec = const moveBidSuccessCodec
+instance HasJson MoveBidSuccess NetworkId where
+  jsonCodec network = const (moveBidSuccessCodec network)
 
-moveBidSuccessCodec :: CA.JsonCodec MoveBidSuccess
-moveBidSuccessCodec =
+moveBidSuccessCodec :: NetworkId -> CA.JsonCodec MoveBidSuccess
+moveBidSuccessCodec network =
   dimap toVariant fromVariant
     ( CAV.variantMatch
         { "SentInitHeadRequest": Left unit
         , "CommittedStandingBid":
             Right $ CA.object "MoveBidSuccess_CommittedStandingBid" $ CAR.record
-              { standingBid: standingBidStateCodec
+              { standingBid: standingBidStateCodec network
               , txHash: transactionHashCodec
               }
         }
@@ -131,8 +141,8 @@ derive instance Eq MoveBidError
 instance Show MoveBidError where
   show = genericShow
 
-instance HasJson MoveBidError where
-  jsonCodec = const moveBidErrorCodec
+instance HasJson MoveBidError anyParams where
+  jsonCodec _ = const moveBidErrorCodec
 
 moveBidErrorCodec :: CA.JsonCodec MoveBidError
 moveBidErrorCodec =

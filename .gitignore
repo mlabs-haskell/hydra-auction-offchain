@@ -8,10 +8,11 @@
 /.direnv
 /.envrc
 /dist/
+/demo/package-lock.json
 /demo/index.js
 /demo/node_modules/
 /plutip-env/payment.skey
-/*.sk
-/*.vk
-/*.addr
+/keys/*.sk
+/keys/*.vk
+/keys/*.addr
 /hydra-persist/

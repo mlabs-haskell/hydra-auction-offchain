@@ -44,10 +44,11 @@ import Data.Either (Either(Left, Right))
 import Data.Maybe (Maybe)
 import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
-import DelegateServer.Lib.Codec (fixTaggedSumCodec, txCodec)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
+import HydraAuctionOffchain.Codec (txCodec)
+import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------

@@ -1,0 +1,38 @@
+{
+    "auctionMetadataOref": "7c181d8cda75cf964efae7bccec6c8373256b03d1d066641cf0bff553de76c5d#0",
+    "serverPort": 7011,
+    "wsServerPort": 7021,
+    "hydraNodeId": "B",
+    "hydraNode": "0.0.0.0:7002",
+    "hydraNodeApi": "127.0.0.1:7003",
+    "hydraPersistDir": "./hydra-persist",
+    "hydraSk": "keys/hydra2.sk",
+    "cardanoSk": "keys/cardano2.sk",
+    "walletSk": "keys/wallet2.sk",
+    "nodeSocket": "node.socket",
+    "network": {
+        "tag": "testnet",
+        "magic": 2
+    },
+    "queryBackend": {
+        "tag": "blockfrost",
+        "config": {
+            "port": 443,
+            "host": "cardano-preview.blockfrost.io",
+            "secure": true,
+            "path": "/api/v0"
+        },
+        "apiKey": null
+    },
+    "hydraScriptsTxHash": "c21b70a719112f76d318abcfee95499a27556ef4a18b1c62bc38e4b9c07ae3a6",
+    "hydraContestPeriod": 60,
+    "logLevel": "info",
+    "ctlLogLevel": "warn",
+    "peers": [
+        { 
+            "hydraNode": "delegate-server-a:7000",
+            "hydraVk": "keys/hydra.vk",
+            "cardanoVk": "keys/cardano.vk"
+        }
+    ]
+}

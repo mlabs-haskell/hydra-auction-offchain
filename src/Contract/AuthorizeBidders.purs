@@ -25,7 +25,7 @@ import Data.Array (nub, null) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
-import HydraAuctionOffchain.Codec (class HasJson, currencySymbolCodec)
+import HydraAuctionOffchain.Codec (currencySymbolCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -41,6 +41,7 @@ import HydraAuctionOffchain.Contract.Types
   , vkeyBytes
   , vkeyCodec
   )
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype AuthBiddersContractParams = AuthBiddersContractParams
@@ -55,8 +56,8 @@ derive instance Eq AuthBiddersContractParams
 instance Show AuthBiddersContractParams where
   show = genericShow
 
-instance HasJson AuthBiddersContractParams where
-  jsonCodec = const authBiddersContractParamsCodec
+instance HasJson AuthBiddersContractParams anyParams where
+  jsonCodec _ = const authBiddersContractParamsCodec
 
 authBiddersContractParamsCodec :: CA.JsonCodec AuthBiddersContractParams
 authBiddersContractParamsCodec =

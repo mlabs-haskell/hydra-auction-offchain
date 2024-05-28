@@ -17,7 +17,7 @@ import Data.Variant (inj, match) as Variant
 import Effect.Aff.Class (class MonadAff)
 import HTTPure (Response, badRequest, response) as HTTPure
 import HTTPure.Status (created) as HTTPureStatus
-import HydraAuctionOffchain.Codec (class HasJson, jsonCodec)
+import HydraAuctionOffchain.Lib.Codec (class HasJson, jsonCodec)
 import Type.Proxy (Proxy(Proxy))
 
 data ServerResponse (success :: Type) (err :: Type)
@@ -30,8 +30,11 @@ derive instance (Eq success, Eq err) => Eq (ServerResponse success err)
 instance (Show success, Show err) => Show (ServerResponse success err) where
   show = genericShow
 
-instance (HasJson success, HasJson err) => HasJson (ServerResponse success err) where
-  jsonCodec = const (serverResponseCodec (jsonCodec Proxy) (jsonCodec Proxy))
+instance (HasJson success p, HasJson err p) => HasJson (ServerResponse success err) p where
+  jsonCodec params _ =
+    serverResponseCodec
+      (jsonCodec params Proxy)
+      (jsonCodec params Proxy)
 
 serverResponseCodec
   :: forall success err
@@ -60,10 +63,10 @@ serverResponseCodec successCodec errCodec =
 respCreatedOrBadRequest
   :: forall m success err
    . MonadAff m
-  => HasJson (ServerResponse success err)
-  => ServerResponse success err
+  => CA.JsonCodec (ServerResponse success err)
+  -> ServerResponse success err
   -> m HTTPure.Response
-respCreatedOrBadRequest resp =
+respCreatedOrBadRequest respCodec resp =
   case resp of
     ServerResponseSuccess _ ->
       HTTPure.response HTTPureStatus.created respBody
@@ -71,4 +74,4 @@ respCreatedOrBadRequest resp =
       HTTPure.badRequest respBody
   where
   respBody :: String
-  respBody = stringify $ CA.encode (jsonCodec Proxy) resp
+  respBody = stringify $ CA.encode respCodec resp

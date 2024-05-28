@@ -1,7 +1,10 @@
 module DelegateServer.Config
-  ( AppConfig(AppConfig)
+  ( AppConfig
+  , AppConfig'(AppConfig)
   , Network(Testnet, Mainnet)
-  , configParser
+  , Options
+  , execAppConfigParser
+  , optionsParser
   ) where
 
 import Prelude
@@ -14,31 +17,47 @@ import Contract.Config
 import Contract.Transaction (TransactionInput)
 import Control.Alt ((<|>))
 import Data.Array (fromFoldable) as Array
-import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (JsonCodec) as CA
-import Data.Either (Either(Left, Right), note)
+import Data.Codec.Argonaut (JsonCodec, array, int, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
+import Data.Codec.Argonaut.Variant (variantMatch) as CAV
+import Data.Either (Either(Left, Right), either, note)
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
-import Data.Log.Level (LogLevel(Trace, Debug, Info, Warn, Error))
+import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, wrap)
+import Data.Profunctor (dimap, wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.String (null) as String
 import Data.UInt (fromInt) as UInt
-import DelegateServer.Helpers (readOref)
+import Data.Variant (inj, match) as Variant
+import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
-import HydraAuctionOffchain.Config (HostPort, readHostPort)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import DelegateServer.Types.QueryBackendParamsSimple
+  ( QueryBackendParamsSimple
+  , queryBackendParamsSimpleCodec
+  , toQueryBackendParams
+  )
+import Effect (Effect)
+import Effect.Exception (throw)
+import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
+import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
+import HydraAuctionOffchain.Lib.Json (caDecodeFile)
+import HydraAuctionOffchain.Lib.Optparse (jsonReader, parserReader)
+import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec, parseHostPort)
 import Node.Path (FilePath)
 import Options.Applicative as Optparse
 import Options.Applicative.Types (optional) as Optparse
-import Parsing (Parser, runParser)
+import Parsing (Parser)
 import Parsing.String (rest, string)
+import Type.Proxy (Proxy(Proxy))
 import URI.Host (parser, print) as Host
 import URI.Port (Port)
 import URI.Port (parser, toInt) as Port
 
-newtype AppConfig = AppConfig
+type AppConfig = AppConfig' QueryBackendParams
+
+newtype AppConfig' (backend :: Type) = AppConfig
   { auctionMetadataOref :: TransactionInput
   , serverPort :: Port
   , wsServerPort :: Port
@@ -52,13 +71,67 @@ newtype AppConfig = AppConfig
   , peers :: Array HydraHeadPeer
   , nodeSocket :: FilePath
   , network :: Network
-  , queryBackend :: QueryBackendParams
+  , queryBackend :: backend
   , hydraScriptsTxHash :: String
   , hydraContestPeriod :: Int
   , logLevel :: LogLevel
+  , ctlLogLevel :: LogLevel
   }
 
-derive instance Newtype AppConfig _
+derive instance Newtype (AppConfig' a) _
+derive instance Functor AppConfig'
+
+appConfigCodec :: CA.JsonCodec (AppConfig' QueryBackendParamsSimple)
+appConfigCodec =
+  wrapIso AppConfig $ CA.object "AppConfig" $ CAR.record
+    { auctionMetadataOref:
+        CA.prismaticCodec "TransactionInput" readOref printOref
+          CA.string
+    , serverPort: portCodec
+    , wsServerPort: portCodec
+    , hydraNodeId: CA.string
+    , hydraNode: hostPortCodec
+    , hydraNodeApi: hostPortCodec
+    , hydraPersistDir: CA.string
+    , hydraSk: CA.string
+    , cardanoSk: CA.string
+    , walletSk: CA.string
+    , peers: CA.array hydraHeadPeerCodec
+    , nodeSocket: CA.string
+    , network: networkCodec
+    , queryBackend: queryBackendParamsSimpleCodec
+    , hydraScriptsTxHash: CA.string
+    , hydraContestPeriod: CA.int
+    , logLevel: logLevelCodec
+    , ctlLogLevel: logLevelCodec
+    }
+
+execAppConfigParser :: Optparse.ParserInfo Options -> Effect AppConfig
+execAppConfigParser parserInfo = do
+  opts <- Optparse.execParser parserInfo
+  case opts of
+    OptionsConfig appConfig ->
+      pure appConfig
+    OptionsConfigFile fp -> do
+      appConfig <- either throw pure =<< caDecodeFile appConfigCodec fp
+      pure $ appConfig <#>
+        flip toQueryBackendParams defaultConfirmTxDelay
+
+data Options
+  = OptionsConfig AppConfig
+  | OptionsConfigFile FilePath
+
+optionsParser :: Optparse.Parser Options
+optionsParser = (OptionsConfigFile <$> configFileParser)
+  <|> (OptionsConfig <$> configParser)
+
+configFileParser :: Optparse.Parser FilePath
+configFileParser =
+  Optparse.strOption $ fold
+    [ Optparse.long "config"
+    , Optparse.metavar "FILE"
+    , Optparse.help "Filepath to delegate-server JSON configuration."
+    ]
 
 configParser :: Optparse.Parser AppConfig
 configParser = ado
@@ -178,6 +251,11 @@ configParser = ado
     , Optparse.metavar "LOGLEVEL"
     , Optparse.value Info
     ]
+  ctlLogLevel <- Optparse.option parseLogLevel $ fold
+    [ Optparse.long "ctl-log-level"
+    , Optparse.metavar "LOGLEVEL"
+    , Optparse.value Warn
+    ]
   in
     wrap
       { auctionMetadataOref
@@ -197,6 +275,7 @@ configParser = ado
       , hydraScriptsTxHash
       , hydraContestPeriod
       , logLevel
+      , ctlLogLevel
       }
 
 queryBackendParser :: Optparse.Parser QueryBackendParams
@@ -241,12 +320,34 @@ ctlBackendParser = ado
     CtlBackendParams { ogmiosConfig, kupoConfig }
       Nothing
 
-data Network = Testnet Int | Mainnet
+data Network = Testnet { magic :: Int } | Mainnet
 
 derive instance Generic Network _
 
 instance Show Network where
   show = genericShow
+
+networkCodec :: CA.JsonCodec Network
+networkCodec =
+  fixTaggedSumCodec $
+    dimap toVariant fromVariant
+      ( CAV.variantMatch
+          { "testnet":
+              Right $ CA.object "Testnet" $ CAR.record
+                { magic: CA.int
+                }
+          , "mainnet": Left unit
+          }
+      )
+  where
+  toVariant = case _ of
+    Testnet rec -> Variant.inj (Proxy :: _ "testnet") rec
+    Mainnet -> Variant.inj (Proxy :: _ "mainnet") unit
+
+  fromVariant = Variant.match
+    { "testnet": Testnet
+    , "mainnet": const Mainnet
+    }
 
 networkParser :: Optparse.Parser Network
 networkParser = mainnetParser <|> testnetParser
@@ -259,7 +360,7 @@ mainnetParser = Optparse.flag' Mainnet $ fold
 
 testnetParser :: Optparse.Parser Network
 testnetParser =
-  map Testnet $ Optparse.option Optparse.int $ fold
+  map (Testnet <<< { magic: _ }) $ Optparse.option Optparse.int $ fold
     [ Optparse.long "testnet-magic"
     , Optparse.metavar "INT"
     , Optparse.help
@@ -273,43 +374,19 @@ testnetParser =
 ----------------------------------------------------------------------
 -- Readers
 
-parseLogLevel :: Optparse.ReadM LogLevel
-parseLogLevel =
-  Optparse.eitherReader $ case _ of
-    "trace" -> Right Trace
-    "debug" -> Right Debug
-    "info" -> Right Info
-    "warn" -> Right Warn
-    "error" -> Right Error
-    str -> Left $ "Can't parse as LogLevel: `" <> str <> "`"
-
 parseOref :: Optparse.ReadM TransactionInput
 parseOref =
   Optparse.eitherReader $ \str ->
     note ("Can't parse as TransactionInput: `" <> str <> "`") $ readOref str
 
-parseHostPort :: Optparse.ReadM HostPort
-parseHostPort =
-  Optparse.eitherReader $ \str ->
-    note ("Can't parse as HostPort: `" <> str <> "`") $ readHostPort str
-
-parserReader :: forall a. String -> Parser String a -> Optparse.ReadM a
-parserReader typeName parser =
-  Optparse.eitherReader $ \str ->
-    runParser str parser # lmap \err ->
-      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> show err
-
 parsePort :: Optparse.ReadM Port
 parsePort = parserReader "Port" Port.parser
 
-parseJson :: forall (a :: Type). String -> CA.JsonCodec a -> Optparse.ReadM a
-parseJson typeName codec =
-  Optparse.eitherReader $ \str ->
-    caDecodeString codec str # lmap \err ->
-      "Can't parse as " <> typeName <> ": `" <> str <> "` ~ " <> err
-
 parseHydraHeadPeer :: Optparse.ReadM HydraHeadPeer
-parseHydraHeadPeer = parseJson "HydraHeadPeer" hydraHeadPeerCodec
+parseHydraHeadPeer = jsonReader "HydraHeadPeer" hydraHeadPeerCodec
+
+parseLogLevel :: Optparse.ReadM LogLevel
+parseLogLevel = jsonReader "LogLevel" logLevelCodec
 
 parseServerConfig :: Optparse.ReadM ServerConfig
 parseServerConfig = parserReader "ServerConfig" httpServerConfigParser
