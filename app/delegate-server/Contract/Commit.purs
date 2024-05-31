@@ -52,7 +52,7 @@ import Ctl.Internal.BalanceTx.RedeemerIndex
   , indexRedeemers
   , mkRedeemersContext
   )
-import Data.Argonaut (Json, encodeJson)
+import Data.Argonaut (encodeJson)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Map (fromFoldable) as Map
@@ -66,7 +66,11 @@ import DelegateServer.Lib.Transaction (appendTxSignatures, reSignTransaction, se
 import DelegateServer.Lib.Wallet (withWallet)
 import DelegateServer.PeerDelegate.Http (signCommitTx)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
-import DelegateServer.Types.HydraCommitRequest (mkFullCommitRequest, mkSimpleCommitRequest)
+import DelegateServer.Types.HydraCommitRequest
+  ( HydraCommitRequest
+  , mkFullCommitRequest
+  , mkSimpleCommitRequest
+  )
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
@@ -87,7 +91,10 @@ import JS.BigInt (fromInt) as BigInt
 import Type.Proxy (Proxy(Proxy))
 
 buildCommitTx
-  :: forall m. AppBase m => Json -> ExceptT ServiceError m BalancedSignedTransaction
+  :: forall m
+   . AppBase m
+  => HydraCommitRequest
+  -> ExceptT ServiceError m BalancedSignedTransaction
 buildCommitTx commitRequest = do
   { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
@@ -118,8 +125,8 @@ commitCollateral = do
   collateralUtxo <- readAppState (Proxy :: _ "collateralUtxo")
   let
     utxos = Map.fromFoldable [ collateralUtxo ]
-    commitRequest = encodeJson $ mkSimpleCommitRequest utxos
-  logDebug' $ "Collateral commit request: " <> printJson commitRequest
+    commitRequest = mkSimpleCommitRequest utxos
+  logDebug' $ "Collateral commit request: " <> printJson (encodeJson commitRequest)
   commitTx <-
     withExceptT CommitCollateral_Error_CommitRequestFailed $
       buildCommitTx commitRequest
@@ -161,8 +168,8 @@ commitStandingBid = do
     mapExceptT runContract $
       moveToHydraUnbalancedTx auctionInfo collateralUtxo
   let utxos = Map.fromFoldable [ standingBidUtxo, collateralUtxo ]
-  commitRequest <- liftEffect $ encodeJson <$> mkFullCommitRequest blueprintTx utxos
-  logDebug' $ "Standing bid commit request: " <> printJson commitRequest
+  commitRequest <- liftEffect $ mkFullCommitRequest blueprintTx utxos
+  logDebug' $ "Standing bid commit request: " <> printJson (encodeJson commitRequest)
   commitTx <-
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       buildCommitTx commitRequest
