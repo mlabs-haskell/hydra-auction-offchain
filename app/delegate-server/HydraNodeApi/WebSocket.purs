@@ -104,11 +104,11 @@ type HydraNodeApiWebSocket =
 mkHydraNodeApiWebSocket
   :: DelegateWebSocketServer -> (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
 mkHydraNodeApiWebSocket wsServer onConnect = do
-  config <- unwrap <$> asks _.config
+  { auctionConfig: { hydraNodeApi } } <- unwrap <$> asks _.config
   runM <- getAppEffRunner
   liftEffect do
     ws /\ wsUrl <- mkWebSocket
-      { hostPort: config.hydraNodeApi
+      { hostPort: hydraNodeApi
       , inMsgCodec: hydraNodeApiInMessageCodec
       , outMsgCodec: hydraNodeApiOutMessageCodec
       , runM
@@ -188,29 +188,29 @@ msgGreetingsHandler wsServer { headStatus, snapshotUtxo } = do
 
 msgPeerConnectedHandler :: forall m. AppBase m => PeerConnMessage -> m Unit
 msgPeerConnectedHandler { peer } = do
-  { config: AppConfig config, livePeers: livePeersAVar } <- accessRec
+  { config: AppConfig { auctionConfig }, livePeers: livePeersAVar } <- accessRec
     (Proxy :: _ ("config" :> "livePeers" :> Nil'))
   modifyAVar_ livePeersAVar \livePeers ->
-    case Set.member peer livePeers, peer /= config.hydraNodeId of
+    case Set.member peer livePeers, peer /= auctionConfig.hydraNodeId of
       false, true -> do
         let livePeers' = Set.insert peer livePeers
         logInfo' $ "Peer connected (live peers " <> show (Set.size livePeers') <> "/"
-          <> show (Array.length config.peers)
+          <> show (Array.length auctionConfig.peers)
           <> ")."
         pure livePeers'
       _, _ -> pure livePeers
 
 msgPeerDisconnectedHandler :: forall m. AppBase m => PeerConnMessage -> m Unit
 msgPeerDisconnectedHandler { peer } = do
-  { config: AppConfig config, livePeers: livePeersAVar } <- accessRec
+  { config: AppConfig { auctionConfig }, livePeers: livePeersAVar } <- accessRec
     (Proxy :: _ ("config" :> "livePeers" :> Nil'))
   modifyAVar_ livePeersAVar \livePeers ->
-    case Set.member peer livePeers, peer /= config.hydraNodeId of
+    case Set.member peer livePeers, peer /= auctionConfig.hydraNodeId of
       true, true -> do
         let livePeers' = Set.delete peer livePeers
         logInfo' $ "Peer disconnected (live peers " <> show (Set.size livePeers')
           <> "/"
-          <> show (Array.length config.peers)
+          <> show (Array.length auctionConfig.peers)
           <> ")."
         pure livePeers'
       _, _ -> pure livePeers

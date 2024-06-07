@@ -7,7 +7,7 @@ export const newWebSocketServer = (options) => () => {
 export const onConnect = (wss) => (cb) => () => {
   wss.on("connection", (ws, req) => {
     console.log("conn url: ", req.url);
-    cb(ws)();
+    cb(ws)(req.url)();
   });
 };
 

@@ -5,19 +5,27 @@ module DelegateServer.Server
 import Prelude
 
 import Contract.Log (logInfo')
+import Control.Monad.Logger.Trans (runLoggerT)
+import Data.Either (Either(Left, Right))
+import Data.Map (lookup) as Map
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap)
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import DelegateServer.App (AppLogger, AppM, AppState, runApp, runAppEff)
+import DelegateServer.AppMap (AppMap)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.Handlers.SignCommitTx (signCommitTxHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
+import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
+import Effect.Console (log)
 import HTTPure
   ( Headers
   , Request
   , Response
   , ServerM
+  , badRequest
   , emptyResponse'
   , header
   , headers
@@ -25,54 +33,85 @@ import HTTPure
   , serve
   , toString
   ) as HTTPure
-import HTTPure (Method(Options, Post), (!?), (!@))
+import HTTPure (Method(Options, Post), (!!), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
+import HydraAuctionOffchain.Codec (currencySymbolCodec)
+import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import URI.Port (Port)
 import URI.Port (toInt) as Port
 
-httpServer :: AppState -> AppLogger -> HydraNodeApiWebSocket -> HTTPure.ServerM
-httpServer appState appLogger ws = do
-  let port = Port.toInt (unwrap appState.config).serverPort
-  HTTPure.serve port (runApp appState appLogger <<< router ws) do
-    runAppEff appState appLogger do
-      logInfo' $ "Http server now accepts connections on port " <> show port <> "."
+type AppMap' = AppMap HydraNodeApiWebSocket
 
-router :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
+httpServer :: Port -> AppLogger -> AppMap' -> HTTPure.ServerM
+httpServer serverPort appLogger appMap = do
+  let port = Port.toInt serverPort
+  HTTPure.serve port (router (appLogger /\ appMap)) do
+    -- TODO: Add a top-level logger that is not associated with a
+    -- specific app instance   
+    log $ "Http server now accepts connections on port " <> show port <> "."
+
+router :: AppLogger /\ AppMap' -> HTTPure.Request -> Aff HTTPure.Response
 router _ { method: Options, headers }
   | unwrap headers !? "Access-Control-Request-Method" = corsPreflightHandler headers
   | otherwise = HTTPure.notFound
 
-router ws request = corsMiddleware routerCors ws request
+router appMap request = corsMiddleware routerCors appMap request
 
-routerCors :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
-routerCors ws { method: Post, path: [ "moveBid" ] } =
+routerCors :: AppLogger /\ AppMap' -> HTTPure.Request -> Aff HTTPure.Response
+routerCors appMap request = appLookupMiddleware routerCorsApp appMap request
+
+routerCorsApp :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
+routerCorsApp ws { method: Post, path: [ "moveBid" ] } =
   moveBidHandler ws
 
-routerCors ws { body, method: Post, path: [ "placeBid" ] } = do
+routerCorsApp ws { body, method: Post, path: [ "placeBid" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   placeBidHandler ws bodyStr
 
-routerCors _ { body, method: Post, path: [ "signCommitTx" ] } = do
+routerCorsApp _ { body, method: Post, path: [ "signCommitTx" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   signCommitTxHandler bodyStr
 
-routerCors _ _ = HTTPure.notFound
+routerCorsApp _ _ = HTTPure.notFound
 
 -- Middleware --------------------------------------------------------
 
-corsMiddleware
+appLookupMiddleware
   :: (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
-  -> HydraNodeApiWebSocket
+  -> AppLogger /\ AppMap
   -> HTTPure.Request
-  -> AppM HTTPure.Response
-corsMiddleware router' ws request =
-  router' ws request <#> \response ->
+  -> Aff HTTPure.Response
+appLookupMiddleware router' (appLogger /\ appMap) request@{ headers }
+  | Just auctionCsRaw <- headers !! "Auction-Cs" =
+      case caDecodeString currencySymbolCodec auctionCsRaw of
+        Left decodeErr ->
+          HTTPure.badRequest "Could not decode Auction-Cs request header"
+        Right auctionCs ->
+          case Map.lookup auctionCs appMap of
+            Nothing ->
+              HTTPure.badRequest
+                "Provided Auction-Cs does not correspond to any auction served by this \
+                \delegate server"
+            Just (appState /\ ws) ->
+              runApp appState appLogger $ router' ws request
+  | otherwise =
+      HTTPure.badRequest "Missing Auction-Cs request header"
+
+corsMiddleware
+  :: forall a
+   . (a -> HTTPure.Request -> Aff HTTPure.Response)
+  -> a
+  -> HTTPure.Request
+  -> Aff HTTPure.Response
+corsMiddleware router' params request =
+  router' params request <#> \response ->
     response
       { headers =
           response.headers <>
             HTTPure.header "Access-Control-Allow-Origin" "*"
       }
 
-corsPreflightHandler :: HTTPure.Headers -> AppM HTTPure.Response
+corsPreflightHandler :: HTTPure.Headers -> Aff HTTPure.Response
 corsPreflightHandler headers =
   HTTPure.emptyResponse' HTTPureStatus.ok $
     HTTPure.headers

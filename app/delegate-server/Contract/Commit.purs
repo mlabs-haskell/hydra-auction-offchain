@@ -89,7 +89,7 @@ import Type.Proxy (Proxy(Proxy))
 buildCommitTx
   :: forall m. AppBase m => Json -> ExceptT ServiceError m BalancedSignedTransaction
 buildCommitTx commitRequest = do
-  { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { hydraNodeApi, cardanoSk } } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
   draftCommitTx <- ExceptT $ liftAff $ commit serverConfig commitRequest
   runContractLift do
@@ -166,7 +166,7 @@ commitStandingBid = do
   commitTx <-
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       buildCommitTx commitRequest
-  { peers } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { peers } } <- unwrap <$> access (Proxy :: _ "config")
   commitTxMultiSigned <- multiSignCommitTx peers `modifyF` commitTx
   txHash <- runContract (submit commitTxMultiSigned) !* CommitBid_Error_SubmitTxFailed
   pure $ standingBid /\ txHash
@@ -179,7 +179,7 @@ multiSignCommitTx
   -> Transaction
   -> ExceptT CommitStandingBidError m Transaction
 multiSignCommitTx peers commitTx = do
-  { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { cardanoSk } } <- unwrap <$> access (Proxy :: _ "config")
   responses <- do
     pkh <- runContract (withWallet cardanoSk $ ownPaymentPubKeyHash)
       !? CommitBid_Error_CouldNotGetOwnPubKeyHash

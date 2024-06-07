@@ -20,6 +20,7 @@ import Contract.Config
   ( ContractParams
   , NetworkId(TestnetId, MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
+  , QueryBackendParams
   , WalletSpec(UseKeys)
   , defaultTimeParams
   , disabledSynchronizationParams
@@ -38,7 +39,13 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), Network(Testnet, Mainnet))
+import DelegateServer.Config
+  ( AppConfig
+  , AppConfig'(AppConfig)
+  , AuctionConfig
+  , Network(Testnet, Mainnet)
+  , networkToNetworkId
+  )
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -199,9 +206,9 @@ instance MonadAccess AppM "commitStatus" (AVar CommitStatus) where
 instance MonadAccess AppM "snapshot" (AVar HydraSnapshot) where
   access _ = asks _.snapshot
 
-initApp :: AppConfig -> Aff AppState
-initApp config = do
-  contractEnv <- wrap <$> mkContractEnv (mkContractParams config)
+initApp :: forall ac. AppConfig' ac QueryBackendParams -> AuctionConfig -> Aff AppState
+initApp (AppConfig appConfig) auctionConfig = do
+  contractEnv <- wrap <$> mkContractEnv contractParams
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeers <- AVar.new Set.empty
@@ -211,7 +218,7 @@ initApp config = do
   commitStatus <- AVar.new ShouldCommitCollateral
   snapshot <- AVar.new emptySnapshot
   pure
-    { config
+    { config: wrap $ appConfig { auctionConfig = auctionConfig }
     , contractEnv
     , auctionInfo
     , headStatus
@@ -222,19 +229,16 @@ initApp config = do
     , commitStatus
     , snapshot
     }
-
-mkContractParams :: AppConfig -> ContractParams
-mkContractParams (AppConfig appConfig) =
-  { backendParams: appConfig.queryBackend
-  , networkId:
-      case appConfig.network of
-        Testnet _ -> TestnetId
-        Mainnet -> MainnetId
-  , logLevel: appConfig.ctlLogLevel
-  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile appConfig.walletSk) Nothing
-  , customLogger: Nothing
-  , suppressLogs: true
-  , hooks: emptyHooks
-  , timeParams: defaultTimeParams
-  , synchronizationParams: disabledSynchronizationParams
-  }
+  where
+  contractParams :: ContractParams
+  contractParams =
+    { backendParams: appConfig.queryBackend
+    , networkId: networkToNetworkId appConfig.network
+    , logLevel: appConfig.ctlLogLevel
+    , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile auctionConfig.walletSk) Nothing
+    , customLogger: Nothing
+    , suppressLogs: true
+    , hooks: emptyHooks
+    , timeParams: defaultTimeParams
+    , synchronizationParams: disabledSynchronizationParams
+    }

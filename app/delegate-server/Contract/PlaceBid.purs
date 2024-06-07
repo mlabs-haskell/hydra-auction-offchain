@@ -100,7 +100,7 @@ placeBidL2 ws bidTerms = do
       <#> toUtxoMapWithoutRefScripts
       <<< _.utxo
       <<< unwrap
-  { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { cardanoSk } } <- unwrap <$> access (Proxy :: _ "config")
   mapExceptT runContractNullCosts $
     placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
 

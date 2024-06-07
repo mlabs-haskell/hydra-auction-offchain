@@ -11,6 +11,7 @@ import Ansi.Output (foreground, withGraphics)
 import Contract.Address (getNetworkId)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Contract.Monad (ContractEnv, stopContractEnv)
+import Control.Parallel (parTraverse)
 import Data.Foldable (foldMap)
 import Data.Int (decimal, toStringAs) as Int
 import Data.Maybe (Maybe, maybe)
@@ -35,9 +36,7 @@ import DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
   , Network(Testnet, Mainnet)
-  , Options
   , execAppConfigParser
-  , optionsParser
   )
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
@@ -86,13 +85,11 @@ import Node.ChildProcess (ChildProcess, defaultSpawnOptions, kill, spawn, stderr
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal, onUncaughtException)
 import Node.Stream (onDataString)
-import Options.Applicative ((<**>))
-import Options.Applicative as Optparse
 import Type.Proxy (Proxy(Proxy))
 
 main :: Effect Unit
 main = launchAff_ do
-  appConfig <- liftEffect $ execAppConfigParser opts
+  appConfig <- liftEffect execAppConfigParser
   appHandle <- startDelegateServer appConfig
   liftEffect do
     onUncaughtException \err -> do
@@ -105,17 +102,38 @@ main = launchAff_ do
     log $ withGraphics (foreground Red) $ show exitReason
     appHandle.cleanupHandler
 
-opts :: Optparse.ParserInfo Options
-opts =
-  Optparse.info (optionsParser <**> Optparse.helper) $ Optparse.fullDesc
-    <> Optparse.header "delegate-server"
-
 type AppHandle =
   { cleanupHandler :: Effect Unit
   , appState :: AppState
   , appLogger :: AppLogger
   , ws :: HydraNodeApiWebSocket
   }
+
+startDelegateServer :: AppConfig' (Array AuctionConfig) QueryBackendParams -> Aff AppHandle
+startDelegateServer appConfig = do
+  -- TODO: Make each app instance have its own logger, otherwise the
+  -- logs will be a complete mess
+  let appLogger = appLoggerDefault
+  appStateList <-
+    parTraverse
+      ( \auctionConfig -> do
+          appState <- initApp appConfig auctionConfig
+          runApp appState appLogger $ setAuction *> prepareCollateralUtxo
+          pure appState
+      )
+      (unwrap appConfig).auctionConfig
+  appMap <- buildAppMap appStateList
+
+  parTraverse
+    ( \auctionConfig -> do
+        appState <- initApp appConfig auctionConfig
+        runApp appState appLogger do
+          setAuction *> prepareCollateralUtxo
+          hydraNodeProcess <- startHydraNode
+          hydraApiWs <- initHydraApiWsConn
+
+    )
+    (unwrap appConfig).auctionConfig
 
 startDelegateServer :: AppConfig -> Aff AppHandle
 startDelegateServer appConfig = do
@@ -248,8 +266,9 @@ initHydraApiWsConn wsServer = do
   mkHydraNodeApiWebSocket wsServer (liftAff <<< void <<< flip AVar.tryPut wsAVar)
   liftAff $ AVar.take wsAVar
 
-startHydraNode :: AppConfig -> AppM ChildProcess
-startHydraNode (AppConfig appConfig) = do
+startHydraNode :: AppM ChildProcess
+startHydraNode = do
+  appConfig <- unwrap <$> access (Proxy :: _ "config")
   apiServerStartedSem <- liftAff AVar.empty
   hydraNodeProcess <- liftEffect $ spawn "hydra-node" hydraNodeArgs defaultSpawnOptions
 
@@ -267,7 +286,7 @@ startHydraNode (AppConfig appConfig) = do
   where
   peerArgs :: Array String
   peerArgs =
-    appConfig.peers # foldMap \peer ->
+    appConfig.auctionConfig.peers # foldMap \peer ->
       [ "--peer"
       , printHostPort peer.hydraNode
       , "--hydra-verification-key"
@@ -291,21 +310,21 @@ startHydraNode (AppConfig appConfig) = do
   hydraNodeArgs =
     peerArgs <> networkArgs <>
       [ "--node-id"
-      , appConfig.hydraNodeId
+      , appConfig.auctionConfig.hydraNodeId
       , "--host"
-      , appConfig.hydraNode.host
+      , appConfig.auctionConfig.hydraNode.host
       , "--port"
-      , UInt.toString appConfig.hydraNode.port
+      , UInt.toString appConfig.auctionConfig.hydraNode.port
       , "--api-host"
-      , appConfig.hydraNodeApi.host
+      , appConfig.auctionConfig.hydraNodeApi.host
       , "--api-port"
-      , UInt.toString appConfig.hydraNodeApi.port
+      , UInt.toString appConfig.auctionConfig.hydraNodeApi.port
       , "--persistence-dir"
-      , appConfig.hydraPersistDir
+      , appConfig.hydraPersistDir <</>> appConfig.auctionConfig.hydraNodeId
       , "--hydra-signing-key"
       , appConfig.hydraSk
       , "--cardano-signing-key"
-      , appConfig.cardanoSk
+      , appConfig.auctionConfig.cardanoSk
       , "--node-socket"
       , appConfig.nodeSocket
       , "--ledger-protocol-parameters"

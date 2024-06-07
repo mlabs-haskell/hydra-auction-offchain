@@ -21,7 +21,8 @@ import Data.Profunctor (dimap)
 import Data.Tuple (snd)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.App (AppM, getAppEffRunner, runContract)
-import DelegateServer.Config (AppConfig)
+import DelegateServer.AppMap (AppMap)
+import DelegateServer.Config (AppConfig, Network, networkToNetworkId)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Lib.WebSocketServer
   ( WebSocketServer
@@ -30,18 +31,19 @@ import DelegateServer.Lib.WebSocketServer
   )
 import DelegateServer.State (readAppState)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
+import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
 import Type.Proxy (Proxy(Proxy))
+import URI.Port (Port)
 import URI.Port (toInt) as Port
 
-wsServer :: AppConfig -> AppM DelegateWebSocketServer
-wsServer appConfig = do
-  network <- runContract getNetworkId
-  wss <- mkWebSocketServer (delegateWsServerMessageCodec network) wsServerOptions
-  runAppEff' <- getAppEffRunner
+wsServer :: Port -> Network -> AppMap Unit -> Aff DelegateWebSocketServer
+wsServer wsServerPort network appMap = do
+  wss <- mkWebSocketServer (delegateWsServerMessageCodec $ networkToNetworkId network)
+    wsServerOptions
   liftEffect do
-    wss.onConnect \sendMessages ->
+    wss.onConnect \path sendMessages ->
       runAppEff' do
         headStatus <- readAppState (Proxy :: _ "headStatus")
         standingBid <- map snd <$> queryStandingBidL2
@@ -53,7 +55,7 @@ wsServer appConfig = do
   wsServerOptions :: WebSocketServerOptions
   wsServerOptions =
     { host: "0.0.0.0"
-    , port: Port.toInt (unwrap appConfig).wsServerPort
+    , port: Port.toInt wsServerPort
     }
 
 type DelegateWebSocketServer = WebSocketServer DelegateWebSocketServerMessage

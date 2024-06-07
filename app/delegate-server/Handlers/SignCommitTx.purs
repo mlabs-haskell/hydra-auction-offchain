@@ -116,7 +116,7 @@ signCommitTxHandlerImpl bodyStr = do
     Right { commitTx, commitLeader } -> do
       auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
       hydraHeadCs <- readAppState (Proxy :: _ "headCs")
-      { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+      { cardanoSk } <- _.auctionConfig <<< unwrap <$> access (Proxy :: _ "config")
       runContract $ withWallet cardanoSk do
         let txBody = commitTx ^. _body
         mResolvedInputs <- resolveInputs (Array.fromFoldable $ txBody ^. _inputs)

@@ -1,35 +1,30 @@
 module DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
+  , AuctionConfig
   , Network(Testnet, Mainnet)
-  , Options
   , execAppConfigParser
-  , optionsParser
+  , networkToNetworkId
   ) where
 
 import Prelude
 
 import Contract.Config
-  ( QueryBackendParams(CtlBackendParams, BlockfrostBackendParams)
-  , ServerConfig
+  ( NetworkId(TestnetId, MainnetId)
+  , QueryBackendParams
   , defaultConfirmTxDelay
   )
 import Contract.Transaction (TransactionInput)
-import Control.Alt ((<|>))
-import Data.Array (fromFoldable) as Array
 import Data.Codec.Argonaut (JsonCodec, array, int, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
-import Data.Either (Either(Left, Right), either, note)
+import Data.Either (Either(Left, Right), either)
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
-import Data.Log.Level (LogLevel(Info, Warn))
-import Data.Maybe (Maybe(Just, Nothing))
-import Data.Newtype (class Newtype, wrap)
+import Data.Log.Level (LogLevel)
+import Data.Newtype (class Newtype, over, wrap)
 import Data.Profunctor (dimap, wrapIso)
 import Data.Show.Generic (genericShow)
-import Data.String (null) as String
-import Data.UInt (fromInt) as UInt
 import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
@@ -43,60 +38,108 @@ import Effect.Exception (throw)
 import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
 import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile)
-import HydraAuctionOffchain.Lib.Optparse (jsonReader, parserReader)
-import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec, parseHostPort)
+import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec)
 import Node.Path (FilePath)
+import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
-import Options.Applicative.Types (optional) as Optparse
-import Parsing (Parser)
-import Parsing.String (rest, string)
 import Type.Proxy (Proxy(Proxy))
-import URI.Host (parser, print) as Host
 import URI.Port (Port)
-import URI.Port (parser, toInt) as Port
 
-type AppConfig = AppConfig' QueryBackendParams
-
-newtype AppConfig' (backend :: Type) = AppConfig
+-- TODO: check that specified ports are free and non-overlapping
+-- TODO: check 'max number of participants' constraint
+-- TODO: check that `auctionMetadataOref` exists and points to a valid auction
+-- TODO: check the balance of `cardanoSk`
+-- TODO: generate `hydraNodeId` using UUID
+-- TODO: remove `walletSk` parameter
+-- see https://github.com/input-output-hk/hydra/pull/1463
+type AuctionConfig =
   { auctionMetadataOref :: TransactionInput
-  , serverPort :: Port
-  , wsServerPort :: Port
+  -- ^ Reference of the tx output with auction metadata record,
+  -- used to access onchain data of the target auction.
   , hydraNodeId :: String
+  -- ^ The Hydra node identifier used on the Hydra network. It is
+  -- important to have a unique identifier in order to be able
+  -- to distinguish between connected peers.
   , hydraNode :: HostPort
+  -- ^ Listen address + port for incoming Hydra network connections.
   , hydraNodeApi :: HostPort
-  , hydraPersistDir :: FilePath
-  , hydraSk :: FilePath
-  , cardanoSk :: FilePath
-  , walletSk :: FilePath
+  -- ^ Listen address + port for incoming client Hydra Node API
+  -- connections.
   , peers :: Array HydraHeadPeer
+  -- ^ Info about other Head participants (max 5 entries).
+  , cardanoSk :: FilePath
+  -- ^ Cardano signing key of the underlying Hydra node, used to
+  -- authorize Hydra protocol transactions, and any funds owned
+  -- by this key will be used as 'fuel'.
+  , walletSk :: FilePath
+  -- ^ Cardano signing key of the wallet used to commit collateral
+  -- to the hydra-node. It is necessary because hydra-node prohibits
+  -- committing utxos controlled by 'cardanoSk'.
+  }
+
+auctionConfigCodec :: CA.JsonCodec AuctionConfig
+auctionConfigCodec =
+  CA.object "AuctionConfig" $ CAR.record
+    { auctionMetadataOref:
+        CA.prismaticCodec "TransactionInput" readOref printOref
+          CA.string
+    , hydraNodeId: CA.string
+    , hydraNode: hostPortCodec
+    , hydraNodeApi: hostPortCodec
+    , peers: CA.array hydraHeadPeerCodec
+    , cardanoSk: CA.string
+    , walletSk: CA.string
+    }
+
+-- TODO: make `hydraScriptsTxHash` parameter optional
+-- see https://github.com/input-output-hk/hydra/issues/1441
+newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
+  { auctionConfig :: ac
+  , serverPort :: Port
+  -- ^ Listen port for incoming HTTP client requests to the
+  -- delegate server.
+  , wsServerPort :: Port
+  -- ^ Listen port for incoming WebSocket connections to the
+  -- delegate server.
+  , hydraPersistDir :: FilePath
+  -- ^ The directory where the state of underlying Hydra Heads will
+  -- be stored.
+  , hydraSk :: FilePath
+  -- ^ Hydra signing key used by the underlying Hydra nodes.
   , nodeSocket :: FilePath
+  -- ^ Filepath to local unix domain socket used to communicate
+  -- with cardano-node.
   , network :: Network
-  , queryBackend :: backend
+  -- ^ Network identifier (mainnet or testnet+magic).
+  , queryBackend :: qb
+  -- ^ Cardano query backend (Blockfrost or Ogmios+Kupo) for CTL.
   , hydraScriptsTxHash :: String
+  -- ^ The transaction which is expected to have published Hydra
+  -- scripts as reference scripts in its outputs. See hydra-node
+  -- release notes for pre-published versions. You can use the
+  -- 'publish-scripts' sub-command of hydra-node to publish them
+  -- yourself.
   , hydraContestPeriod :: Int
+  -- ^ Contestation period for close transaction in seconds. If this
+  -- value is not in sync with other participants hydra-node will
+  -- ignore the initial tx. Additionally, this value needs to make
+  -- sense compared to the current network we are running.
   , logLevel :: LogLevel
   , ctlLogLevel :: LogLevel
   }
 
-derive instance Newtype (AppConfig' a) _
-derive instance Functor AppConfig'
+derive instance Newtype (AppConfig' ac qb) _
 
-appConfigCodec :: CA.JsonCodec (AppConfig' QueryBackendParamsSimple)
+type AppConfig = AppConfig' AuctionConfig QueryBackendParams
+
+appConfigCodec :: CA.JsonCodec (AppConfig' (Array AuctionConfig) QueryBackendParamsSimple)
 appConfigCodec =
   wrapIso AppConfig $ CA.object "AppConfig" $ CAR.record
-    { auctionMetadataOref:
-        CA.prismaticCodec "TransactionInput" readOref printOref
-          CA.string
+    { auctionConfig: CA.array auctionConfigCodec
     , serverPort: portCodec
     , wsServerPort: portCodec
-    , hydraNodeId: CA.string
-    , hydraNode: hostPortCodec
-    , hydraNodeApi: hostPortCodec
     , hydraPersistDir: CA.string
     , hydraSk: CA.string
-    , cardanoSk: CA.string
-    , walletSk: CA.string
-    , peers: CA.array hydraHeadPeerCodec
     , nodeSocket: CA.string
     , network: networkCodec
     , queryBackend: queryBackendParamsSimpleCodec
@@ -105,220 +148,6 @@ appConfigCodec =
     , logLevel: logLevelCodec
     , ctlLogLevel: logLevelCodec
     }
-
-execAppConfigParser :: Optparse.ParserInfo Options -> Effect AppConfig
-execAppConfigParser parserInfo = do
-  opts <- Optparse.execParser parserInfo
-  case opts of
-    OptionsConfig appConfig ->
-      pure appConfig
-    OptionsConfigFile fp -> do
-      appConfig <- either throw pure =<< caDecodeFile appConfigCodec fp
-      pure $ appConfig <#>
-        flip toQueryBackendParams defaultConfirmTxDelay
-
-data Options
-  = OptionsConfig AppConfig
-  | OptionsConfigFile FilePath
-
-optionsParser :: Optparse.Parser Options
-optionsParser = (OptionsConfigFile <$> configFileParser)
-  <|> (OptionsConfig <$> configParser)
-
-configFileParser :: Optparse.Parser FilePath
-configFileParser =
-  Optparse.strOption $ fold
-    [ Optparse.long "config"
-    , Optparse.metavar "FILE"
-    , Optparse.help "Filepath to delegate-server JSON configuration."
-    ]
-
-configParser :: Optparse.Parser AppConfig
-configParser = ado
-  auctionMetadataOref <- Optparse.option parseOref $ fold
-    [ Optparse.long "auction-metadata-oref"
-    , Optparse.metavar "TXOUTREF"
-    , Optparse.help
-        "Reference of the tx output with auction metadata record. \
-        \This will be used to access onchain data for the target \
-        \auction."
-    ]
-  serverPort <- Optparse.option parsePort $ fold
-    [ Optparse.long "server-port"
-    , Optparse.metavar "PORT"
-    , Optparse.help
-        "Listen port for incoming client connections to this \
-        \delegate server."
-    ]
-  wsServerPort <- Optparse.option parsePort $ fold
-    [ Optparse.long "ws-server-port"
-    , Optparse.metavar "PORT"
-    , Optparse.help
-        "Listen port for incoming WebSocket connections to this \
-        \delegate server."
-    ]
-  hydraNodeId <- Optparse.strOption $ fold
-    [ Optparse.long "hydra-node-id"
-    , Optparse.metavar "STR"
-    , Optparse.help
-        "The Hydra node identifier used on the Hydra network. It is \
-        \important to have a unique identifier in order to be able \
-        \to distinguish between connected peers."
-    ]
-  hydraNode <- Optparse.option parseHostPort $ fold
-    [ Optparse.long "hydra-node"
-    , Optparse.metavar "HOSTPORT"
-    , Optparse.help
-        "Listen address + port for incoming Hydra network \
-        \connections."
-    ]
-  hydraNodeApi <- Optparse.option parseHostPort $ fold
-    [ Optparse.long "hydra-node-api"
-    , Optparse.metavar "HOSTPORT"
-    , Optparse.help
-        "Listen address + port for incoming client Hydra Node API \
-        \connections."
-    ]
-  hydraPersistDir <- Optparse.strOption $ fold
-    [ Optparse.long "hydra-persist-dir"
-    , Optparse.metavar "DIR"
-    , Optparse.help
-        "The directory where the Hydra Head state is stored. Do not \
-        \edit these files manually!"
-    ]
-  hydraSk <- Optparse.strOption $ fold
-    [ Optparse.long "hydra-sk"
-    , Optparse.metavar "FILE"
-    , Optparse.help
-        "Hydra signing key used by the underlying hydra-node."
-    ]
-  cardanoSk <- Optparse.strOption $ fold
-    [ Optparse.long "cardano-sk"
-    , Optparse.metavar "FILE"
-    , Optparse.help
-        "Cardano signing key of the underlying hydra-node. This will \
-        \be used to authorize Hydra protocol transactions and any \
-        \funds owned by this key will be used as 'fuel'."
-    ]
-  walletSk <- Optparse.strOption $ fold
-    [ Optparse.long "wallet-sk"
-    , Optparse.metavar "FILE"
-    , Optparse.help
-        "Cardano signing key of the wallet used to commit collateral \
-        \to the hydra-node. It is necessary because hydra-node \
-        \prohibits committing utxos controlled by 'cardanoSk'."
-    ]
-  peers <- Optparse.many $ Optparse.option parseHydraHeadPeer $ fold
-    [ Optparse.long "peer"
-    , Optparse.metavar "JSON"
-    , Optparse.help
-        "Peer data in JSON format: { \"hydraNode\": <HOSTPORT>, \
-        \\"hydraVk\": <FILE>, \"cardanoVk\": <FILE> }."
-    ]
-  nodeSocket <- Optparse.strOption $ fold
-    [ Optparse.long "node-socket"
-    , Optparse.metavar "FILE"
-    , Optparse.help
-        "Filepath to local unix domain socket used to communicate \
-        \with the cardano node."
-    ]
-  network <- networkParser
-  queryBackend <- queryBackendParser
-  hydraScriptsTxHash <- Optparse.strOption $ fold
-    [ Optparse.long "hydra-scripts-tx-id"
-    , Optparse.metavar "TXID"
-    , Optparse.help
-        "The transaction which is expected to have published Hydra \
-        \scripts as reference scripts in its outputs. See hydra-node \
-        \release notes for pre-published versions. You can use the \
-        \'publish-scripts' sub-command of hydra-node to publish them \
-        \yourself."
-    ]
-  hydraContestPeriod <- Optparse.option Optparse.int $ fold
-    [ Optparse.long "hydra-contestation-period"
-    , Optparse.metavar "SECONDS"
-    , Optparse.showDefault
-    , Optparse.value 60
-    , Optparse.help
-        "Contestation period for close transaction in seconds. If \
-        \this value is not in sync with other participants \
-        \hydra-node will ignore the initial tx. Additionally, this \
-        \value needs to make sense compared to the current network \
-        \we are running."
-    ]
-  logLevel <- Optparse.option parseLogLevel $ fold
-    [ Optparse.long "log-level"
-    , Optparse.metavar "LOGLEVEL"
-    , Optparse.value Info
-    ]
-  ctlLogLevel <- Optparse.option parseLogLevel $ fold
-    [ Optparse.long "ctl-log-level"
-    , Optparse.metavar "LOGLEVEL"
-    , Optparse.value Warn
-    ]
-  in
-    wrap
-      { auctionMetadataOref
-      , serverPort
-      , wsServerPort
-      , hydraNodeId
-      , hydraNode
-      , hydraNodeApi
-      , hydraPersistDir
-      , hydraSk
-      , cardanoSk
-      , walletSk
-      , peers: Array.fromFoldable peers
-      , nodeSocket
-      , network
-      , queryBackend
-      , hydraScriptsTxHash
-      , hydraContestPeriod
-      , logLevel
-      , ctlLogLevel
-      }
-
-queryBackendParser :: Optparse.Parser QueryBackendParams
-queryBackendParser = blockfrostBackendParser <|> ctlBackendParser
-
-blockfrostBackendParser :: Optparse.Parser QueryBackendParams
-blockfrostBackendParser = ado
-  blockfrostConfig <- Optparse.option parseServerConfig $ fold
-    [ Optparse.long "blockfrost-config"
-    , Optparse.metavar "URL"
-    , Optparse.help
-        "Blockfrost server configuration. See \
-        \ https://blockfrost.dev/api/blockfrost-io-api-documentation \
-        \ for available public servers."
-    ]
-  blockfrostApiKey <- Optparse.optional $ Optparse.strOption $ fold
-    [ Optparse.long "blockfrost-api-key"
-    , Optparse.metavar "STR"
-    , Optparse.help "Optional Blockfrost API key."
-    ]
-  in
-    BlockfrostBackendParams
-      { blockfrostConfig
-      , blockfrostApiKey
-      , confirmTxDelay: defaultConfirmTxDelay
-      }
-      Nothing
-
-ctlBackendParser :: Optparse.Parser QueryBackendParams
-ctlBackendParser = ado
-  ogmiosConfig <- Optparse.option parseServerConfig $ fold
-    [ Optparse.long "ogmios-config"
-    , Optparse.metavar "URL"
-    , Optparse.help "Ogmios server configuration."
-    ]
-  kupoConfig <- Optparse.option parseServerConfig $ fold
-    [ Optparse.long "kupo-config"
-    , Optparse.metavar "URL"
-    , Optparse.help "Kupo server configuration."
-    ]
-  in
-    CtlBackendParams { ogmiosConfig, kupoConfig }
-      Nothing
 
 data Network = Testnet { magic :: Int } | Mainnet
 
@@ -349,52 +178,33 @@ networkCodec =
     , "mainnet": const Mainnet
     }
 
-networkParser :: Optparse.Parser Network
-networkParser = mainnetParser <|> testnetParser
+networkToNetworkId :: Network -> NetworkId
+networkToNetworkId =
+  case _ of
+    Testnet _ -> TestnetId
+    Mainnet -> MainnetId
 
-mainnetParser :: Optparse.Parser Network
-mainnetParser = Optparse.flag' Mainnet $ fold
-  [ Optparse.long "mainnet"
-  , Optparse.help "Use the mainnet magic id."
-  ]
+execAppConfigParser :: Effect (AppConfig' (Array AuctionConfig) QueryBackendParams)
+execAppConfigParser = do
+  fp <- Optparse.execParser parserInfo
+  appConfig <- either throw pure =<< caDecodeFile appConfigCodec fp
+  pure $ over wrap
+    ( \rec -> rec
+        { queryBackend =
+            toQueryBackendParams rec.queryBackend defaultConfirmTxDelay
+        }
+    )
+    appConfig
+  where
+  parserInfo :: Optparse.ParserInfo FilePath
+  parserInfo =
+    Optparse.info (configFileParser <**> Optparse.helper) $ Optparse.fullDesc
+      <> Optparse.header "delegate-server"
 
-testnetParser :: Optparse.Parser Network
-testnetParser =
-  map (Testnet <<< { magic: _ }) $ Optparse.option Optparse.int $ fold
-    [ Optparse.long "testnet-magic"
-    , Optparse.metavar "INT"
-    , Optparse.help
-        "Network identifier for a testnet to connect to. We only \
-        \need to provide the magic number here. For example: '2' is \
-        \the 'preview' network. See \
-        \https://book.world.dev.cardano.org/environments.html for \
-        \available networks."
-    ]
-
-----------------------------------------------------------------------
--- Readers
-
-parseOref :: Optparse.ReadM TransactionInput
-parseOref =
-  Optparse.eitherReader $ \str ->
-    note ("Can't parse as TransactionInput: `" <> str <> "`") $ readOref str
-
-parsePort :: Optparse.ReadM Port
-parsePort = parserReader "Port" Port.parser
-
-parseHydraHeadPeer :: Optparse.ReadM HydraHeadPeer
-parseHydraHeadPeer = jsonReader "HydraHeadPeer" hydraHeadPeerCodec
-
-parseLogLevel :: Optparse.ReadM LogLevel
-parseLogLevel = jsonReader "LogLevel" logLevelCodec
-
-parseServerConfig :: Optparse.ReadM ServerConfig
-parseServerConfig = parserReader "ServerConfig" httpServerConfigParser
-
-httpServerConfigParser :: Parser String ServerConfig
-httpServerConfigParser = do
-  secure <- (string "https://" $> true) <|> (string "http://" $> false)
-  host <- Host.parser <#> Host.print
-  port <- Port.parser <#> UInt.fromInt <<< Port.toInt
-  path <- rest <#> \x -> if String.null x then Nothing else Just x
-  pure { port, host, secure, path }
+  configFileParser :: Optparse.Parser FilePath
+  configFileParser =
+    Optparse.strOption $ fold
+      [ Optparse.long "config"
+      , Optparse.metavar "FILE"
+      , Optparse.help "Filepath to delegate-server JSON configuration."
+      ]

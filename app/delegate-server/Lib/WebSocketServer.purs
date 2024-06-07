@@ -28,7 +28,7 @@ foreign import closeWebSocketServer :: WebSocketServerObj -> Effect Unit -> Effe
 
 foreign import onConnect
   :: WebSocketServerObj
-  -> (WebSocketConnection -> Effect Unit)
+  -> (WebSocketConnection -> String -> Effect Unit)
   -> Effect Unit
 
 type WebSocketServerOptions =
@@ -37,7 +37,7 @@ type WebSocketServerOptions =
   }
 
 type WebSocketServer (out :: Type) =
-  { onConnect :: ((Array out -> Effect Unit) -> Effect Unit) -> Effect Unit
+  { onConnect :: (String -> (Array out -> Effect Unit) -> Effect Unit) -> Effect Unit
   , broadcast :: out -> Effect Unit
   , close :: Aff Unit
   }
@@ -52,8 +52,8 @@ mkWebSocketServer outMessageCodec options = do
   wss <- liftEffect $ newWebSocketServer options
   pure
     { onConnect: \cb ->
-        onConnect wss \conn ->
-          cb (traverse_ (sendMessage conn <<< caEncodeString outMessageCodec))
+        onConnect wss \conn path ->
+          cb path (traverse_ (sendMessage conn <<< caEncodeString outMessageCodec))
 
     , broadcast:
         broadcastMessage wss <<< caEncodeString outMessageCodec
