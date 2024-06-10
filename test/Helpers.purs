@@ -11,6 +11,7 @@ module Test.Helpers
   , mkVerificationKeyUnsafe
   , mkdirIfNotExists
   , publicPaymentKeyToFile
+  , unsafeHead
   , untilM
   , waitUntil
   ) where
@@ -33,7 +34,7 @@ import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
 import Ctl.Internal.Serialization.Address (addressFromBech32)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Ctl.Internal.Serialization.Keys (bytesFromPublicKey)
-import Data.Array (cons, drop, take)
+import Data.Array (cons, drop, head, take)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -82,6 +83,9 @@ mkOrefUnsafe :: String -> TransactionInput
 mkOrefUnsafe txHash =
   fromJustWithErr "mkOrefUnsafe" $
     (wrap <<< { transactionId: _, index: zero } <<< wrap) <$> hexToByteArray txHash
+
+unsafeHead :: forall a. Array a -> a
+unsafeHead = fromJustWithErr "unsafeHead" <<< head
 
 -- Delays the fiber until the given POSIXTime has passed (plus 3 seconds).
 waitUntil :: POSIXTime -> Contract Unit

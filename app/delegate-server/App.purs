@@ -18,7 +18,6 @@ import Prelude
 
 import Contract.Config
   ( ContractParams
-  , NetworkId(TestnetId, MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
   , QueryBackendParams
   , WalletSpec(UseKeys)
@@ -43,7 +42,6 @@ import DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
   , AuctionConfig
-  , Network(Testnet, Mainnet)
   , networkToNetworkId
   )
 import DelegateServer.Lib.Contract (runContractNullCostsAff)

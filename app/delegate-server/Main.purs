@@ -9,9 +9,12 @@ import Prelude
 import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
 import Contract.Address (getNetworkId)
+import Contract.Config (QueryBackendParams)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Contract.Monad (ContractEnv, stopContractEnv)
 import Control.Parallel (parTraverse)
+import Ctl.Internal.Helpers ((<</>>))
+import Data.Array (concat) as Array
 import Data.Foldable (foldMap)
 import Data.Int (decimal, toStringAs) as Int
 import Data.Maybe (Maybe, maybe)
@@ -20,6 +23,8 @@ import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
 import Data.Traversable (for_, sequence, traverse_)
+import Data.Tuple (Tuple(Tuple), fst, snd)
+import Data.Tuple.Nested ((/\))
 import Data.UInt (toString) as UInt
 import DelegateServer.App
   ( AppLogger
@@ -32,10 +37,12 @@ import DelegateServer.App
   , runContract
   , runContractExitOnErr
   )
+import DelegateServer.AppMap (buildAppMap)
 import DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
   , Network(Testnet, Mainnet)
+  , AuctionConfig
   , execAppConfigParser
   )
 import DelegateServer.Const (appConst)
@@ -97,23 +104,27 @@ main = launchAff_ do
       appHandle.cleanupHandler
     onSignal SIGINT appHandle.cleanupHandler
     onSignal SIGTERM appHandle.cleanupHandler
-  exitReason <- AVar.take appHandle.appState.exitSem
-  liftEffect do
-    log $ withGraphics (foreground Red) $ show exitReason
-    appHandle.cleanupHandler
+
+{-
+exitReason <- AVar.take appHandle.appState.exitSem
+liftEffect do
+  log $ withGraphics (foreground Red) $ show exitReason
+  appHandle.cleanupHandler
+-}
 
 type AppHandle =
   { cleanupHandler :: Effect Unit
-  , appState :: AppState
   , appLogger :: AppLogger
-  , ws :: HydraNodeApiWebSocket
+  , apps :: Array AppState
+  , hydraNodeApiWebSockets :: Array HydraNodeApiWebSocket
   }
 
 startDelegateServer :: AppConfig' (Array AuctionConfig) QueryBackendParams -> Aff AppHandle
-startDelegateServer appConfig = do
+startDelegateServer appConfig@(AppConfig appConfigRec) = do
   -- TODO: Make each app instance have its own logger, otherwise the
   -- logs will be a complete mess
   let appLogger = appLoggerDefault
+
   appStateList <-
     parTraverse
       ( \auctionConfig -> do
@@ -121,82 +132,81 @@ startDelegateServer appConfig = do
           runApp appState appLogger $ setAuction *> prepareCollateralUtxo
           pure appState
       )
-      (unwrap appConfig).auctionConfig
-  appMap <- buildAppMap appStateList
+      appConfigRec.auctionConfig -- array of auction configurations
 
-  parTraverse
-    ( \auctionConfig -> do
-        appState <- initApp appConfig auctionConfig
+  appMap0 <- buildAppMap $ flip Tuple unit <$> appStateList
+  wsServer' <- wsServer appConfigRec.wsServerPort appConfigRec.network appMap0 appLogger
+
+  resources <- parTraverse
+    ( \appState ->
         runApp appState appLogger do
-          setAuction *> prepareCollateralUtxo
           hydraNodeProcess <- startHydraNode
-          hydraApiWs <- initHydraApiWsConn
-
+          hydraApiWs <- initHydraApiWsConn wsServer'
+          timers <-
+            sequence
+              [ initHeadAtBiddingStart hydraApiWs
+              , closeHeadAtBiddingEnd hydraApiWs
+              ]
+          pure { appMapValues: appState /\ hydraApiWs, hydraNodeProcess, timers }
     )
-    (unwrap appConfig).auctionConfig
+    appStateList
 
-startDelegateServer :: AppConfig -> Aff AppHandle
-startDelegateServer appConfig = do
-  appState <- initApp appConfig
-  let appLogger = appLoggerDefault
+  appMap1 <- buildAppMap $ _.appMapValues <$> resources
+  closeServer <- liftEffect $ httpServer appConfigRec.serverPort appLogger appMap1
 
-  runApp appState appLogger do
-    setAuction *> prepareCollateralUtxo
-    hydraNodeProcess <- startHydraNode appConfig
-    wsServer' <- wsServer appConfig
-    hydraApiWs <- initHydraApiWsConn wsServer'
-    closeServer <- liftEffect $ httpServer appState appLogger hydraApiWs
-
-    timers <-
-      sequence
-        [ initHeadAtBiddingStart hydraApiWs
-        , closeHeadAtBiddingEnd hydraApiWs
-        ]
-
-    cleanupSem <- liftAff $ AVar.new unit
-    let
-      cleanupHandler' =
-        AVarSync.tryTake cleanupSem >>=
-          maybe (pure unit)
-            ( const
-                ( cleanupHandler hydraNodeProcess hydraApiWs wsServer' closeServer
-                    (unwrap appState.contractEnv)
-                    timers
-                )
-            )
-    pure
-      { cleanupHandler: cleanupHandler'
-      , appState
-      , appLogger
-      , ws: hydraApiWs
-      }
+  cleanupSem <- liftAff $ AVar.new unit
+  let
+    apps = resources <#> fst <<< _.appMapValues
+    hydraNodeProcs = resources <#> _.hydraNodeProcess
+    hydraNodeApiWebSockets = resources <#> snd <<< _.appMapValues
+    cleanupHandler' =
+      AVarSync.tryTake cleanupSem >>=
+        maybe (pure unit)
+          ( const
+              ( cleanupHandler hydraNodeProcs hydraNodeApiWebSockets wsServer' closeServer
+                  (apps <#> unwrap <<< _.contractEnv)
+                  (Array.concat $ _.timers <$> resources)
+              )
+          )
+  pure
+    { cleanupHandler: cleanupHandler'
+    , appLogger
+    , apps
+    , hydraNodeApiWebSockets
+    }
 
 cleanupHandler
-  :: ChildProcess
-  -> HydraNodeApiWebSocket
+  :: Array ChildProcess
+  -> Array HydraNodeApiWebSocket
   -> DelegateWebSocketServer
   -> (Effect Unit -> Effect Unit)
-  -> ContractEnv
+  -> Array ContractEnv
   -> Array (AVar (Maybe TimeoutId))
   -> Effect Unit
-cleanupHandler hydraNodeProcess ws wsServer closeServer contractEnv timers = do
+cleanupHandler
+  hydraNodeProcs
+  hydraNodeApiWebSockets
+  wsServer
+  closeHttpServer
+  contractEnvs
+  timers = do
   log "\nCancelling timers."
   for_ timers \timer ->
     AVarSync.take timer \timeout -> do
       traverse_ (traverse_ Timer.clearTimeout) timeout
-  log "Stopping http server."
-  closeServer do
-    log "Closing hydra-node-api ws connection."
-    ws.baseWs.close
-    log "Killing hydra-node."
-    kill SIGINT hydraNodeProcess
-    log "Finalizing Contract environment, stopping ws server."
-    flip runAff_ (wsServer.close <* stopContractEnv contractEnv) $
+  log "Stopping HTTP server."
+  closeHttpServer do
+    log "Closing Hydra Node API ws connections."
+    traverse_ _.baseWs.close hydraNodeApiWebSockets
+    log "Killing Hydra nodes."
+    traverse_ (kill SIGINT) hydraNodeProcs
+    log "Finalizing Contract environments, stopping ws server."
+    flip runAff_ (wsServer.close <* traverse_ stopContractEnv contractEnvs) $
       const (log "Successfully completed all cleanup actions -> exiting.")
 
 setAuction :: forall m. AppBase m => m Unit
 setAuction = do
-  { auctionMetadataOref } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { auctionMetadataOref } } <- unwrap <$> access (Proxy :: _ "config")
   auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
   setAuctionInfo auctionInfo
   network <- runContract getNetworkId
@@ -268,9 +278,10 @@ initHydraApiWsConn wsServer = do
 
 startHydraNode :: AppM ChildProcess
 startHydraNode = do
-  appConfig <- unwrap <$> access (Proxy :: _ "config")
+  appConfig <- access (Proxy :: _ "config")
   apiServerStartedSem <- liftAff AVar.empty
-  hydraNodeProcess <- liftEffect $ spawn "hydra-node" hydraNodeArgs defaultSpawnOptions
+  hydraNodeProcess <- liftEffect $ spawn "hydra-node" (hydraNodeArgs appConfig)
+    defaultSpawnOptions
 
   runAppEff' <- getAppEffRunner
   liftEffect $ onDataString (stderr hydraNodeProcess) Encoding.UTF8 \str ->
@@ -284,8 +295,8 @@ startHydraNode = do
   liftAff $ AVar.take apiServerStartedSem
   pure hydraNodeProcess
   where
-  peerArgs :: Array String
-  peerArgs =
+  peerArgs :: AppConfig -> Array String
+  peerArgs (AppConfig appConfig) =
     appConfig.auctionConfig.peers # foldMap \peer ->
       [ "--peer"
       , printHostPort peer.hydraNode
@@ -295,8 +306,8 @@ startHydraNode = do
       , peer.cardanoVk
       ]
 
-  networkArgs :: Array String
-  networkArgs =
+  networkArgs :: AppConfig -> Array String
+  networkArgs (AppConfig appConfig) =
     case appConfig.network of
       Testnet { magic } ->
         [ "--testnet-magic"
@@ -306,9 +317,9 @@ startHydraNode = do
         [ "--mainnet"
         ]
 
-  hydraNodeArgs :: Array String
-  hydraNodeArgs =
-    peerArgs <> networkArgs <>
+  hydraNodeArgs :: AppConfig -> Array String
+  hydraNodeArgs ac@(AppConfig appConfig) =
+    peerArgs ac <> networkArgs ac <>
       [ "--node-id"
       , appConfig.auctionConfig.hydraNodeId
       , "--host"

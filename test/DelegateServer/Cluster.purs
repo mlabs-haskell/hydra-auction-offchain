@@ -6,7 +6,7 @@ module Test.DelegateServer.Cluster
 import Prelude
 
 import Contract.Address (PubKeyHash)
-import Contract.Config (NetworkId(MainnetId), mkCtlBackendParams)
+import Contract.Config (NetworkId(MainnetId), QueryBackendParams, mkCtlBackendParams)
 import Contract.Hashing (publicKeyHash)
 import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
@@ -40,7 +40,7 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
 import DelegateServer.App (AppM, runApp, runContract)
-import DelegateServer.Config (AppConfig, Network(Mainnet))
+import DelegateServer.Config (AppConfig', Network(Mainnet), AuctionConfig)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
@@ -77,6 +77,7 @@ import Test.Helpers
   , localhost
   , mkdirIfNotExists
   , publicPaymentKeyToFile
+  , unsafeHead
   )
 import Test.Plutip.Config (plutipConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)
@@ -163,7 +164,7 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
           withRandomAppHandle f =
             liftAff do
               appHandle <- randomElem apps
-              runApp appHandle.appState appHandle.appLogger $ f appHandle
+              runApp (unsafeHead appHandle.apps) appHandle.appLogger $ f appHandle
 
           withRandomAppHandle_ :: forall a. AppM a -> Contract a
           withRandomAppHandle_ =
@@ -181,7 +182,7 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
 
             , moveBidToL2:
                 withRandomAppHandle \appHandle ->
-                  moveBidHandlerImpl appHandle.ws
+                  moveBidHandlerImpl $ unsafeHead appHandle.hydraNodeApiWebSockets
 
             , queryStandingBidL2:
                 withRandomAppHandle_ do
@@ -191,8 +192,10 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
                 \bidTerms ->
                   withRandomAppHandle \appHandle -> do
                     env <- wrap <$> runContract (patchContractEnv MainnetId)
-                    let body = caEncodeString (bidTermsCodec MainnetId) bidTerms
-                    local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
+                    let
+                      body = caEncodeString (bidTermsCodec MainnetId) bidTerms
+                      ws = unsafeHead appHandle.hydraNodeApiWebSockets
+                    local (_ { contractEnv = env }) $ placeBidHandlerImpl ws body
 
             , getAppExitReason:
                 withRandomAppHandle_ do
@@ -239,7 +242,7 @@ genDelegateServerConfigs
   :: FilePath
   -> DelegateServerClusterConfig
   -> NonEmptyArray DelegateServerPeer
-  -> Aff (Array AppConfig)
+  -> Aff (Array (AppConfig' (Array AuctionConfig) QueryBackendParams))
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
   hydraScriptsTxHash <- publishHydraScripts
@@ -261,32 +264,38 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
     , mkWalletSk: flip concatPaths "wallet.sk"
     }
 
-  worker :: Array (Int /\ FilePath) -> String -> Array AppConfig
+  worker
+    :: Array (Int /\ FilePath)
+    -> String
+    -> Array (AppConfig' (Array AuctionConfig) QueryBackendParams)
   worker peers' hydraScriptsTxHash =
     peers' <#> \(idx /\ workdir) -> wrap
-      { auctionMetadataOref: clusterConfig.auctionMetadataOref
+      { auctionConfig:
+          [ { auctionMetadataOref: clusterConfig.auctionMetadataOref
+            , hydraNodeId: toStringAs decimal idx
+            , hydraNode: ops.mkHydraNode idx
+            , hydraNodeApi: ops.mkHydraNodeApi idx
+            , peers:
+                fromJustWithErr "genDelegateServerConfigs" $
+                  deleteAt idx peers' <#> map \(idx' /\ workdir') ->
+                    { hydraNode: ops.mkHydraNode idx'
+                    , hydraVk: ops.mkHydraVk workdir'
+                    , cardanoVk: ops.mkCardanoVk workdir'
+                    , httpServer:
+                        { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
+                        , host: localhost
+                        , secure: false
+                        , path: Nothing
+                        }
+                    }
+            , cardanoSk: ops.mkCardanoSk workdir
+            , walletSk: ops.mkWalletSk workdir
+            }
+          ]
       , serverPort: ops.mkServerPort idx
       , wsServerPort: ops.mkWsServerPort idx
-      , hydraNodeId: toStringAs decimal idx
-      , hydraNode: ops.mkHydraNode idx
-      , hydraNodeApi: ops.mkHydraNodeApi idx
       , hydraPersistDir: ops.mkPersistDir workdir
       , hydraSk: ops.mkHydraSk workdir
-      , cardanoSk: ops.mkCardanoSk workdir
-      , walletSk: ops.mkWalletSk workdir
-      , peers:
-          fromJustWithErr "genDelegateServerConfigs" $
-            deleteAt idx peers' <#> map \(idx' /\ workdir') ->
-              { hydraNode: ops.mkHydraNode idx'
-              , hydraVk: ops.mkHydraVk workdir'
-              , cardanoVk: ops.mkCardanoVk workdir'
-              , httpServer:
-                  { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
-                  , host: localhost
-                  , secure: false
-                  , path: Nothing
-                  }
-              }
       , nodeSocket: clusterConfig.plutipClusterParams.nodeSocketPath
       , network: Mainnet
       , queryBackend:

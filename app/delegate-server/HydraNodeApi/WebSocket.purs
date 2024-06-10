@@ -307,7 +307,8 @@ setHeadStatus' :: forall m. AppBase m => DelegateWebSocketServer -> HydraHeadSta
 setHeadStatus' wsServer status = do
   setHeadStatus status
   logInfo' $ "New head status: " <> printHeadStatus status <> "."
-  liftEffect $ wsServer.broadcast (HydraHeadStatus status)
+  auctionCs <- _.auctionId <<< unwrap <$> readAppState (Proxy :: _ "auctionInfo")
+  liftEffect $ wsServer.broadcast auctionCs (HydraHeadStatus status)
 
 setSnapshot' :: forall m. AppOpen m => DelegateWebSocketServer -> HydraSnapshot -> m Unit
 setSnapshot' wsServer snapshot = do
@@ -315,5 +316,6 @@ setSnapshot' wsServer snapshot = do
   logInfo' $ "New confirmed snapshot: " <> printJsonUsingCodec hydraSnapshotCodec
     snapshot
   standingBid <- map snd <$> queryStandingBidL2
-  liftEffect $ traverse_ (wsServer.broadcast <<< StandingBid)
+  auctionCs <- _.auctionId <<< unwrap <$> readAppState (Proxy :: _ "auctionInfo")
+  liftEffect $ traverse_ (wsServer.broadcast auctionCs <<< StandingBid)
     standingBid

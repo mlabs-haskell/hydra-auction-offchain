@@ -18,12 +18,12 @@ import Effect.Aff.AVar (read) as AVar
 
 type AppMap a = Map CurrencySymbol (AppState /\ a)
 
-buildAppMap :: Array AppState -> Aff (AppMap Unit)
+buildAppMap :: forall a. Array (AppState /\ a) -> Aff (AppMap a)
 buildAppMap apps =
   foldM
-    ( \appMap appState -> do
+    ( \appMap val@(appState /\ _) -> do
         auctionCs <- _.auctionId <<< unwrap <$> AVar.read appState.auctionInfo
-        pure $ Map.insert auctionCs (appState /\ unit) appMap
+        pure $ Map.insert auctionCs val appMap
     )
     Map.empty
     (List.fromFoldable apps)

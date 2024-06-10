@@ -4,14 +4,12 @@ module DelegateServer.Server
 
 import Prelude
 
-import Contract.Log (logInfo')
-import Control.Monad.Logger.Trans (runLoggerT)
 import Data.Either (Either(Left, Right))
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap)
 import Data.Tuple.Nested (type (/\), (/\))
-import DelegateServer.App (AppLogger, AppM, AppState, runApp, runAppEff)
+import DelegateServer.App (AppLogger, AppM, runApp)
 import DelegateServer.AppMap (AppMap)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
@@ -78,13 +76,13 @@ routerCorsApp _ _ = HTTPure.notFound
 
 appLookupMiddleware
   :: (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
-  -> AppLogger /\ AppMap
+  -> AppLogger /\ AppMap'
   -> HTTPure.Request
   -> Aff HTTPure.Response
 appLookupMiddleware router' (appLogger /\ appMap) request@{ headers }
   | Just auctionCsRaw <- headers !! "Auction-Cs" =
       case caDecodeString currencySymbolCodec auctionCsRaw of
-        Left decodeErr ->
+        Left _ ->
           HTTPure.badRequest "Could not decode Auction-Cs request header"
         Right auctionCs ->
           case Map.lookup auctionCs appMap of

@@ -6,6 +6,8 @@ module DelegateServer.Lib.WebSocketServer
 
 import Prelude
 
+import Contract.Prim.ByteArray (byteArrayToHex)
+import Contract.Value (CurrencySymbol, getCurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (Either(Right))
 import Data.Traversable (traverse_)
@@ -22,7 +24,7 @@ foreign import newWebSocketServer :: WebSocketServerOptions -> Effect WebSocketS
 
 foreign import sendMessage :: WebSocketConnection -> String -> Effect Unit
 
-foreign import broadcastMessage :: WebSocketServerObj -> String -> Effect Unit
+foreign import broadcastMessage :: WebSocketServerObj -> String -> String -> Effect Unit
 
 foreign import closeWebSocketServer :: WebSocketServerObj -> Effect Unit -> Effect Unit
 
@@ -38,7 +40,7 @@ type WebSocketServerOptions =
 
 type WebSocketServer (out :: Type) =
   { onConnect :: (String -> (Array out -> Effect Unit) -> Effect Unit) -> Effect Unit
-  , broadcast :: out -> Effect Unit
+  , broadcast :: CurrencySymbol -> out -> Effect Unit
   , close :: Aff Unit
   }
 
@@ -55,8 +57,9 @@ mkWebSocketServer outMessageCodec options = do
         onConnect wss \conn path ->
           cb path (traverse_ (sendMessage conn <<< caEncodeString outMessageCodec))
 
-    , broadcast:
-        broadcastMessage wss <<< caEncodeString outMessageCodec
+    , broadcast: \auctionCs message ->
+        broadcastMessage wss (byteArrayToHex $ getCurrencySymbol auctionCs)
+          (caEncodeString outMessageCodec message)
 
     , close:
         makeAff \cb -> do
