@@ -1,4 +1,4 @@
-module Test.Plutip
+module Test.Main
   ( main
   ) where
 
@@ -17,6 +17,7 @@ import Test.Contract.DelegateServer (suite) as DelegateServer
 import Test.Contract.EnterAuction (suite) as EnterAuction
 import Test.Contract.PlaceBid (suite) as PlaceBid
 import Test.Contract.StartBidding (suite) as StartBidding
+import Test.DelegateServer.WsServer (suite) as WsServer
 import Test.Plutip.Config (plutipConfig)
 
 main :: Effect Unit
@@ -25,7 +26,9 @@ main = do
   interruptOnSignal SIGINT fiber *> interruptOnSignal SIGTERM fiber
 
 suite :: TestPlanM (Aff Unit) Unit
-suite =
+suite = do
+  group "delegate-server" do
+    WsServer.suite
   testPlutipContracts plutipConfig do
     group "contracts" do
       AnnounceAuction.suite

@@ -10,7 +10,8 @@ import Prelude
 import Contract.Log (logTrace')
 import Control.Monad.Logger.Class (class MonadLogger)
 import Ctl.Internal.JsWebSocket
-  ( _mkWebSocket
+  ( JsWebSocket
+  , _mkWebSocket
   , _onWsConnect
   , _onWsError
   , _onWsMessage
@@ -28,16 +29,19 @@ import Effect.Class (class MonadEffect)
 import HydraAuctionOffchain.Lib.Json (caDecodeString, caEncodeString)
 import HydraAuctionOffchain.Types.HostPort (HostPort)
 
+foreign import _onWsClose :: JsWebSocket -> (Int -> String -> Effect Unit) -> Effect Unit
+
 type WebSocket (m :: Type -> Type) (in_ :: Type) (out :: Type) =
   { onConnect :: m Unit -> Effect Unit
   , onMessage :: (in_ -> m Unit) -> Effect Unit
   , onError :: (String -> m Unit) -> Effect Unit
+  , onClose :: (Int -> String -> m Unit) -> Effect Unit
   , send :: out -> Effect Unit
   , close :: Effect Unit
   }
 
 type WebSocketBuilder (m :: Type -> Type) (in_ :: Type) (out :: Type) =
-  { hostPort :: HostPort
+  { url :: String
   , inMsgCodec :: CA.JsonCodec in_
   , outMsgCodec :: CA.JsonCodec out
   , runM :: forall a. m a -> Effect Unit
@@ -50,8 +54,8 @@ mkWebSocket
   => WebSocketBuilder m in_ out
   -> Effect (WebSocket m in_ out /\ String)
 mkWebSocket builder = do
-  ws <- _mkWebSocket wsLogger wsUrl
-  pure $ flip Tuple wsUrl $
+  ws <- _mkWebSocket wsLogger builder.url
+  pure $ flip Tuple builder.url $
     { onConnect:
         \callback ->
           _onWsConnect ws (builder.runM callback)
@@ -68,6 +72,10 @@ mkWebSocket builder = do
         \callback ->
           void $ _onWsError ws (builder.runM <<< callback)
 
+    , onClose:
+        \callback ->
+          _onWsClose ws (\code -> builder.runM <<< callback code)
+
     , send:
         \msg ->
           _wsSend ws wsLogger (caEncodeString builder.outMsgCodec msg)
@@ -76,9 +84,6 @@ mkWebSocket builder = do
         _wsFinalize ws *> _wsClose ws
     }
   where
-  wsUrl :: String
-  wsUrl = mkWsUrl builder.hostPort
-
   wsLogger :: String -> Effect Unit
   wsLogger _ = pure unit
 

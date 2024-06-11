@@ -21,6 +21,7 @@
   , "foldable-traversable"
   , "foreign-object"
   , "formatters"
+  , "gen"
   , "http-methods"
   , "httpure"
   , "integers"

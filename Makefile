@@ -37,8 +37,8 @@ serve:
 repl: requires-nix-shell
 	spago repl
 
-plutip-test: requires-nix-shell
-	CARDANO_NETWORK=mainnet spago run --main Test.Plutip
+test: requires-nix-shell
+	CARDANO_NETWORK=mainnet spago run --main Test.Main
 
 plutip-env: requires-nix-shell
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 

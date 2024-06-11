@@ -15,6 +15,10 @@ export const sendMessage = (ws) => (message) => () => {
   ws.send(message);
 };
 
+export const closeConn = (ws) => (code) => (reason) => () => {
+  ws.close(code, reason);
+};
+
 export const broadcastMessage = (wss) => (auctionCs) => (message) => () => {
   wss.clients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN && ws.connPath === "/" + auctionCs) {

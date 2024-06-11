@@ -1,19 +1,23 @@
 module DelegateServer.Lib.WebSocketServer
-  ( WebSocketServer
+  ( WebSocketCloseReason
+  , WebSocketOnConnect
+  , WebSocketOnConnectAction(AcceptWebSocketConn, CloseWebSocketConn)
+  , WebSocketOnConnectCb
+  , WebSocketServer
   , WebSocketServerOptions
   , mkWebSocketServer
   ) where
 
 import Prelude
 
-import Contract.Prim.ByteArray (byteArrayToHex)
-import Contract.Value (CurrencySymbol, getCurrencySymbol)
+import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Either (Either(Right))
 import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Class (class MonadEffect, liftEffect)
+import HydraAuctionOffchain.Helpers (csToHex)
 import HydraAuctionOffchain.Lib.Json (caEncodeString)
 
 foreign import data WebSocketServerObj :: Type
@@ -23,6 +27,8 @@ foreign import data WebSocketConnection :: Type
 foreign import newWebSocketServer :: WebSocketServerOptions -> Effect WebSocketServerObj
 
 foreign import sendMessage :: WebSocketConnection -> String -> Effect Unit
+
+foreign import closeConn :: WebSocketConnection -> Int -> String -> Effect Unit
 
 foreign import broadcastMessage :: WebSocketServerObj -> String -> String -> Effect Unit
 
@@ -38,10 +44,26 @@ type WebSocketServerOptions =
   , port :: Int
   }
 
-type WebSocketServer (out :: Type) =
-  { onConnect :: (String -> (Array out -> Effect Unit) -> Effect Unit) -> Effect Unit
+type WebSocketServer out =
+  { onConnect :: WebSocketOnConnectCb out -> Effect Unit
   , broadcast :: CurrencySymbol -> out -> Effect Unit
   , close :: Aff Unit
+  }
+
+type WebSocketOnConnectCb out = WebSocketOnConnect out -> Effect WebSocketOnConnectAction
+
+type WebSocketOnConnect out =
+  { connPath :: String
+  , sendMessages :: Array out -> Effect Unit
+  }
+
+data WebSocketOnConnectAction
+  = AcceptWebSocketConn
+  | CloseWebSocketConn WebSocketCloseReason
+
+type WebSocketCloseReason =
+  { code :: Int
+  , reason :: String
   }
 
 mkWebSocketServer
@@ -54,12 +76,18 @@ mkWebSocketServer outMessageCodec options = do
   wss <- liftEffect $ newWebSocketServer options
   pure
     { onConnect: \cb ->
-        onConnect wss \conn path ->
-          cb path (traverse_ (sendMessage conn <<< caEncodeString outMessageCodec))
+        onConnect wss \conn connPath -> do
+          action <- cb
+            { connPath
+            , sendMessages: traverse_ (sendMessage conn <<< caEncodeString outMessageCodec)
+            }
+          case action of
+            CloseWebSocketConn { code, reason } -> closeConn conn code reason
+            AcceptWebSocketConn -> pure unit
 
-    , broadcast: \auctionCs message ->
-        broadcastMessage wss (byteArrayToHex $ getCurrencySymbol auctionCs)
-          (caEncodeString outMessageCodec message)
+    , broadcast: \auctionCs ->
+        broadcastMessage wss (csToHex auctionCs)
+          <<< caEncodeString outMessageCodec
 
     , close:
         makeAff \cb -> do

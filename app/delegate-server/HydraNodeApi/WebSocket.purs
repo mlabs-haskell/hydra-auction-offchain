@@ -80,7 +80,7 @@ import DelegateServer.Types.HydraNodeApiMessage
   )
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.Types.HydraTx (mkHydraTx)
-import DelegateServer.WebSocket (WebSocket, mkWebSocket)
+import DelegateServer.WebSocket (WebSocket, mkWebSocket, mkWsUrl)
 import DelegateServer.WsServer
   ( DelegateWebSocketServer
   , DelegateWebSocketServerMessage(HydraHeadStatus, StandingBid)
@@ -108,7 +108,7 @@ mkHydraNodeApiWebSocket wsServer onConnect = do
   runM <- getAppEffRunner
   liftEffect do
     ws /\ wsUrl <- mkWebSocket
-      { hostPort: hydraNodeApi
+      { url: mkWsUrl hydraNodeApi
       , inMsgCodec: hydraNodeApiInMessageCodec
       , outMsgCodec: hydraNodeApiOutMessageCodec
       , runM

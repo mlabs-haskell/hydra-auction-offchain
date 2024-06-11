@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Helpers
-  ( dateTimeFromPosixTimeUnsafe
+  ( csToHex
+  , dateTimeFromPosixTimeUnsafe
   , errV
   , exceptNoteE
   , fromJustWithErr
@@ -20,7 +21,7 @@ import Prelude
 
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, Datum(Datum), OutputDatum(OutputDatum), fromData)
-import Contract.Prim.ByteArray (byteArrayFromAscii)
+import Contract.Prim.ByteArray (byteArrayFromAscii, byteArrayToHex)
 import Contract.Scripts (PlutusScript(PlutusScript))
 import Contract.Time (POSIXTime)
 import Contract.Transaction
@@ -30,7 +31,7 @@ import Contract.Transaction
   , TransactionOutputWithRefScript
   )
 import Contract.Utxos (utxosAt)
-import Contract.Value (TokenName, mkTokenName)
+import Contract.Value (CurrencySymbol, TokenName, getCurrencySymbol, mkTokenName)
 import Control.Error.Util (hush, (!?))
 import Control.Monad.Error.Class (class MonadError, class MonadThrow, liftEither, try)
 import Control.Monad.Except (ExceptT)
@@ -127,3 +128,6 @@ withEmptyPlutusV2Script output = wrap
   scriptRefEmpty :: ScriptRef
   scriptRefEmpty =
     PlutusScriptRef $ PlutusScript (mempty /\ PlutusV2)
+
+csToHex :: CurrencySymbol -> String
+csToHex = byteArrayToHex <<< getCurrencySymbol
