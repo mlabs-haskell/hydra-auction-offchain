@@ -50,8 +50,6 @@ import URI.Port (Port)
 -- TODO: check that `auctionMetadataOref` exists and points to a valid auction
 -- TODO: check the balance of `cardanoSk`
 -- TODO: generate `hydraNodeId` using UUID
--- TODO: remove `walletSk` parameter
--- see https://github.com/input-output-hk/hydra/pull/1463
 type AuctionConfig =
   { auctionMetadataOref :: TransactionInput
   -- ^ Reference of the tx output with auction metadata record,
@@ -71,10 +69,6 @@ type AuctionConfig =
   -- ^ Cardano signing key of the underlying Hydra node, used to
   -- authorize Hydra protocol transactions, and any funds owned
   -- by this key will be used as 'fuel'.
-  , walletSk :: FilePath
-  -- ^ Cardano signing key of the wallet used to commit collateral
-  -- to the hydra-node. It is necessary because hydra-node prohibits
-  -- committing utxos controlled by 'cardanoSk'.
   }
 
 auctionConfigCodec :: CA.JsonCodec AuctionConfig
@@ -88,7 +82,6 @@ auctionConfigCodec =
     , hydraNodeApi: hostPortCodec
     , peers: CA.array hydraHeadPeerCodec
     , cardanoSk: CA.string
-    , walletSk: CA.string
     }
 
 -- TODO: make `hydraScriptsTxHash` parameter optional

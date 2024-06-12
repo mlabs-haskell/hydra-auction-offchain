@@ -253,7 +253,6 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
     , mkHydraVk: flip concatPaths "hydra.vk"
     , mkCardanoSk: flip concatPaths "cardano.sk"
     , mkCardanoVk: flip concatPaths "cardano.vk"
-    , mkWalletSk: flip concatPaths "wallet.sk"
     }
 
   worker
@@ -281,7 +280,6 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
                         }
                     }
             , cardanoSk: ops.mkCardanoSk workdir
-            , walletSk: ops.mkWalletSk workdir
             }
           ]
       , serverPort: ops.mkServerPort idx
@@ -315,8 +313,6 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
         peer.cardanoSk
       publicPaymentKeyToFile (ops.mkCardanoVk workdir)
         cardanoVk
-      privatePaymentKeyToFile (ops.mkWalletSk workdir)
-        peer.walletSk
       genHydraKeys $ ops.mkHydra workdir
       pure $ idx /\ workdir
 

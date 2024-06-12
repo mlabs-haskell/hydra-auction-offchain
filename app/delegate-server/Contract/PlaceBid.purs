@@ -61,8 +61,7 @@ import DelegateServer.App (runContractNullCosts)
 import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
-import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (class AppOpen, access, readAppState)
+import DelegateServer.State (class AppOpen, readAppState)
 import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
@@ -84,7 +83,6 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionValidatorsErrorCodec
   )
 import JS.BigInt (fromInt) as BigInt
-import Node.Path (FilePath)
 import Type.Proxy (Proxy(Proxy))
 
 placeBidL2
@@ -100,9 +98,8 @@ placeBidL2 ws bidTerms = do
       <#> toUtxoMapWithoutRefScripts
       <<< _.utxo
       <<< unwrap
-  { auctionConfig: { cardanoSk } } <- unwrap <$> access (Proxy :: _ "config")
   mapExceptT runContractNullCosts $
-    placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
+    placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos
 
 placeBidL2'
   :: forall (r :: Row Type)
@@ -110,14 +107,12 @@ placeBidL2'
   -> BidTerms
   -> (Transaction -> Effect Unit)
   -> UtxoMap
-  -> FilePath
   -> ExceptT PlaceBidL2ContractError Contract Unit
-placeBidL2' auctionInfo bidTerms submitTxL2 utxos cardanoSk = do
+placeBidL2' auctionInfo bidTerms submitTxL2 utxos = do
   balancedTx <- placeBidL2ContractWithErrors auctionInfo bidTerms utxos
   let validTx = modify setTxValid balancedTx
   evaluatedTx <- lift $ modifyF setExUnitsToMax validTx
-  signedTx <- lift $ (withWallet cardanoSk <<< signTransaction) =<< signTransaction
-    evaluatedTx
+  signedTx <- lift $ signTransaction evaluatedTx
   liftEffect $ submitTxL2 $ unwrap signedTx
 
 placeBidL2ContractWithErrors

@@ -32,7 +32,6 @@ import Contract.Transaction
   , Transaction
   , TransactionHash
   , TransactionInput
-  , signTransaction
   , submit
   )
 import Contract.TxConstraints (TxConstraints)
@@ -63,7 +62,6 @@ import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Transaction (appendTxSignatures, reSignTransaction, setAuxDataHash)
-import DelegateServer.Lib.Wallet (withWallet)
 import DelegateServer.PeerDelegate.Http (signCommitTx)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
 import DelegateServer.Types.HydraCommitRequest (mkFullCommitRequest, mkSimpleCommitRequest)
@@ -89,16 +87,14 @@ import Type.Proxy (Proxy(Proxy))
 buildCommitTx
   :: forall m. AppBase m => Json -> ExceptT ServiceError m BalancedSignedTransaction
 buildCommitTx commitRequest = do
-  { auctionConfig: { hydraNodeApi, cardanoSk } } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { hydraNodeApi } } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
   draftCommitTx <- ExceptT $ liftAff $ commit serverConfig commitRequest
   runContractLift do
     -- NOTE: recompute auxiliary data hash, because auxiliary data
     -- CBOR may be altered after re-serialization
     commitTx <- wrap <$> setAuxDataHash draftCommitTx.cborHex
-    signedTx <-
-      (withWallet cardanoSk <<< signTransaction)
-        =<< reSignTransaction commitTx
+    signedTx <- reSignTransaction commitTx
     pure signedTx
 
 ----------------------------------------------------------------------
@@ -179,10 +175,8 @@ multiSignCommitTx
   -> Transaction
   -> ExceptT CommitStandingBidError m Transaction
 multiSignCommitTx peers commitTx = do
-  { auctionConfig: { cardanoSk } } <- unwrap <$> access (Proxy :: _ "config")
   responses <- do
-    pkh <- runContract (withWallet cardanoSk $ ownPaymentPubKeyHash)
-      !? CommitBid_Error_CouldNotGetOwnPubKeyHash
+    pkh <- runContract ownPaymentPubKeyHash !? CommitBid_Error_CouldNotGetOwnPubKeyHash
     let reqPayload = { commitTx, commitLeader: unwrap pkh }
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       -- TODO: use parTraverse

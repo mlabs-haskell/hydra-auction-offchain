@@ -65,8 +65,7 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.Validation.Semigroup (V, validation)
 import DelegateServer.App (runContract)
 import DelegateServer.Lib.Transaction (txSignatures)
-import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (class AppInit, access, readAppState)
+import DelegateServer.State (class AppInit, readAppState)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   , respCreatedOrBadRequest
@@ -116,8 +115,7 @@ signCommitTxHandlerImpl bodyStr = do
     Right { commitTx, commitLeader } -> do
       auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
       hydraHeadCs <- readAppState (Proxy :: _ "headCs")
-      { cardanoSk } <- _.auctionConfig <<< unwrap <$> access (Proxy :: _ "config")
-      runContract $ withWallet cardanoSk do
+      runContract do
         let txBody = commitTx ^. _body
         mResolvedInputs <- resolveInputs (Array.fromFoldable $ txBody ^. _inputs)
         mResolvedCollateralInputs <- resolveInputs (fromMaybe mempty $ txBody ^. _collateral)
