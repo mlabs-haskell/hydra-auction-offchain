@@ -1,5 +1,12 @@
 module DelegateServer.Contract.QueryAuction
-  ( queryAuction
+  ( QueryAuctionError
+      ( QueryAuction_Error_CouldNotQueryAuctionMetadataUtxo
+      , QueryAuction_Error_CouldNotDecodeAuctionInfoDatum
+      , QueryAuction_Error_InvalidAuctionTerms
+      , QueryAuction_Error_CouldNotBuildAuctionValidators
+      , QueryAuction_Error_InvalidAuctionInfo
+      )
+  , queryAuction
   ) where
 
 import Contract.Prelude
@@ -8,30 +15,24 @@ import Contract.Monad (Contract)
 import Contract.Transaction (TransactionInput)
 import Contract.Utxos (getUtxo)
 import Control.Error.Util ((!?), (??))
-import Control.Monad.Except (ExceptT, throwError, withExceptT)
+import Control.Monad.Except (runExceptT, throwError, withExceptT)
 import Data.Validation.Semigroup (validation)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionInfoExtended
   , AuctionInfoValidationError
   , AuctionTermsValidationError
-  , ContractOutput
   , mkAuctionInfoExtended
-  , mkContractOutput
   , validateAuctionInfo
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Helpers (getInlineDatum)
 
-queryAuction :: TransactionInput -> Contract (ContractOutput AuctionInfoExtended)
-queryAuction =
-  mkContractOutput identity <<< queryAuctionWithErrors
-
-queryAuctionWithErrors
+queryAuction
   :: TransactionInput
-  -> ExceptT QueryAuctionError Contract AuctionInfoExtended
-queryAuctionWithErrors auctionMetadataOref = do
+  -> Contract (Either QueryAuctionError AuctionInfoExtended)
+queryAuction auctionMetadataOref = runExceptT do
   -- Query auction metadata utxo:
   auctionMetadataTxOut <- getUtxo auctionMetadataOref
     !? QueryAuction_Error_CouldNotQueryAuctionMetadataUtxo

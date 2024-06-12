@@ -9,7 +9,6 @@ module DelegateServer.App
   , runApp
   , runAppEff
   , runContract
-  , runContractExitOnErr
   , runContractLift
   , runContractNullCosts
   ) where
@@ -66,14 +65,7 @@ import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (Error)
-import HydraAuctionOffchain.Contract.Types
-  ( AuctionInfoExtended
-  , ContractOutput(ContractOutputError, ContractOutputResult)
-  , Utxo
-  , contractErrorCodec
-  )
-import HydraAuctionOffchain.Lib.Json (caEncodeString)
-import Node.Process (exit)
+import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, Utxo)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------
@@ -143,15 +135,6 @@ runContract contract = do
 
 runContractLift :: forall t m a. MonadTrans t => AppBase m => Contract a -> t m a
 runContractLift = lift <<< runContract
-
-runContractExitOnErr :: forall m a. AppBase m => Contract (ContractOutput a) -> m a
-runContractExitOnErr =
-  runContract >=> case _ of
-    ContractOutputResult res -> pure res
-    ContractOutputError err ->
-      liftEffect do
-        log $ caEncodeString contractErrorCodec err
-        exit one
 
 runContractNullCosts :: forall m a. AppBase m => Contract a -> m a
 runContractNullCosts contract = do

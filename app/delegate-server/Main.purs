@@ -13,6 +13,7 @@ import Contract.Config (QueryBackendParams)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Control.Parallel (parTraverse)
 import Ctl.Internal.Helpers ((<</>>))
+import Data.Either (Either(Left, Right))
 import Data.Foldable (foldMap)
 import Data.Int (decimal, toStringAs) as Int
 import Data.Maybe (Maybe, maybe)
@@ -32,7 +33,6 @@ import DelegateServer.App
   , initApp
   , runApp
   , runContract
-  , runContractExitOnErr
   )
 import DelegateServer.AppMap (AppMap, buildAppMap)
 import DelegateServer.Cleanup (appCleanupHandler, appInstanceCleanupHandler)
@@ -60,7 +60,10 @@ import DelegateServer.State
   , setCollateralUtxo
   )
 import DelegateServer.Types.AppExitReason
-  ( AppExitReason(AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus)
+  ( AppExitReason
+      ( AppExitReason_MissingOrInvalidAuctionInfo
+      , AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus
+      )
   )
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus
@@ -170,11 +173,17 @@ startDelegateServer appConfig@(AppConfig appConfigRec) = do
 setAuction :: forall m. AppBase m => m Unit
 setAuction = do
   { auctionConfig: { auctionMetadataOref } } <- unwrap <$> access (Proxy :: _ "config")
-  auctionInfo <- runContractExitOnErr $ queryAuction auctionMetadataOref
-  setAuctionInfo auctionInfo
-  network <- runContract getNetworkId
-  logInfo' $ "Got valid auction: " <> printJsonUsingCodec (auctionInfoExtendedCodec network)
-    auctionInfo
+  runContract (queryAuction auctionMetadataOref) >>=
+    case _ of
+      Left queryAuctionErr ->
+        exitWithReason $
+          AppExitReason_MissingOrInvalidAuctionInfo queryAuctionErr
+      Right auctionInfo -> do
+        setAuctionInfo auctionInfo
+        network <- runContract getNetworkId
+        logInfo' $ "Got valid auction: " <> printJsonUsingCodec
+          (auctionInfoExtendedCodec network)
+          auctionInfo
 
 prepareCollateralUtxo :: forall m. AppInit m => m Unit
 prepareCollateralUtxo = do
