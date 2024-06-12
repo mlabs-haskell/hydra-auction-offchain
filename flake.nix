@@ -50,7 +50,7 @@
 
         enableFormatCheck = true;
         plutip = {
-          testMain = "Test.Plutip";
+          testMain = "Test.Main";
           buildInputs = [
             inputs.hydra.packages.${system}.hydra-node
           ];
