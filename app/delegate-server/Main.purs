@@ -11,10 +11,8 @@ import Ansi.Output (foreground, withGraphics)
 import Contract.Address (getNetworkId)
 import Contract.Config (QueryBackendParams)
 import Contract.Log (logInfo', logTrace', logWarn')
-import Contract.Monad (ContractEnv, stopContractEnv)
 import Control.Parallel (parTraverse)
 import Ctl.Internal.Helpers ((<</>>))
-import Data.Array (concat) as Array
 import Data.Foldable (foldMap)
 import Data.Int (decimal, toStringAs) as Int
 import Data.Maybe (Maybe, maybe)
@@ -22,14 +20,13 @@ import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
-import Data.Traversable (for_, sequence, traverse_)
-import Data.Tuple (Tuple(Tuple), fst, snd)
+import Data.Traversable (sequence)
+import Data.Tuple (Tuple(Tuple))
 import Data.Tuple.Nested ((/\))
 import Data.UInt (toString) as UInt
 import DelegateServer.App
   ( AppLogger
   , AppM
-  , AppState
   , appLoggerDefault
   , getAppEffRunner
   , initApp
@@ -37,7 +34,8 @@ import DelegateServer.App
   , runContract
   , runContractExitOnErr
   )
-import DelegateServer.AppMap (buildAppMap)
+import DelegateServer.AppMap (AppMap, buildAppMap)
+import DelegateServer.Cleanup (appCleanupHandler, appInstanceCleanupHandler)
 import DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
@@ -56,6 +54,7 @@ import DelegateServer.State
   , class AppInit
   , access
   , exitWithReason
+  , putAppState
   , readAppState
   , setAuctionInfo
   , setCollateralUtxo
@@ -75,20 +74,19 @@ import DelegateServer.Types.HydraHeadStatus
 import DelegateServer.WsServer (DelegateWebSocketServer, wsServer)
 import Effect (Effect)
 import Effect.AVar (AVar)
-import Effect.AVar (take, tryPut, tryTake) as AVarSync
-import Effect.Aff (Aff, launchAff_, runAff_)
+import Effect.AVar (tryPut, tryTake) as AVarSync
+import Effect.Aff (Aff, launchAff_)
 import Effect.Aff.AVar (empty, new, take, tryPut) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (message)
 import Effect.Timer (TimeoutId)
-import Effect.Timer (clearTimeout) as Timer
 import HydraAuctionOffchain.Contract.Types (auctionInfoExtendedCodec)
 import HydraAuctionOffchain.Helpers (waitSeconds)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 import HydraAuctionOffchain.Types.HostPort (printHostPort)
-import Node.ChildProcess (ChildProcess, defaultSpawnOptions, kill, spawn, stderr, stdout)
+import Node.ChildProcess (ChildProcess, defaultSpawnOptions, spawn, stderr, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Process (onSignal, onUncaughtException)
 import Node.Stream (onDataString)
@@ -105,18 +103,10 @@ main = launchAff_ do
     onSignal SIGINT appHandle.cleanupHandler
     onSignal SIGTERM appHandle.cleanupHandler
 
-{-
-exitReason <- AVar.take appHandle.appState.exitSem
-liftEffect do
-  log $ withGraphics (foreground Red) $ show exitReason
-  appHandle.cleanupHandler
--}
-
 type AppHandle =
-  { cleanupHandler :: Effect Unit
+  { appMap :: AppMap HydraNodeApiWebSocket
   , appLogger :: AppLogger
-  , apps :: Array AppState
-  , hydraNodeApiWebSockets :: Array HydraNodeApiWebSocket
+  , cleanupHandler :: Effect Unit
   }
 
 startDelegateServer :: AppConfig' (Array AuctionConfig) QueryBackendParams -> Aff AppHandle
@@ -137,72 +127,45 @@ startDelegateServer appConfig@(AppConfig appConfigRec) = do
   appMap0 <- buildAppMap $ flip Tuple unit <$> appStateList
   wsServer' <- wsServer appConfigRec.wsServerPort appConfigRec.network appMap0 appLogger
 
-  resources <- parTraverse
+  appInstances <- parTraverse
     ( \appState ->
         runApp appState appLogger do
           hydraNodeProcess <- startHydraNode
-          hydraApiWs <- initHydraApiWsConn wsServer'
+          hydraNodeApiWs <- initHydraApiWsConn wsServer'
           timers <-
             sequence
-              [ initHeadAtBiddingStart hydraApiWs
-              , closeHeadAtBiddingEnd hydraApiWs
+              [ initHeadAtBiddingStart hydraNodeApiWs
+              , closeHeadAtBiddingEnd hydraNodeApiWs
               ]
-          pure { appMapValues: appState /\ hydraApiWs, hydraNodeProcess, timers }
+
+          contractEnv <- unwrap <$> access (Proxy :: _ "contractEnv")
+          cleanupSem <- liftAff $ AVar.new unit
+          let
+            cleanupHandler exitReason =
+              AVarSync.tryTake cleanupSem >>=
+                maybe (pure unit) \_ -> do
+                  log $ withGraphics (foreground Red) $ show exitReason
+                  appInstanceCleanupHandler hydraNodeProcess hydraNodeApiWs contractEnv timers
+
+          putAppState (Proxy :: _ "exit") cleanupHandler -- attach cleanup handler to each app instance
+          pure { appMapValue: appState /\ hydraNodeApiWs, cleanupHandler }
     )
     appStateList
 
-  appMap1 <- buildAppMap $ _.appMapValues <$> resources
-  closeServer <- liftEffect $ httpServer appConfigRec.serverPort appLogger appMap1
+  appMap1 <- buildAppMap $ _.appMapValue <$> appInstances
+  closeHttpServer <- liftEffect $ httpServer appConfigRec.serverPort appLogger appMap1
 
   cleanupSem <- liftAff $ AVar.new unit
   let
-    apps = resources <#> fst <<< _.appMapValues
-    hydraNodeProcs = resources <#> _.hydraNodeProcess
-    hydraNodeApiWebSockets = resources <#> snd <<< _.appMapValues
-    cleanupHandler' =
+    cleanupHandler =
       AVarSync.tryTake cleanupSem >>=
-        maybe (pure unit)
-          ( const
-              ( cleanupHandler hydraNodeProcs hydraNodeApiWebSockets wsServer' closeServer
-                  (apps <#> unwrap <<< _.contractEnv)
-                  (Array.concat $ _.timers <$> resources)
-              )
-          )
+        maybe (pure unit) \_ ->
+          appCleanupHandler closeHttpServer wsServer' (_.cleanupHandler <$> appInstances)
   pure
-    { cleanupHandler: cleanupHandler'
+    { appMap: appMap1
     , appLogger
-    , apps
-    , hydraNodeApiWebSockets
+    , cleanupHandler
     }
-
-cleanupHandler
-  :: Array ChildProcess
-  -> Array HydraNodeApiWebSocket
-  -> DelegateWebSocketServer
-  -> (Effect Unit -> Effect Unit)
-  -> Array ContractEnv
-  -> Array (AVar (Maybe TimeoutId))
-  -> Effect Unit
-cleanupHandler
-  hydraNodeProcs
-  hydraNodeApiWebSockets
-  wsServer
-  closeHttpServer
-  contractEnvs
-  timers = do
-  log "\nCancelling timers."
-  for_ timers \timer ->
-    AVarSync.take timer \timeout -> do
-      traverse_ (traverse_ Timer.clearTimeout) timeout
-  log "Stopping HTTP server."
-  closeHttpServer do
-    log "Closing Hydra Node API ws connections."
-    traverse_ _.baseWs.close hydraNodeApiWebSockets
-    log "Killing Hydra nodes."
-    traverse_ (kill SIGINT) hydraNodeProcs
-    log "Finalizing Contract environments, stopping ws server."
-    flip runAff_ (wsServer.close <* traverse_ stopContractEnv contractEnvs) $
-      const (log "Successfully completed all cleanup actions -> exiting.")
 
 setAuction :: forall m. AppBase m => m Unit
 setAuction = do

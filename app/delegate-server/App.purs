@@ -167,7 +167,7 @@ type AppState =
   , auctionInfo :: AVar AuctionInfoExtended
   , headStatus :: AVar HydraHeadStatus
   , livePeers :: AVar (Set String)
-  , exitSem :: AVar AppExitReason
+  , exit :: AVar (AppExitReason -> Effect Unit)
   , headCs :: AVar CurrencySymbol
   , collateralUtxo :: AVar Utxo
   , commitStatus :: AVar CommitStatus
@@ -189,8 +189,8 @@ instance MonadAccess AppM "headStatus" (AVar HydraHeadStatus) where
 instance MonadAccess AppM "livePeers" (AVar (Set String)) where
   access _ = asks _.livePeers
 
-instance MonadAccess AppM "exitSem" (AVar AppExitReason) where
-  access _ = asks _.exitSem
+instance MonadAccess AppM "exit" (AVar (AppExitReason -> Effect Unit)) where
+  access _ = asks _.exit
 
 instance MonadAccess AppM "headCs" (AVar CurrencySymbol) where
   access _ = asks _.headCs
@@ -210,7 +210,7 @@ initApp (AppConfig appConfig) auctionConfig = do
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeers <- AVar.new Set.empty
-  exitSem <- AVar.empty
+  exit <- AVar.empty
   headCs <- AVar.empty
   collateralUtxo <- AVar.empty
   commitStatus <- AVar.new ShouldCommitCollateral
@@ -221,7 +221,7 @@ initApp (AppConfig appConfig) auctionConfig = do
     , auctionInfo
     , headStatus
     , livePeers
-    , exitSem
+    , exit
     , headCs
     , collateralUtxo
     , commitStatus

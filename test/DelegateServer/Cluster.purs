@@ -24,6 +24,7 @@ import Ctl.Internal.Plutip.Utils (tmpdir)
 import Ctl.Internal.Types.Int (fromInt)
 import Ctl.Internal.Wallet.Key (KeyWallet(KeyWallet))
 import Data.Array (concat, deleteAt, replicate)
+import Data.Array (fromFoldable) as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty (fromArray, head, toArray) as NEArray
 import Data.Codec.Argonaut (JsonCodec, array, int, object) as CA
@@ -31,7 +32,7 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
 import Data.Log.Level (LogLevel(Info, Warn))
-import Data.Map (singleton) as Map
+import Data.Map (singleton, values) as Map
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (modify, unwrap, wrap)
 import Data.TraversableWithIndex (traverseWithIndex)
@@ -44,9 +45,9 @@ import DelegateServer.Config (AppConfig', Network(Mainnet), AuctionConfig)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
+import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Main (AppHandle, startDelegateServer)
 import DelegateServer.State (access, readAppState)
-import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import Effect (Effect)
 import Effect.Aff (Aff, bracket)
@@ -90,7 +91,6 @@ type TestAppHandle =
   , moveBidToL2 :: Contract MoveBidResponse
   , queryStandingBidL2 :: Contract (Maybe StandingBidState)
   , placeBidL2 :: BidTerms -> Contract PlaceBidResponse
-  , getAppExitReason :: Contract (Maybe AppExitReason)
   }
 
 withWallets'
@@ -160,46 +160,38 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
     )
     ( \(apps /\ _) ->
         let
-          withRandomAppHandle :: forall a. (AppHandle -> AppM a) -> Contract a
-          withRandomAppHandle f =
+          withRandomApp :: forall a. (HydraNodeApiWebSocket -> AppM a) -> Contract a
+          withRandomApp f =
             liftAff do
               appHandle <- randomElem apps
-              runApp (unsafeHead appHandle.apps) appHandle.appLogger $ f appHandle
+              let
+                (appState /\ ws) = unsafeHead $ Array.fromFoldable $ Map.values
+                  appHandle.appMap
+              runApp appState appHandle.appLogger $ f ws
 
-          withRandomAppHandle_ :: forall a. AppM a -> Contract a
-          withRandomAppHandle_ =
-            withRandomAppHandle
-              <<< const
+          withRandomApp_ :: forall a. AppM a -> Contract a
+          withRandomApp_ = withRandomApp <<< const
         in
           runContractInEnv contractEnv $ action
             { getActiveAuction:
-                withRandomAppHandle_ do
+                withRandomApp_ $
                   liftAff <<< AVar.tryRead =<< access (Proxy :: _ "auctionInfo")
 
             , getHeadStatus:
-                withRandomAppHandle_ do
-                  readAppState (Proxy :: _ "headStatus")
+                withRandomApp_ $ readAppState (Proxy :: _ "headStatus")
 
             , moveBidToL2:
-                withRandomAppHandle \appHandle ->
-                  moveBidHandlerImpl $ unsafeHead appHandle.hydraNodeApiWebSockets
+                withRandomApp moveBidHandlerImpl
 
             , queryStandingBidL2:
-                withRandomAppHandle_ do
-                  map snd <$> queryStandingBidL2
+                withRandomApp_ $ map snd <$> queryStandingBidL2
 
             , placeBidL2:
                 \bidTerms ->
-                  withRandomAppHandle \appHandle -> do
+                  withRandomApp \hydraNodeApiWs -> do
                     env <- wrap <$> runContract (patchContractEnv MainnetId)
-                    let
-                      body = caEncodeString (bidTermsCodec MainnetId) bidTerms
-                      ws = unsafeHead appHandle.hydraNodeApiWebSockets
-                    local (_ { contractEnv = env }) $ placeBidHandlerImpl ws body
-
-            , getAppExitReason:
-                withRandomAppHandle_ do
-                  liftAff <<< AVar.tryRead =<< access (Proxy :: _ "exitSem")
+                    let body = caEncodeString (bidTermsCodec MainnetId) bidTerms
+                    local (_ { contractEnv = env }) $ placeBidHandlerImpl hydraNodeApiWs body
             }
     )
 

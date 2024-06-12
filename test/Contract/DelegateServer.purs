@@ -24,13 +24,13 @@ import DelegateServer.Handlers.PlaceBid
   ( PlaceBidError(PlaceBidError_ContractError)
   , PlaceBidSuccess(PlaceBidSuccess_SubmittedTransaction)
   )
-import DelegateServer.Types.AppExitReason (AppExitReason(AppExitReason_HeadFinalized))
 import DelegateServer.Types.HydraHeadStatus
   ( HydraHeadStatus
       ( HeadStatus_Idle
       , HeadStatus_Initializing
       , HeadStatus_Open
       , HeadStatus_Closed
+      , HeadStatus_Final
       )
   )
 import DelegateServer.Types.ServerResponse
@@ -106,8 +106,8 @@ suite =
       placeL2Bids (validBids { maxNumBids: 2 }) shortBiddingPeriod \rec -> do
         let biddingEnd = (unwrap (unwrap rec.auctionInfo).auctionTerms).biddingEnd
         waitUntil biddingEnd
-        untilM (eq (Just AppExitReason_HeadFinalized))
-          rec.appHandle.getAppExitReason
+        untilM (eq HeadStatus_Final)
+          rec.appHandle.getHeadStatus
         let lastBid = Array.last rec.bids <#> StandingBidState <<< Just
         untilM (eq lastBid <<< map snd) do
           queryStandingBidUtxo (unwrap rec.auctionInfo)
