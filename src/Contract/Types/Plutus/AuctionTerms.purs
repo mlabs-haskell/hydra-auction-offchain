@@ -11,7 +11,6 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
       , PurchaseDeadlineNotBeforeCleanupError
-      , NonPositiveMinBidIncrementError
       , InvalidStartingBidError
       , InvalidAuctionFeePerDelegateError
       , NoDelegatesError
@@ -26,28 +25,32 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (Address, PubKeyHash, toPubKeyHash)
-import Contract.Config (NetworkId)
-import Contract.Numeric.BigNum (zero) as BigNum
+import Cardano.Plutus.Types.Address (Address) as Plutus
+import Cardano.Plutus.Types.Credential (Credential(PubKeyCredential)) as Plutus
+import Cardano.Plutus.Types.Value (Value) as Plutus
+import Cardano.Plutus.Types.Value (gt, valueToCoin) as Plutus.Value
+import Cardano.Types (BigNum, Ed25519KeyHash, NetworkId)
+import Contract.Numeric.BigNum (fromInt, mul, zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Time (POSIXTime)
-import Contract.Value (Value, valueToCoin)
 import Contract.Value (gt) as Value
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Nothing), isJust)
-import Data.Newtype (class Newtype, wrap)
+import Data.Maybe (Maybe(Just, Nothing), isJust, maybe)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
   ( addressCodec
   , bigIntCodec
+  , bigNumCodec
+  , ed25519KeyHashCodec
+  , plutusAddressCodec
+  , plutusValueCodec
   , posixTimeCodec
-  , pubKeyHashCodec
-  , valueCodec
   )
 import HydraAuctionOffchain.Contract.Types.VerificationKey
   ( VerificationKey
@@ -56,9 +59,10 @@ import HydraAuctionOffchain.Contract.Types.VerificationKey
   )
 import HydraAuctionOffchain.Helpers (errV)
 import HydraAuctionOffchain.Lib.Crypto (hashVk)
+import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
-import Ply.Typename (class PlyTypeName)
+import Partial.Unsafe (unsafePartial)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------
@@ -66,16 +70,16 @@ import Type.Proxy (Proxy(Proxy))
 ----------------------------------------------------------------------
 
 type AuctionTermsInputRec (r :: Row Type) =
-  ( auctionLot :: Value
-  , delegates :: Array PubKeyHash
+  ( auctionLot :: Plutus.Value
+  , delegates :: Array Ed25519KeyHash
   , biddingStart :: POSIXTime
   , biddingEnd :: POSIXTime
   , purchaseDeadline :: POSIXTime
   , cleanup :: POSIXTime
-  , auctionFeePerDelegate :: BigInt
-  , startingBid :: BigInt
-  , minBidIncrement :: BigInt
-  , minDepositAmount :: BigInt
+  , auctionFeePerDelegate :: BigNum
+  , startingBid :: BigNum
+  , minBidIncrement :: BigNum
+  , minDepositAmount :: BigNum
   | r
   )
 
@@ -83,19 +87,19 @@ type AuctionTermsInput = Record (AuctionTermsInputRec ())
 
 auctionTermsInputCodec :: CA.JsonCodec AuctionTermsInput
 auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
-  { auctionLot: valueCodec
-  , delegates: CA.array pubKeyHashCodec
+  { auctionLot: plutusValueCodec
+  , delegates: CA.array ed25519KeyHashCodec
   , biddingStart: posixTimeCodec
   , biddingEnd: posixTimeCodec
   , purchaseDeadline: posixTimeCodec
   , cleanup: posixTimeCodec
-  , auctionFeePerDelegate: bigIntCodec
-  , startingBid: bigIntCodec
-  , minBidIncrement: bigIntCodec
-  , minDepositAmount: bigIntCodec
+  , auctionFeePerDelegate: bigNumCodec
+  , startingBid: bigNumCodec
+  , minBidIncrement: bigNumCodec
+  , minDepositAmount: bigNumCodec
   }
 
-mkAuctionTerms :: AuctionTermsInput -> Address -> VerificationKey -> AuctionTerms
+mkAuctionTerms :: AuctionTermsInput -> Plutus.Address -> VerificationKey -> AuctionTerms
 mkAuctionTerms rec sellerAddress sellerVk = wrap
   { auctionLot: rec.auctionLot
   , sellerAddress
@@ -116,7 +120,7 @@ mkAuctionTerms rec sellerAddress sellerVk = wrap
 ----------------------------------------------------------------------
 
 type AuctionTermsRec = AuctionTermsInputRec
-  ( sellerAddress :: Address
+  ( sellerAddress :: Plutus.Address
   , sellerVk :: VerificationKey
   )
 
@@ -130,18 +134,18 @@ instance Show AuctionTerms where
   show = genericShow
 
 type AuctionTermsSchema =
-  ("auctionLot" :~: Value)
-    :$: ("sellerAddress" :~: Address)
+  ("auctionLot" :~: Plutus.Value)
+    :$: ("sellerAddress" :~: Plutus.Address)
     :$: ("sellerVk" :~: VerificationKey)
-    :$: ("delegates" :~: Array PubKeyHash)
+    :$: ("delegates" :~: Array Ed25519KeyHash)
     :$: ("biddingStart" :~: POSIXTime)
     :$: ("biddingEnd" :~: POSIXTime)
     :$: ("purchaseDeadline" :~: POSIXTime)
     :$: ("cleanup" :~: POSIXTime)
-    :$: ("auctionFeePerDelegate" :~: BigInt)
-    :$: ("startingBid" :~: BigInt)
-    :$: ("minBidIncrement" :~: BigInt)
-    :$: ("minDepositAmount" :~: BigInt)
+    :$: ("auctionFeePerDelegate" :~: BigNum)
+    :$: ("startingBid" :~: BigNum)
+    :$: ("minBidIncrement" :~: BigNum)
+    :$: ("minDepositAmount" :~: BigNum)
     :$: Nil
 
 auctionTermsSchema :: Proxy AuctionTermsSchema
@@ -156,29 +160,27 @@ instance FromData AuctionTerms where
         wrap <$> fromDataRec auctionTermsSchema pd
   fromData _ = Nothing
 
-instance PlyTypeName AuctionTerms where
-  plyTypeName _ = "HydraAuctionOnchain.Types.AuctionTerms:AuctionTerms"
-
 auctionTermsCodec :: NetworkId -> CA.JsonCodec AuctionTerms
 auctionTermsCodec network =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
-    { auctionLot: valueCodec
-    , sellerAddress: addressCodec network
+    { auctionLot: plutusValueCodec
+    , sellerAddress: plutusAddressCodec network
     , sellerVk: vkeyCodec
-    , delegates: CA.array pubKeyHashCodec
+    , delegates: CA.array ed25519KeyHashCodec
     , biddingStart: posixTimeCodec
     , biddingEnd: posixTimeCodec
     , purchaseDeadline: posixTimeCodec
     , cleanup: posixTimeCodec
-    , auctionFeePerDelegate: bigIntCodec
-    , startingBid: bigIntCodec
-    , minBidIncrement: bigIntCodec
-    , minDepositAmount: bigIntCodec
+    , auctionFeePerDelegate: bigNumCodec
+    , startingBid: bigNumCodec
+    , minBidIncrement: bigNumCodec
+    , minDepositAmount: bigNumCodec
     }
 
-totalAuctionFees :: AuctionTerms -> BigInt
+totalAuctionFees :: AuctionTerms -> Maybe BigNum
 totalAuctionFees (AuctionTerms auctionTerms) =
-  length auctionTerms.delegates * auctionTerms.auctionFeePerDelegate
+  BigNum.mul (BigNum.fromInt $ length auctionTerms.delegates)
+    auctionTerms.auctionFeePerDelegate
 
 --------------------------------------------------------------------------------
 -- Validation
@@ -192,7 +194,6 @@ data AuctionTermsValidationError
   | BiddingStartNotBeforeBiddingEndError
   | BiddingEndNotBeforePurchaseDeadlineError
   | PurchaseDeadlineNotBeforeCleanupError
-  | NonPositiveMinBidIncrementError
   | InvalidStartingBidError
   | InvalidAuctionFeePerDelegateError
   | NoDelegatesError
@@ -204,18 +205,19 @@ instance Show AuctionTermsValidationError where
   show = genericShow
 
 -- TODO: Replace with min ada for Ada-only input?
-minAuctionFee :: BigInt
-minAuctionFee = BigInt.fromInt 2_000_000
+minAuctionFee :: BigNum
+minAuctionFee = BigNum.fromInt 2_000_000
 
 validateAuctionTerms :: AuctionTerms -> V (Array AuctionTermsValidationError) Unit
-validateAuctionTerms (AuctionTerms rec) = fold
-  [ (valueToCoin rec.auctionLot == mempty)
+validateAuctionTerms auctionTerms@(AuctionTerms rec) = fold
+  [ (Plutus.Value.valueToCoin rec.auctionLot == mempty)
       `errV` AuctionLotNonZeroAdaError
-  , (rec.auctionLot `Value.gt` mempty)
+  , (rec.auctionLot `Plutus.Value.gt` mempty) -- FIXME
+
       `errV` NonPositiveAuctionLotValueError
-  , (isJust $ toPubKeyHash rec.sellerAddress)
+  , (isJust sellerPkh)
       `errV` SellerAddressLacksPubKeyCredentialError
-  , (toPubKeyHash rec.sellerAddress == hashVk (vkeyBytes rec.sellerVk))
+  , (sellerPkh == hashVk (vkeyBytes rec.sellerVk))
       `errV` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
       `errV` BiddingStartNotBeforeBiddingEndError
@@ -223,12 +225,13 @@ validateAuctionTerms (AuctionTerms rec) = fold
       `errV` BiddingEndNotBeforePurchaseDeadlineError
   , (rec.purchaseDeadline < rec.cleanup)
       `errV` PurchaseDeadlineNotBeforeCleanupError
-  , (rec.minBidIncrement > zero)
-      `errV` NonPositiveMinBidIncrementError
-  , (rec.startingBid > rec.auctionFeePerDelegate * length rec.delegates)
+  , (maybe false (rec.startingBid > _) $ totalAuctionFees auctionTerms)
       `errV` InvalidStartingBidError
   , (rec.auctionFeePerDelegate > minAuctionFee)
       `errV` InvalidAuctionFeePerDelegateError
   , (length rec.delegates > 0)
       `errV` NoDelegatesError
   ]
+  where
+  sellerPkh :: Maybe Ed25519KeyHash
+  sellerPkh = unwrap <$> toPubKeyHash rec.sellerAddress

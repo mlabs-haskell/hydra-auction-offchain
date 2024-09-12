@@ -11,8 +11,10 @@ module HydraAuctionOffchain.Contract.Validators.AuctionValidators
 
 import Prelude
 
+import Cardano.Types (PlutusScript)
+import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Contract.Monad (Contract)
-import Contract.Scripts (Validator, validatorHash)
+import Contract.Scripts (validatorHash)
 import Contract.Value (CurrencySymbol)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -66,22 +68,22 @@ mkAuctionValidatorsErrorCodec =
 mkAuctionValidators
   :: CurrencySymbol
   -> AuctionTerms
-  -> ExceptT MkAuctionValidatorsError Contract (AuctionValidators Validator)
+  -> ExceptT MkAuctionValidatorsError Contract (AuctionValidators PlutusScript)
 mkAuctionValidators auctionCs auctionTerms = do
   feeEscrow <- lift mkAlwaysSucceedsValidator
   standingBid <- mkStandingBidValidator auctionCs auctionTerms !* MkStandingBidValidatorError
   let
-    standingBidSh = StandingBidScriptHash $ unwrap $ validatorHash standingBid
+    standingBidSh = StandingBidScriptHash $ PlutusScript.hash standingBid
     mkAuctionEscrow = mkAuctionEscrowValidator
       standingBidSh
-      (FeeEscrowScriptHash $ unwrap $ validatorHash feeEscrow)
+      (FeeEscrowScriptHash $ PlutusScript.hash feeEscrow)
       auctionCs
       auctionTerms
   auctionEscrow <- mkAuctionEscrow !* MkAuctionEscrowValidatorError
   let
     mkBidderDeposit = mkBidderDepositValidator
       standingBidSh
-      (AuctionEscrowScriptHash $ unwrap $ validatorHash auctionEscrow)
+      (AuctionEscrowScriptHash $ PlutusScript.hash auctionEscrow)
       auctionCs
       auctionTerms
   bidderDeposit <- mkBidderDeposit !* MkBidderDepositValidatorError

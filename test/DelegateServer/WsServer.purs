@@ -4,8 +4,7 @@ module Test.DelegateServer.WsServer
 
 import Prelude
 
-import Contract.Config (NetworkId(MainnetId))
-import Contract.Value (CurrencySymbol)
+import Cardano.Types (NetworkId(MainnetId), ScriptHash)
 import Control.Monad.Logger.Trans (LoggerT, runLoggerT)
 import Data.Array (cons, elemIndex, singleton) as Array
 import Data.Codec.Argonaut (null) as CA
@@ -81,7 +80,7 @@ wsServerPort :: Port
 wsServerPort = Port.unsafeFromInt 7080
 
 withWsServer
-  :: Array CurrencySymbol
+  :: Array ScriptHash
   -> HydraHeadStatus
   -> Maybe StandingBidState
   -> (DelegateWebSocketServer -> Aff Unit)
@@ -93,7 +92,7 @@ withWsServer auctionsToServe headStatus standingBid cont = do
   wsServer.close
 
 appMapMock
-  :: Array CurrencySymbol
+  :: Array ScriptHash
   -> HydraHeadStatus
   -> Maybe StandingBidState
   -> WsServerAppMap Unit
@@ -130,12 +129,12 @@ wsBuilder auctionCs =
   , runM: launchAff_ <<< void <<< flip runLoggerT (const (pure unit))
   }
 
-auctionCsFixture0 :: CurrencySymbol
+auctionCsFixture0 :: ScriptHash
 auctionCsFixture0 =
   mkCurrencySymbolUnsafe
     "5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65"
 
-auctionCsFixture1 :: CurrencySymbol
+auctionCsFixture1 :: ScriptHash
 auctionCsFixture1 =
   mkCurrencySymbolUnsafe
     "92c4f22371bd453aec9fe19ccebfbc88211ae854b5eab424bcd4c26d"

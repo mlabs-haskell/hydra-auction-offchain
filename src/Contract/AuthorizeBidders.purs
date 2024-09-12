@@ -11,12 +11,15 @@ module HydraAuctionOffchain.Contract.AuthorizeBidders
 
 import Contract.Prelude
 
+import Cardano.Types (PlutusData, ScriptHash, Value)
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.Int (one) as Cardano.Int
+import Contract.Address (getNetworkId)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, toData)
+import Contract.PlutusData (toData)
 import Contract.Transaction (TransactionHash)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints (mustMintCurrencyUsingNativeScript, mustPayToScript) as Constraints
-import Contract.Value (CurrencySymbol, Value)
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
@@ -25,7 +28,7 @@ import Data.Array (nub, null) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
-import HydraAuctionOffchain.Codec (currencySymbolCodec)
+import HydraAuctionOffchain.Codec (scriptHashCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -45,7 +48,7 @@ import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype AuthBiddersContractParams = AuthBiddersContractParams
-  { auctionCs :: CurrencySymbol
+  { auctionCs :: ScriptHash
   , biddersToAuthorize :: Array VerificationKey
   }
 
@@ -63,7 +66,7 @@ authBiddersContractParamsCodec :: CA.JsonCodec AuthBiddersContractParams
 authBiddersContractParamsCodec =
   wrapIso AuthBiddersContractParams $ CA.object "AuthBiddersContractParams" $
     CAR.record
-      { auctionCs: currencySymbolCodec
+      { auctionCs: scriptHashCodec
       , biddersToAuthorize: CA.array vkeyCodec
       }
 
@@ -80,6 +83,8 @@ mkAuthorizeBiddersContractWithErrors (AuthBiddersContractParams params) = do
   let
     auctionCs = params.auctionCs
     biddersToAuthorize = Array.nub params.biddersToAuthorize
+
+  network <- lift getNetworkId
 
   -- Check that there is at least one bidder to authorize:
   when (Array.null biddersToAuthorize) $
@@ -98,23 +103,23 @@ mkAuthorizeBiddersContractWithErrors (AuthBiddersContractParams params) = do
 
   let
     sellerOracle :: PersonalOracle
-    sellerOracle = mkPersonalOracle sellerPkh
+    sellerOracle = mkPersonalOracle network sellerPkh
 
     sellerOracleTokenValue :: Value
-    sellerOracleTokenValue = assetToValue sellerOracle.assetClass one
+    sellerOracleTokenValue = assetToValue sellerOracle.assetClass BigNum.one
 
-    auctionAuthDatum :: Datum
-    auctionAuthDatum = wrap $ toData $ AuctionAuth { auctionCs, signatures }
+    auctionAuthDatum :: PlutusData
+    auctionAuthDatum = toData $ AuctionAuth { auctionCs, signatures }
 
     constraints :: TxConstraints
     constraints = mconcat
-      [ Constraints.mustPayToScript (wrap $ sellerOracle.nativeScriptHash) auctionAuthDatum
+      [ Constraints.mustPayToScript sellerOracle.nativeScriptHash auctionAuthDatum
           DatumInline
           sellerOracleTokenValue
 
       , Constraints.mustMintCurrencyUsingNativeScript sellerOracle.nativeScript
           (unwrap sellerOracle.assetClass).tokenName
-          one
+          Cardano.Int.one
       ]
 
   lift $ submitTxReturningContractResult {} $ emptySubmitTxData

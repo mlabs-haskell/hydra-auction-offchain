@@ -9,11 +9,8 @@ module DelegateServer.Config
 
 import Prelude
 
-import Contract.Config
-  ( NetworkId(TestnetId, MainnetId)
-  , QueryBackendParams
-  , defaultConfirmTxDelay
-  )
+import Cardano.Types (NetworkId(TestnetId, MainnetId))
+import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
 import Contract.Transaction (TransactionInput)
 import Data.Codec.Argonaut (JsonCodec, array, int, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Record (record) as CAR

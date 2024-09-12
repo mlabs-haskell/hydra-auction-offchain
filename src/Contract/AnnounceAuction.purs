@@ -8,6 +8,8 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
       , AnnounceAuction_Error_CurrentTimeAfterBiddingStart
       , AnnounceAuction_Error_CouldNotBuildAuctionValidators
       , AnnounceAuction_Error_CouldNotGetOwnPubKey
+      , AnnounceAuction_Error_SellerAddressConversionFailure
+      , AnnounceAuction_Error_AuctionLotValueConversionFailure
       )
   , AnnounceAuctionContractOutput(AnnounceAuctionContractOutput)
   , AnnounceAuctionContractParams(AnnounceAuctionContractParams)
@@ -18,21 +20,32 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
 
 import Contract.Prelude
 
-import Contract.Address (getNetworkId, scriptHashAddress)
-import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
-import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, Redeemer, toData)
-import Contract.ScriptLookups (ScriptLookups)
-import Contract.ScriptLookups (mintingPolicy, unspentOutputs) as Lookups
-import Contract.Scripts (ValidatorHash, validatorHash)
-import Contract.Time (POSIXTimeRange, to)
-import Contract.Transaction
-  ( ScriptRef(PlutusScriptRef)
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Plutus.Types.Address (scriptHashAddress)
+import Cardano.Plutus.Types.Value (toCardano) as Plutus.Value
+import Cardano.Types
+  ( AssetName
+  , NetworkId
+  , PlutusData
+  , RedeemerDatum
+  , ScriptHash
+  , ScriptRef(PlutusScriptRef)
   , TransactionHash
   , TransactionInput
-  , TransactionOutputWithRefScript
+  , TransactionOutput
+  , Value
   )
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.Int (one) as Cardano.Int
+import Cardano.Types.Mint (fromMultiAsset) as Mint
+import Cardano.Types.PlutusScript (hash) as PlutusScript
+import Contract.Address (getNetworkId)
+import Contract.Chain (currentTime)
+import Contract.Monad (Contract)
+import Contract.PlutusData (toData)
+import Contract.ScriptLookups (ScriptLookups)
+import Contract.ScriptLookups (plutusMintingPolicy, unspentOutputs) as Lookups
+import Contract.Time (POSIXTimeRange, to)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustMintCurrencyUsingNativeScript
@@ -43,10 +56,9 @@ import Contract.TxConstraints
   , mustValidateIn
   ) as Constraints
 import Contract.Utxos (UtxoMap, getUtxo)
-import Contract.Value (TokenName, Value, scriptCurrencySymbol)
-import Contract.Value (singleton) as Value
+import Contract.Value (getMultiAsset, singleton) as Value
 import Contract.Wallet (getWalletUtxos)
-import Control.Error.Util ((!?))
+import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, runExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Control.Parallel (parTraverse)
@@ -55,7 +67,7 @@ import Ctl.Internal.BalanceTx.CoinSelection
   , performMultiAssetSelection
   )
 import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
-import Ctl.Internal.Plutus.Conversion (fromPlutusUtxoMap, fromPlutusValue, toPlutusUtxoMap)
+import Ctl.Internal.Types.Val (fromValue) as Val
 import Data.Array (head) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
@@ -64,7 +76,7 @@ import Data.Either (hush)
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (orefCodec, transactionHashCodec)
+import HydraAuctionOffchain.Codec (orefCodec, txHashCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
   , auctionMetadataTokenName
@@ -80,6 +92,7 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionInfo
   , AuctionInfoExtended
   , AuctionPolicyRedeemer(MintAuction)
+  , AuctionTerms(AuctionTerms)
   , AuctionTermsInput
   , AuctionTermsValidationError
   , ContractOutput
@@ -156,7 +169,7 @@ announceAuctionContractOutputCodec :: NetworkId -> CA.JsonCodec AnnounceAuctionC
 announceAuctionContractOutputCodec network =
   wrapIso AnnounceAuctionContractOutput $ CA.object "AnnounceAuctionContractOutput" $
     CAR.record
-      { txHash: transactionHashCodec
+      { txHash: txHashCodec
       , auctionInfo: auctionInfoExtendedCodec network
       }
 
@@ -176,23 +189,34 @@ mkAnnounceAuctionContractWithErrors
   :: AnnounceAuctionContractParams
   -> ExceptT AnnounceAuctionContractError Contract AnnounceAuctionContractResult
 mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
+  network <- lift getNetworkId
+
   -- Get pkh and vkey, build AuctionTerms:
   { vkey, address, pkh: sellerPkh } <-
     withExceptT AnnounceAuction_Error_CouldNotGetOwnPubKey
       askWalletVk
 
+  -- Convert seller address:
+  sellerAddressPlutus <- Plutus.Address.fromCardano address
+    ?? AnnounceAuction_Error_SellerAddressConversionFailure
+
   -- Check auction terms:
-  let auctionTerms = mkAuctionTerms params.auctionTerms address vkey
+  let
+    auctionTerms@(AuctionTerms auctionTermsRec) =
+      mkAuctionTerms params.auctionTerms sellerAddressPlutus vkey
   validateAuctionTerms auctionTerms #
     validation (throwError <<< AnnounceAuction_Error_InvalidAuctionTerms) pure
 
+  -- Convert auction lot Value:
+  auctionLotValue <- Plutus.Value.toCardano auctionTermsRec.auctionLot
+    ?? AnnounceAuction_Error_AuctionLotValueConversionFailure
+
   -- Select utxos to cover auction lot Value:
-  let { auctionLot, biddingStart } = unwrap auctionTerms
   utxos <- getWalletUtxos !? AnnounceAuction_Error_CouldNotGetWalletUtxos
   additionalAuctionLotUtxos <- queryUtxos params.additionalAuctionLotOrefs
     !? AnnounceAuction_Error_CouldNotGetAdditionalAuctionLotUtxos
   let utxos' = Map.union utxos additionalAuctionLotUtxos
-  auctionLotUtxos <- selectUtxos utxos' auctionLot
+  auctionLotUtxos <- selectUtxos utxos' auctionLotValue
     !? AnnounceAuction_Error_CouldNotCoverAuctionLot
   when (Map.isEmpty auctionLotUtxos) $
     throwError AnnounceAuction_Error_EmptyAuctionLotUtxoMap -- impossible
@@ -203,48 +227,52 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
 
   -- Check that the current time < bidding start time:
   nowTime <- lift currentTime
-  unless (nowTime < biddingStart) $
+  unless (nowTime < auctionTermsRec.biddingStart) $
     throwError AnnounceAuction_Error_CurrentTimeAfterBiddingStart
 
   -- Get auction minting policy:
-  auctionMetadataSh <- lift $ mkAuctionMetadataValidator <#> unwrap <<< validatorHash
+  auctionMetadataSh <- lift $ PlutusScript.hash <$> mkAuctionMetadataValidator
   auctionMintingPolicy <- lift $ mkAuctionMintingPolicy auctionMetadataSh nonceOref
-  let auctionCs = scriptCurrencySymbol auctionMintingPolicy
+  let auctionCs = PlutusScript.hash auctionMintingPolicy
 
   -- Get auction validators:
   validators <-
     withExceptT AnnounceAuction_Error_CouldNotBuildAuctionValidators $
       mkAuctionValidators auctionCs auctionTerms
-  let validatorHashes = validatorHash <$> validators
-  let validatorAddresses = unwrap $ flip scriptHashAddress Nothing <$> validatorHashes
+  let validatorHashes = PlutusScript.hash <$> validators
+  let validatorAddresses = unwrap $ flip scriptHashAddress Nothing <<< wrap <$> validatorHashes
 
   -- Get auction metadata validator hash:
-  metadataValidatorHash <- lift $ validatorHash <$> mkAuctionMetadataValidator
+  metadataValidatorHash <- lift $ PlutusScript.hash <$> mkAuctionMetadataValidator
   let
-    mkAuctionToken :: TokenName -> Value
-    mkAuctionToken tokenName = Value.singleton auctionCs tokenName one
+    mkAuctionToken :: AssetName -> Value
+    mkAuctionToken tokenName = Value.singleton auctionCs tokenName BigNum.one
 
     auctionTokenBundle :: Value
-    auctionTokenBundle = foldMap mkAuctionToken
-      [ auctionEscrowTokenName
-      , auctionMetadataTokenName
-      , standingBidTokenName
-      ]
+    auctionTokenBundle =
+      -- safe, no numeric overflow is possible here 
+      unsafePartial $ foldMap mkAuctionToken
+        [ auctionEscrowTokenName
+        , auctionMetadataTokenName
+        , standingBidTokenName
+        ]
 
-    mintAuctionRedeemer :: Redeemer
+    mintAuctionRedeemer :: RedeemerDatum
     mintAuctionRedeemer = wrap $ toData MintAuction
 
     -- AuctionEscrow -------------------------------------------------
 
-    auctionEscrowValidatorHash :: ValidatorHash
+    auctionEscrowValidatorHash :: ScriptHash
     auctionEscrowValidatorHash = (unwrap validatorHashes).auctionEscrow
 
     auctionEscrowValue :: Value
-    auctionEscrowValue = auctionLot <> mkAuctionToken auctionEscrowTokenName
-      <> mkAuctionToken standingBidTokenName
+    auctionEscrowValue =
+      unsafePartial do
+        auctionLotValue <> mkAuctionToken auctionEscrowTokenName <>
+          mkAuctionToken standingBidTokenName
 
-    auctionEscrowDatum :: Datum
-    auctionEscrowDatum = wrap $ toData AuctionAnnounced
+    auctionEscrowDatum :: PlutusData
+    auctionEscrowDatum = toData AuctionAnnounced
 
     -- AuctionInfo ---------------------------------------------------
 
@@ -262,19 +290,19 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       , standingBidAddr: validatorAddresses.standingBid
       }
 
-    auctionInfoDatum :: Datum
-    auctionInfoDatum = wrap $ toData auctionInfo
+    auctionInfoDatum :: PlutusData
+    auctionInfoDatum = toData auctionInfo
 
     -- AuctionActor --------------------------------------------------
 
     sellerOracle :: PersonalOracle
-    sellerOracle = mkPersonalOracle $ wrap sellerPkh
+    sellerOracle = mkPersonalOracle network $ wrap sellerPkh
 
     sellerOracleTokenValue :: Value
-    sellerOracleTokenValue = assetToValue sellerOracle.assetClass one
+    sellerOracleTokenValue = assetToValue sellerOracle.assetClass BigNum.one
 
-    auctionActorDatum :: Datum
-    auctionActorDatum = wrap $ toData $ AuctionActor
+    auctionActorDatum :: PlutusData
+    auctionActorDatum = toData $ AuctionActor
       { auctionInfo: mkAuctionInfoExtended auctionInfo Nothing
       , role: ActorRoleSeller
       }
@@ -282,7 +310,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     --
 
     txValidRange :: POSIXTimeRange
-    txValidRange = to $ biddingStart - wrap (BigInt.fromInt 1000)
+    txValidRange = to $ auctionTermsRec.biddingStart - wrap (BigInt.fromInt 1000)
 
     constraints :: TxConstraints
     constraints = mconcat
@@ -290,7 +318,8 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
         foldMap Constraints.mustSpendPubKeyOutput $ Map.keys auctionLotUtxos
 
       -- Mint auction state, auction metadata, and standing bid tokens:
-      , Constraints.mustMintValueWithRedeemer mintAuctionRedeemer auctionTokenBundle
+      , Constraints.mustMintValueWithRedeemer mintAuctionRedeemer $ Mint.fromMultiAsset $
+          Value.getMultiAsset auctionTokenBundle
 
       -- Lock auction lot with auction state and standing bid tokens
       -- at the auction escrow validator address, set state to 
@@ -301,11 +330,11 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
       -- Mint seller's personal oracle token:
       , Constraints.mustMintCurrencyUsingNativeScript sellerOracle.nativeScript
           (unwrap sellerOracle.assetClass).tokenName
-          one
+          Cardano.Int.one
 
       -- Lock auction actor datum with personal oracle token at 
       -- the seller's personal oracle address:
-      , Constraints.mustPayToScript (wrap $ sellerOracle.nativeScriptHash) auctionActorDatum
+      , Constraints.mustPayToScript sellerOracle.nativeScriptHash auctionActorDatum
           DatumInline
           sellerOracleTokenValue
 
@@ -315,7 +344,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
           DatumInline
           -- Attach standing bid reference script to meet the max tx
           -- size requirement for subsequent transactions.
-          (PlutusScriptRef $ unwrap (unwrap validators).standingBid)
+          (PlutusScriptRef $ (unwrap validators).standingBid)
           auctionInfoValue
 
       -- Set transaction validity interval to registration period:
@@ -325,7 +354,7 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
     lookups :: ScriptLookups
     lookups = mconcat
       [ Lookups.unspentOutputs auctionLotUtxos
-      , Lookups.mintingPolicy auctionMintingPolicy
+      , Lookups.plutusMintingPolicy auctionMintingPolicy
       ]
 
   result <- lift $ submitTxReturningContractResult {} $ emptySubmitTxData
@@ -342,23 +371,20 @@ mkAnnounceAuctionContractWithErrors (AnnounceAuctionContractParams params) = do
 
 selectUtxos :: UtxoMap -> Value -> Contract (Maybe UtxoMap)
 selectUtxos utxos requiredValue = do
-  networkId <- getNetworkId
-  let utxoIndex = buildUtxoIndex $ fromPlutusUtxoMap networkId utxos
+  let utxoIndex = buildUtxoIndex utxos
   hush <$> runExceptT do
     selState <- performMultiAssetSelection SelectionStrategyMinimal utxoIndex
-      (fromPlutusValue requiredValue)
+      (Val.fromValue requiredValue)
     let selectedUtxos = (unwrap selState).selectedUtxos
-    pure $ unsafePartial fromJust $ toPlutusUtxoMap selectedUtxos
+    pure selectedUtxos
 
 queryUtxos :: Array TransactionInput -> Contract (Maybe UtxoMap)
 queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
   where
   getUtxo'
     :: TransactionInput
-    -> Contract (Maybe (TransactionInput /\ TransactionOutputWithRefScript))
-  getUtxo' oref =
-    getUtxo oref <#>
-      map (\output -> oref /\ wrap { output, scriptRef: Nothing })
+    -> Contract (Maybe (TransactionInput /\ TransactionOutput))
+  getUtxo' oref = map (Tuple oref) <$> getUtxo oref
 
 ----------------------------------------------------------------------
 -- Errors
@@ -372,6 +398,8 @@ data AnnounceAuctionContractError
   | AnnounceAuction_Error_CurrentTimeAfterBiddingStart
   | AnnounceAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
   | AnnounceAuction_Error_CouldNotGetOwnPubKey SignMessageError
+  | AnnounceAuction_Error_SellerAddressConversionFailure
+  | AnnounceAuction_Error_AuctionLotValueConversionFailure
 
 derive instance Generic AnnounceAuctionContractError _
 derive instance Eq AnnounceAuctionContractError
@@ -405,3 +433,9 @@ instance ToContractError AnnounceAuctionContractError where
 
     AnnounceAuction_Error_CouldNotGetOwnPubKey err ->
       "Could not get own public key, error: " <> show err <> "."
+
+    AnnounceAuction_Error_SellerAddressConversionFailure ->
+      "Could not convert seller address to Plutus.Address."
+
+    AnnounceAuction_Error_AuctionLotValueConversionFailure ->
+      "Could not convert auction lot Plutus.Value to Cardano.Value."

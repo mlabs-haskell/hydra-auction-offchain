@@ -14,6 +14,10 @@ module DelegateServer.Contract.PlaceBid
 
 import Contract.Prelude
 
+import Cardano.Types (PlutusData, RedeemerDatum, Transaction, TransactionInput, Value)
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.MultiAsset (empty) as MultiAsset
+import Cardano.Types.Value (getMultiAsset, singleton) as Value
 import Contract.Address (getNetworkId)
 import Contract.BalanceTxConstraints (BalanceTxConstraintsBuilder)
 import Contract.BalanceTxConstraints
@@ -24,17 +28,12 @@ import Contract.BalanceTxConstraints
   ) as BalancerConstraints
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract, liftedM)
-import Contract.PlutusData (Datum, OutputDatum(NoOutputDatum), Redeemer, toData)
+import Contract.PlutusData (toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( FinalizedTransaction
-  , Transaction
-  , TransactionInput
-  , signTransaction
-  )
+import Contract.Transaction (signTransaction)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustNotBeValid
@@ -43,8 +42,6 @@ import Contract.TxConstraints
   , mustValidateIn
   ) as Constraints
 import Contract.Utxos (UtxoMap)
-import Contract.Value (Value)
-import Contract.Value (adaSymbol, singleton, symbols) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, mapExceptT, throwError, withExceptT)
@@ -110,17 +107,17 @@ placeBidL2'
   -> ExceptT PlaceBidL2ContractError Contract Unit
 placeBidL2' auctionInfo bidTerms submitTxL2 utxos = do
   balancedTx <- placeBidL2ContractWithErrors auctionInfo bidTerms utxos
-  let validTx = modify setTxValid balancedTx
-  evaluatedTx <- lift $ modifyF setExUnitsToMax validTx
+  let validTx = setTxValid balancedTx
+  evaluatedTx <- lift $ setExUnitsToMax validTx
   signedTx <- lift $ signTransaction evaluatedTx
-  liftEffect $ submitTxL2 $ unwrap signedTx
+  liftEffect $ submitTxL2 signedTx
 
 placeBidL2ContractWithErrors
   :: forall (r :: Row Type)
    . Record (AuctionInfoRec r)
   -> BidTerms
   -> UtxoMap
-  -> ExceptT PlaceBidL2ContractError Contract FinalizedTransaction
+  -> ExceptT PlaceBidL2ContractError Contract Transaction
 placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
   let
     auctionCs = auctionInfoRec.auctionId
@@ -170,21 +167,21 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
     standingBidOref :: TransactionInput
     standingBidOref = fst standingBidUtxo
 
-    standingBidRedeemer :: Redeemer
+    standingBidRedeemer :: RedeemerDatum
     standingBidRedeemer = wrap $ toData NewBidRedeemer
 
-    standingBidDatum :: Datum
-    standingBidDatum = wrap $ toData newBidState
+    standingBidDatum :: PlutusData
+    standingBidDatum = toData newBidState
 
     standingBidTokenValue :: Value
-    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName one
+    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName BigNum.one
 
     --
 
     balancerConstraints :: BalanceTxConstraintsBuilder
     balancerConstraints = mconcat
       [ BalancerConstraints.mustUseCoinSelectionStrategy SelectionStrategyMinimal
-      , BalancerConstraints.mustUseUtxosAtAddresses network []
+      , BalancerConstraints.mustUseUtxosAtAddresses mempty
       , BalancerConstraints.mustUseCollateralUtxos $ Map.fromFoldable [ collateralUtxo ]
       , BalancerConstraints.mustUseAdditionalUtxos spendableUtxos
       ]
@@ -226,12 +223,12 @@ findCollateralUtxo utxos = do
   pure $ Map.toUnfoldable utxos # Array.find
     ( \utxo ->
         let
-          txOut = unwrap $ _.output $ unwrap $ snd utxo
+          txOut = unwrap $ snd utxo
         in
           txOut.address == ownAddress
-            && (Value.symbols txOut.amount == [ Value.adaSymbol ])
-            && (txOut.datum == NoOutputDatum)
-            && isNothing txOut.referenceScript
+            && (Value.getMultiAsset txOut.amount == MultiAsset.empty)
+            && isNothing txOut.datum
+            && isNothing txOut.scriptRef
     )
 
 ----------------------------------------------------------------------

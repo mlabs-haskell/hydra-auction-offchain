@@ -16,11 +16,10 @@ import Contract.Prelude
 import Affjax (Error, Response, defaultRequest) as Affjax
 import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
 import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
+import Cardano.Types (NetworkId, ScriptHash)
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
-import Contract.Value (CurrencySymbol)
 import Control.Monad.Except (ExceptT(ExceptT), throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.Affjax (request) as Affjax
@@ -31,7 +30,7 @@ import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidResponseCodec)
-import HydraAuctionOffchain.Codec (currencySymbolCodec)
+import HydraAuctionOffchain.Codec (scriptHashCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
@@ -53,7 +52,7 @@ import HydraAuctionOffchain.Service.Common
   )
 
 newtype MoveBidContractParams = MoveBidContractParams
-  { auctionCs :: CurrencySymbol
+  { auctionCs :: ScriptHash
   , auctionTerms :: AuctionTerms
   , delegateInfo :: DelegateInfo
   }
@@ -72,7 +71,7 @@ moveBidContractParamsCodec :: NetworkId -> CA.JsonCodec MoveBidContractParams
 moveBidContractParamsCodec network =
   wrapIso MoveBidContractParams $ CA.object "MoveBidContractParams" $
     CAR.record
-      { auctionCs: currencySymbolCodec
+      { auctionCs: scriptHashCodec
       , auctionTerms: auctionTermsCodec network
       , delegateInfo: delegateInfoCodec
       }

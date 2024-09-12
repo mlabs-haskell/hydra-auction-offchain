@@ -44,7 +44,6 @@
   , "parallel"
   , "parsing"
   , "partial"
-  , "ply-ctl"
   , "posix-types"
   , "prelude"
   , "profunctor"

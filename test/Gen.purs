@@ -7,7 +7,9 @@ module Test.Gen
 
 import Prelude
 
-import Contract.Address (Address, pubKeyHashAddress)
+import Cardano.Plutus.Types.Address (Address) as Plutus
+import Cardano.Plutus.Types.Address (pubKeyHashAddress)
+import Cardano.Types.BigNum (fromInt) as BigNum
 import Control.Monad.Gen.Common (genMaybe)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (wrap)
@@ -22,7 +24,7 @@ genStandingBid = wrap <$> genMaybe genBidTerms
 genBidTerms :: Gen BidTerms
 genBidTerms = do
   bidder <- genBidderInfo
-  price <- BigInt.fromInt <$> chooseInt zero top
+  price <- BigNum.fromInt <$> chooseInt zero top
   bidderSignature <- arbitrary
   sellerSignature <- arbitrary
   pure $ wrap
@@ -41,7 +43,7 @@ genBidderInfo = do
     , bidderVk
     }
 
-genPubKeyHashAddress :: Gen Address
+genPubKeyHashAddress :: Gen Plutus.Address
 genPubKeyHashAddress =
   arbitrary <#>
     flip pubKeyHashAddress Nothing <<< wrap <<< wrap

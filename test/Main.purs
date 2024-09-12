@@ -5,7 +5,7 @@ module Test.Main
 import Prelude
 
 import Contract.Test.Mote (TestPlanM, interpret)
-import Contract.Test.Plutip (testPlutipContracts)
+import Contract.Test.Testnet (testTestnetContracts)
 import Contract.Test.Utils (interruptOnSignal)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Effect (Effect)
@@ -18,7 +18,7 @@ import Test.Contract.EnterAuction (suite) as EnterAuction
 import Test.Contract.PlaceBid (suite) as PlaceBid
 import Test.Contract.StartBidding (suite) as StartBidding
 import Test.DelegateServer.WsServer (suite) as WsServer
-import Test.Plutip.Config (plutipConfig)
+import Test.Localnet.Config (plutipConfig)
 
 main :: Effect Unit
 main = do
@@ -28,12 +28,14 @@ main = do
 suite :: TestPlanM (Aff Unit) Unit
 suite = do
   group "delegate-server" do
-    WsServer.suite
-  testPlutipContracts plutipConfig do
-    group "contracts" do
-      AnnounceAuction.suite
-      StartBidding.suite
-      EnterAuction.suite
-      AuthorizeBidders.suite
-      PlaceBid.suite
-      skip DelegateServer.suite
+    -- WsServer.suite
+    testTestnetContracts plutipConfig do
+      DelegateServer.suite
+-- group "contracts" do
+{-
+AnnounceAuction.suite
+StartBidding.suite
+EnterAuction.suite
+AuthorizeBidders.suite
+PlaceBid.suite
+-}

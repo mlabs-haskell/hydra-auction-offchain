@@ -5,15 +5,14 @@ module HydraAuctionOffchain.Lib.Crypto
 
 import Prelude
 
-import Contract.Address (PubKeyHash)
-import Contract.Hashing (blake2b224Hash)
+import Cardano.Types (Ed25519KeyHash)
+import Cardano.Types.PublicKey (fromRawBytes, hash) as PublicKey
 import Contract.Prim.ByteArray (ByteArray)
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
 import Data.Maybe (Maybe)
 import Data.Newtype (wrap)
 import Effect (Effect)
 
 foreign import verifySignature :: ByteArray -> ByteArray -> ByteArray -> Effect Boolean
 
-hashVk :: ByteArray -> Maybe PubKeyHash
-hashVk = map wrap <<< ed25519KeyHashFromBytes <<< blake2b224Hash
+hashVk :: ByteArray -> Maybe Ed25519KeyHash
+hashVk = map PublicKey.hash <<< PublicKey.fromRawBytes <<< wrap

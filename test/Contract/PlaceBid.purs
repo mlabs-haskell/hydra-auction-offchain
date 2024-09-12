@@ -5,6 +5,8 @@ module Test.Contract.PlaceBid
 
 import Contract.Prelude
 
+import Cardano.Plutus.Types.Address (toCardano) as Plutus.Address
+import Contract.Address (getNetworkId)
 import Contract.Monad (Contract, liftContractM, liftedE)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Test (ContractTest, withKeyWallet, withWallets)
@@ -77,11 +79,17 @@ initAuction seller bidder = do
 
 discoverSellerSignature :: AuctionInfoExtended -> Maybe VerificationKey -> Contract ByteArray
 discoverSellerSignature (AuctionInfoExtended auctionInfo) bidderVk = do
+  network <- getNetworkId
+  sellerAddress <-
+    liftContractM "Could not convert seller address to Cardano.Address." $
+      Plutus.Address.toCardano
+        network
+        (unwrap auctionInfo.auctionTerms).sellerAddress
   sellerSignature <- liftedE $ runExceptT $
     discoverSellerSignatureWithErrors
       ( wrap
           { auctionCs: auctionInfo.auctionId
-          , sellerAddress: (unwrap auctionInfo.auctionTerms).sellerAddress
+          , sellerAddress
           , bidderVk
           }
       )

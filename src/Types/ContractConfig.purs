@@ -1,16 +1,16 @@
 module HydraAuctionOffchain.Types.ContractConfig
   ( ContractConfig(ContractConfig, ContractConfigPlutipEnv)
   , contractConfigCodec
+  , localnetConfig
   , mkContractParams
-  , plutipConfig
   ) where
 
 import Prelude
 
+import Cardano.Types (NetworkId(MainnetId))
 import Contract.Config
   ( ContractParams
   , LogLevel(Trace)
-  , NetworkId(MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyValue)
   , QueryBackendParams
   , WalletSpec(UseKeys)
@@ -21,7 +21,7 @@ import Contract.Config
   , mkCtlBackendParams
   , strictSynchronizationParams
   )
-import Contract.Test.Plutip (PlutipConfig)
+import Contract.Test.Testnet (Era(Conway), TestnetConfig)
 import Data.Codec.Argonaut (JsonCodec, object, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
@@ -124,7 +124,7 @@ mkContractParams config =
         }
     ContractConfigPlutipEnv rec ->
       mkCtlBackendParams
-        { ogmiosConfig: plutipConfig.ogmiosConfig
+        { ogmiosConfig: localnetConfig.ogmiosConfig
         , kupoConfig:
             { port: rec.demoHostPort.port
             , host: rec.demoHostPort.host
@@ -153,14 +153,12 @@ mkContractParams config =
             , secure: false
             , path: Nothing
             }
-        queryPlutipEnvPrivateKey plutipEnvServerConfig
-          <#> flip UseKeys Nothing <<< PrivatePaymentKeyValue
+        payKey <- queryPlutipEnvPrivateKey plutipEnvServerConfig
+        pure $ UseKeys (PrivatePaymentKeyValue payKey) Nothing Nothing
 
-plutipConfig :: PlutipConfig
-plutipConfig =
-  { host: "127.0.0.1"
-  , port: UInt.fromInt 8082
-  , logLevel: Trace
+localnetConfig :: TestnetConfig
+localnetConfig =
+  { logLevel: Trace
   , ogmiosConfig:
       { port: UInt.fromInt 1338
       , host: "127.0.0.1"
@@ -177,9 +175,9 @@ plutipConfig =
   , customLogger: Nothing
   , hooks: emptyHooks
   , clusterConfig:
-      { slotLength: Seconds 0.1
+      { testnetMagic: 2
+      , era: Conway
+      , slotLength: Seconds 0.1
       , epochSize: Just $ UInt.fromInt 4320000
-      , maxTxSize: Just $ UInt.fromInt 16384
-      , raiseExUnitsToMax: false
       }
   }

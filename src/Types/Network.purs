@@ -7,9 +7,9 @@ module HydraAuctionOffchain.Types.Network
 
 import Prelude
 
+import Cardano.Types (NetworkId(TestnetId, MainnetId))
 import Contract.Config
-  ( NetworkId(TestnetId, MainnetId)
-  , ServerConfig
+  ( ServerConfig
   , blockfrostPublicMainnetServerConfig
   , blockfrostPublicPreprodServerConfig
   , blockfrostPublicPreviewServerConfig

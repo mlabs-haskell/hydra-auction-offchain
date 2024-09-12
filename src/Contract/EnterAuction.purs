@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Contract.EnterAuction
       , EnterAuction_Error_CouldNotBuildAuctionValidators
       , EnterAuction_Error_InvalidAuctionInfo
       , EnterAuction_Error_CouldNotGetOwnPubKey
+      , EnterAuction_Error_BidderAddressConversionFailure
       )
   , EnterAuctionContractParams(EnterAuctionContractParams)
   , enterAuctionContract
@@ -13,8 +14,12 @@ module HydraAuctionOffchain.Contract.EnterAuction
 
 import Contract.Prelude
 
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Types (BigNum, NetworkId, PlutusData)
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.Int (one) as Cardano.Int
+import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, toData)
 import Contract.Scripts (ValidatorHash, validatorHash)
@@ -29,7 +34,7 @@ import Contract.TxConstraints
   ) as Constraints
 import Contract.Value (Value)
 import Contract.Value (lovelaceValueOf) as Value
-import Control.Error.Util (bool)
+import Control.Error.Util (bool, (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
@@ -37,7 +42,7 @@ import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (bigIntCodec)
+import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -66,7 +71,7 @@ import JS.BigInt (fromInt) as BigInt
 
 newtype EnterAuctionContractParams = EnterAuctionContractParams
   { auctionInfo :: AuctionInfoExtended
-  , depositAmount :: Maybe BigInt
+  , depositAmount :: Maybe BigNum
   }
 
 derive instance Generic EnterAuctionContractParams _
@@ -84,7 +89,7 @@ enterAuctionContractParamsCodec network =
   wrapIso EnterAuctionContractParams $ CA.object "EnterAuctionContractParams" $
     CAR.record
       { auctionInfo: auctionInfoExtendedCodec network
-      , depositAmount: CA.maybe bigIntCodec
+      , depositAmount: CA.maybe bigNumCodec
       }
 
 enterAuctionContract
@@ -102,6 +107,8 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
     auctionCs = auctionInfoRec.auctionId
     auctionTerms@(AuctionTerms auctionTermsRec) = auctionInfoRec.auctionTerms
     depositAmount = fromMaybe auctionTermsRec.minDepositAmount params.depositAmount
+
+  network <- lift getNetworkId
 
   -- Check auction terms:
   validateAuctionTerms auctionTerms #
@@ -132,6 +139,10 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
     withExceptT EnterAuction_Error_CouldNotGetOwnPubKey $
       askWalletVk' (bool mempty lowDepositMessage isLowDeposit)
 
+  -- Convert bidder address:
+  bidderAddressPlutus <- Plutus.Address.fromCardano bidderAddress
+    ?? EnterAuction_Error_BidderAddressConversionFailure
+
   let
     -- BidderDeposit -------------------------------------------------
 
@@ -141,22 +152,22 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
     bidderDepositValue :: Value
     bidderDepositValue = Value.lovelaceValueOf depositAmount
 
-    bidderInfoDatum :: Datum
-    bidderInfoDatum = wrap $ toData $ BidderInfo
-      { bidderAddress
+    bidderInfoDatum :: PlutusData
+    bidderInfoDatum = toData $ BidderInfo
+      { bidderAddress: bidderAddressPlutus
       , bidderVk
       }
 
     -- AuctionActor --------------------------------------------------
 
     bidderOracle :: PersonalOracle
-    bidderOracle = mkPersonalOracle $ wrap bidderPkh
+    bidderOracle = mkPersonalOracle network $ wrap bidderPkh
 
     bidderOracleTokenValue :: Value
-    bidderOracleTokenValue = assetToValue bidderOracle.assetClass one
+    bidderOracleTokenValue = assetToValue bidderOracle.assetClass BigNum.one
 
-    auctionActorDatum :: Datum
-    auctionActorDatum = wrap $ toData $ AuctionActor
+    auctionActorDatum :: PlutusData
+    auctionActorDatum = toData $ AuctionActor
       { auctionInfo
       , role: ActorRoleBidder
       }
@@ -176,11 +187,11 @@ mkEnterAuctionContractWithErrors (EnterAuctionContractParams params) = do
       -- Mint bidder's personal oracle token:
       , Constraints.mustMintCurrencyUsingNativeScript bidderOracle.nativeScript
           (unwrap bidderOracle.assetClass).tokenName
-          one
+          Cardano.Int.one
 
       -- Lock auction actor datum with personal oracle token at 
       -- the bidder's personal oracle address:
-      , Constraints.mustPayToScript (wrap $ bidderOracle.nativeScriptHash) auctionActorDatum
+      , Constraints.mustPayToScript bidderOracle.nativeScriptHash auctionActorDatum
           DatumInline
           bidderOracleTokenValue
 
@@ -204,6 +215,7 @@ data EnterAuctionContractError
   | EnterAuction_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
   | EnterAuction_Error_InvalidAuctionInfo (Array AuctionInfoValidationError)
   | EnterAuction_Error_CouldNotGetOwnPubKey SignMessageError
+  | EnterAuction_Error_BidderAddressConversionFailure
 
 derive instance Generic EnterAuctionContractError _
 derive instance Eq EnterAuctionContractError
@@ -228,3 +240,6 @@ instance ToContractError EnterAuctionContractError where
 
     EnterAuction_Error_CouldNotGetOwnPubKey err ->
       "Could not get own public key, error: " <> show err <> "."
+
+    EnterAuction_Error_BidderAddressConversionFailure ->
+      "Could not convert bidder address to Plutus.Address."

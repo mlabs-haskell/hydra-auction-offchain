@@ -13,6 +13,7 @@ module HydraAuctionOffchain.Lib.Codec
 
 import Prelude
 
+import Cardano.Types (AssetName, BigNum)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Transaction (TransactionHash)
 import Contract.Value (TokenName)
@@ -53,10 +54,11 @@ import Data.Variant (Variant)
 import Data.Variant (inj, prj) as Variant
 import Foreign.Object (delete, fromHomogeneous, lookup, member, size, union) as Obj
 import HydraAuctionOffchain.Codec
-  ( bigIntCodec
+  ( assetNameCodec
+  , bigIntCodec
+  , bigNumCodec
   , byteArrayCodec
-  , tokenNameCodec
-  , transactionHashCodec
+  , txHashCodec
   )
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
@@ -197,11 +199,14 @@ instance HasJson a p => HasJson (Maybe a) p where
 instance HasJson BigInt anyParams where
   jsonCodec _ = const bigIntCodec
 
+instance HasJson BigNum anyParams where
+  jsonCodec _ = const bigNumCodec
+
 instance HasJson ByteArray anyParams where
   jsonCodec _ = const byteArrayCodec
 
 instance HasJson TransactionHash anyParams where
-  jsonCodec _ = const transactionHashCodec
+  jsonCodec _ = const txHashCodec
 
-instance HasJson TokenName anyParams where
-  jsonCodec _ = const tokenNameCodec
+instance HasJson AssetName anyParams where
+  jsonCodec _ = const assetNameCodec

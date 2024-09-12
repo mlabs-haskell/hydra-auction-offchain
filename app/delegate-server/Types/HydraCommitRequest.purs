@@ -41,13 +41,12 @@ instance EncodeJson HydraCommitRequest where
 mkSimpleCommitRequest :: UtxoMap -> HydraCommitRequest
 mkSimpleCommitRequest = SimpleCommitRequest <<< HydraUtxoMap.fromUtxoMap
 
-mkFullCommitRequest :: Transaction -> UtxoMap -> Effect HydraCommitRequest
+mkFullCommitRequest :: Transaction -> UtxoMap -> HydraCommitRequest
 mkFullCommitRequest tx utxos =
-  mkHydraTx tx <#> \blueprintTx ->
-    FullCommitRequest
-      { blueprintTx
-      , utxo: HydraUtxoMap.fromUtxoMap utxos
-      }
+  FullCommitRequest
+    { blueprintTx: mkHydraTx tx
+    , utxo: HydraUtxoMap.fromUtxoMap utxos
+    }
 
 type HydraFullCommitRequest =
   { blueprintTx :: HydraTx

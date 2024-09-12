@@ -5,13 +5,21 @@ module Test.DelegateServer.Cluster
 
 import Prelude
 
-import Contract.Address (PubKeyHash)
-import Contract.Config (NetworkId(MainnetId), QueryBackendParams, mkCtlBackendParams)
+import Cardano.Types
+  ( BigNum
+  , Ed25519KeyHash
+  , Language(PlutusV2)
+  , NetworkId(MainnetId)
+  , TransactionInput
+  )
+import Cardano.Types.Int (fromInt) as Cardano.Int
+import Cardano.Types.PublicKey (hash) as PublicKey
+import Cardano.Wallet.Key (KeyWallet(KeyWallet))
+import Contract.Config (QueryBackendParams, mkCtlBackendParams)
 import Contract.Hashing (publicKeyHash)
 import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
-import Contract.Test.Plutip (PlutipConfig)
-import Contract.Transaction (Language(PlutusV2), TransactionInput)
+import Contract.Test.Testnet (TestnetConfig)
 import Contract.Wallet (PrivatePaymentKey)
 import Contract.Wallet.Key (publicKeyFromPrivateKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
@@ -19,10 +27,7 @@ import Control.Monad.Except (throwError)
 import Control.Monad.Reader (ask, local)
 import Control.Parallel (parTraverse, parTraverse_)
 import Ctl.Internal.Helpers (concatPaths, (<</>>))
-import Ctl.Internal.Plutip.Types (ClusterStartupParameters)
-import Ctl.Internal.Plutip.Utils (tmpdir)
-import Ctl.Internal.Types.Int (fromInt)
-import Ctl.Internal.Wallet.Key (KeyWallet(KeyWallet))
+import Ctl.Internal.Testnet.Utils (tmpdir)
 import Data.Array (concat, deleteAt, replicate)
 import Data.Array (fromFoldable) as Array
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -35,6 +40,7 @@ import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Map (singleton, values) as Map
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (modify, unwrap, wrap)
+import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -57,7 +63,7 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
 import Effect.Unsafe (unsafePerformEffect)
-import HydraAuctionOffchain.Codec (bigIntCodecNum)
+import HydraAuctionOffchain.Codec (bigIntCodecNum, bigNumCodec)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended
   , BidTerms
@@ -80,7 +86,7 @@ import Test.Helpers
   , publicPaymentKeyToFile
   , unsafeHead
   )
-import Test.Plutip.Config (plutipConfig)
+import Test.Localnet.Config (localnetConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)
 import Type.Proxy (Proxy(Proxy))
 import URI.Port (toInt, unsafeFromInt) as Port
@@ -98,7 +104,7 @@ withWallets'
    . UtxoDistribution distr wallets
   => distr
   -> ( wallets
-       -> Array PubKeyHash
+       -> Array Ed25519KeyHash
        -> (AuctionInfoExtended -> (TestAppHandle -> Contract Unit) -> Contract Unit)
        -> Contract Unit
      )
@@ -111,39 +117,45 @@ withWallets' distr tests =
       distrDelegates =
         concat $ replicate numDelegates [ defDistribution, defDistribution ]
     in
-      h (distr /\ distrDelegates) \mPlutipClusterParams (wallets /\ delegateWallets) -> do
-        contractEnv <- ask
+      h (distr /\ distrDelegates) \ {- mPlutipClusterParams -}(wallets /\ delegateWallets) ->
+        do
+          contractEnv <- ask
+          {-
         plutipClusterParams <-
           liftContractM "Could not get Plutip cluster params"
             mPlutipClusterParams
-        delegateWalletsGrouped <-
-          liftContractM "Expected even number of delegate wallets"
-            (chunksOf2 delegateWallets)
-        let
-          delegates =
-            delegateWalletsGrouped <#> \((KeyWallet kw) /\ _) ->
-              publicKeyHash $ publicKeyFromPrivateKey $ unwrap kw.paymentKey
-        tests wallets delegates \auctionInfo action -> do
-          auctionMetadataOref <-
-            liftContractM "Could not get auction metadata oref"
-              (unwrap auctionInfo).metadataOref
-          let
-            clusterConfig =
-              { auctionMetadataOref
-              , plutipClusterParams
-              , plutipConfig
-              }
-            peers =
-              fromJustWithErr "withWallets'" $ NEArray.fromArray $
-                delegateWalletsGrouped <#> \(cardanoKw /\ walletKw) ->
-                  { cardanoSk: (unwrap cardanoKw).paymentKey
-                  , walletSk: (unwrap walletKw).paymentKey
-                  }
-          liftAff $ withDelegateServerCluster
-            contractEnv
-            clusterConfig
-            peers
-            action
+        -}
+          delegateWalletsGrouped <-
+            liftContractM "Expected even number of delegate wallets"
+              (chunksOf2 delegateWallets)
+          delegates <-
+            liftAff $ traverse
+              ( \((KeyWallet kw) /\ _) ->
+                  PublicKey.hash <<< publicKeyFromPrivateKey <<< unwrap <$> kw.paymentKey
+              )
+              delegateWalletsGrouped
+          tests wallets delegates \auctionInfo action -> do
+            auctionMetadataOref <-
+              liftContractM "Could not get auction metadata oref"
+                (unwrap auctionInfo).metadataOref
+            let
+              clusterConfig =
+                { auctionMetadataOref
+                -- , plutipClusterParams
+                , localnetConfig
+                }
+            peers <-
+              liftAff $ traverse
+                ( \(cardanoKw /\ walletKw) ->
+                    { cardanoSk: _, walletSk: _ } <$> (unwrap cardanoKw).paymentKey
+                      <*> (unwrap walletKw).paymentKey
+                )
+                delegateWalletsGrouped
+            liftAff $ withDelegateServerCluster
+              contractEnv
+              clusterConfig
+              (fromJustWithErr "withWallets'" $ NEArray.fromArray peers)
+              action
 
 withDelegateServerCluster
   :: ContractEnv
@@ -202,8 +214,8 @@ type DelegateServerPeer =
 
 type DelegateServerClusterConfig =
   { auctionMetadataOref :: TransactionInput
-  , plutipClusterParams :: ClusterStartupParameters
-  , plutipConfig :: PlutipConfig
+  -- , plutipClusterParams :: ClusterStartupParameters
+  , localnetConfig :: TestnetConfig
   }
 
 startDelegateServerCluster
@@ -238,7 +250,7 @@ genDelegateServerConfigs
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
   hydraScriptsTxHash <- publishHydraScripts
-    clusterConfig.plutipClusterParams.nodeSocketPath
+    "" -- FIXME: clusterConfig.plutipClusterParams.nodeSocketPath
     (ops.mkCardanoSk $ snd $ NEArray.head peers')
   pure $ worker (NEArray.toArray peers') hydraScriptsTxHash
   where
@@ -286,14 +298,14 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
       , wsServerPort: ops.mkWsServerPort idx
       , hydraPersistDir: ops.mkPersistDir workdir
       , hydraSk: ops.mkHydraSk workdir
-      , nodeSocket: clusterConfig.plutipClusterParams.nodeSocketPath
+      , nodeSocket: "" -- FIXME: clusterConfig.plutipClusterParams.nodeSocketPath
       , network: Mainnet
       , queryBackend:
           mkCtlBackendParams
             { ogmiosConfig:
-                clusterConfig.plutipConfig.ogmiosConfig
+                clusterConfig.localnetConfig.ogmiosConfig
             , kupoConfig:
-                clusterConfig.plutipConfig.kupoConfig
+                clusterConfig.localnetConfig.kupoConfig
             }
       , hydraScriptsTxHash
       , hydraContestPeriod: 5
@@ -344,9 +356,9 @@ patchContractEnv network = do
           { pparams =
               env.ledgerConstants.pparams # modify _
                 { costModels =
-                    wrap $ Map.singleton PlutusV2
-                      (wrap $ fromInt <$> pparams.costModels."PlutusV2")
-                , maxTxExUnits =
+                    Map.singleton PlutusV2
+                      (wrap $ Cardano.Int.fromInt <$> pparams.costModels."PlutusV2")
+                , maxTxExUnits = wrap
                     { mem: pparams.maxTxExecutionUnits.memory
                     , steps: pparams.maxTxExecutionUnits.steps
                     }
@@ -360,7 +372,7 @@ pparamsSlice =
     caDecodeFile pparamsSliceCodec "protocol-parameters.json"
 
 type PParamsSlice =
-  { maxTxExecutionUnits :: { memory :: BigInt, steps :: BigInt }
+  { maxTxExecutionUnits :: { memory :: BigNum, steps :: BigNum }
   , costModels :: { "PlutusV2" :: Array Int }
   }
 
@@ -369,8 +381,8 @@ pparamsSliceCodec =
   CA.object "PParamsSlice" $ CAR.record
     { maxTxExecutionUnits:
         CA.object "PParamsSlice:ExUnits" $ CAR.record
-          { memory: bigIntCodecNum
-          , steps: bigIntCodecNum
+          { memory: bigNumCodec
+          , steps: bigNumCodec
           }
     , costModels:
         CA.object "PParamsSlice:CostModels" $ CAR.record

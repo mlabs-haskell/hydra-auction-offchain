@@ -217,6 +217,7 @@ initApp (AppConfig appConfig) auctionConfig = do
     , networkId: networkToNetworkId appConfig.network
     , logLevel: appConfig.ctlLogLevel
     , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile auctionConfig.cardanoSk) Nothing
+        Nothing
     , customLogger: Nothing
     , suppressLogs: true
     , hooks: emptyHooks

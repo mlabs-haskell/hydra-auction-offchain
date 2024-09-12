@@ -7,17 +7,22 @@ module Test.Contract.AnnounceAuction
 
 import Contract.Prelude
 
+import Cardano.Plutus.Types.Value (fromCardano) as Plutus.Value
+import Cardano.Types (Mint, ScriptHash, Value(Value))
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.Int (one) as Cardano.Int
+import Cardano.Types.Mint (singleton, toMultiAsset) as Mint
+import Cardano.Types.PlutusScript (hash) as PlutusScript
+import Cardano.Types.Value (singleton) as Value
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract, liftedE)
 import Contract.ScriptLookups (ScriptLookups)
-import Contract.ScriptLookups (mintingPolicy) as Lookups
+import Contract.ScriptLookups (plutusMintingPolicy) as Lookups
 import Contract.Test (ContractTest, withKeyWallet, withWallets)
 import Contract.Test.Mote (TestPlanM)
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.TxConstraints (TxConstraints)
 import Contract.TxConstraints (mustMintValue) as Constraints
-import Contract.Value (CurrencySymbol, Value)
-import Contract.Value (scriptCurrencySymbol, singleton) as Value
 import Control.Monad.Except (runExceptT)
 import Data.Newtype (wrap)
 import Data.Time.Duration (Seconds(Seconds))
@@ -51,7 +56,7 @@ announceAuction = announceAuctionFix identity
 
 announceAuctionFix :: AuctionTermsMutator -> Contract AnnounceAuctionContractResult
 announceAuctionFix fixAuctionTerms = do
-  auctionLotValue <- mintAuctionLot
+  auctionLotValue <- Plutus.Value.fromCardano <$> mintAuctionLot
   biddingStart <-
     currentTime <#>
       add (mkPosixTimeUnsafe $ Seconds 5.0)
@@ -70,21 +75,21 @@ mintAuctionLot :: Contract Value
 mintAuctionLot = do
   alwaysMintsPolicy <- mkAlwaysMintsPolicy
   let
-    cs :: CurrencySymbol
-    cs = Value.scriptCurrencySymbol alwaysMintsPolicy
+    cs :: ScriptHash
+    cs = PlutusScript.hash alwaysMintsPolicy
 
-    auctionLotValue :: Value
-    auctionLotValue = Value.singleton cs auctionLotTokenNameFixture one
+    auctionLotValue :: Mint
+    auctionLotValue = Mint.singleton cs auctionLotTokenNameFixture Cardano.Int.one
 
     constraints :: TxConstraints
     constraints = Constraints.mustMintValue auctionLotValue
 
     lookups :: ScriptLookups
-    lookups = Lookups.mintingPolicy alwaysMintsPolicy
+    lookups = Lookups.plutusMintingPolicy alwaysMintsPolicy
 
   { txHash } <- submitTxReturningContractResult {} $ emptySubmitTxData
     { lookups = lookups
     , constraints = constraints
     }
   awaitTxConfirmed txHash
-  pure auctionLotValue
+  pure $ Value.singleton cs auctionLotTokenNameFixture BigNum.one

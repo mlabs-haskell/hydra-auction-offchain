@@ -1,6 +1,5 @@
 module DelegateServer.Types.HydraUtxoMap
   ( HydraUtxoMap(HydraUtxoMap)
-  , addressCodec
   , encodePlutusData
   , encodeValue
   , fromUtxoMap
@@ -10,37 +9,38 @@ module DelegateServer.Types.HydraUtxoMap
 
 import Prelude
 
-import Contract.Address (Address, NetworkId(TestnetId), addressWithNetworkTagToBech32)
-import Contract.Hashing (datumHash)
-import Contract.PlutusData
-  ( OutputDatum(NoOutputDatum, OutputDatum)
-  , PlutusData(Constr, Map, List, Integer, Bytes)
-  )
-import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
-import Contract.Transaction
-  ( TransactionInput
-  , TransactionOutput(TransactionOutput)
-  , outputDatumDatum
-  )
-import Contract.Utxos (UtxoMap)
-import Contract.Value
-  ( Value
-  , getCurrencySymbol
-  , getTokenName
-  , getValue
+import Cardano.AsCbor (encodeCbor)
+import Cardano.Plutus.Types.CurrencySymbol (mkCurrencySymbol, unCurrencySymbol)
+import Cardano.Plutus.Types.TokenName (mkTokenName)
+import Cardano.Plutus.Types.Value (Value) as Plutus
+import Cardano.Plutus.Types.Value
+  ( getValue
   , lovelaceValueOf
-  , mkCurrencySymbol
-  , mkTokenName
+  , singleton
+  , toCardano
   , valueToCoin'
+  ) as Plutus.Value
+import Cardano.Types
+  ( Address
+  , OutputDatum(OutputDatum)
+  , TransactionInput
+  , TransactionOutput(TransactionOutput)
+  , Value(Value)
   )
-import Contract.Value (singleton) as Value
+import Cardano.Types.AssetName (unAssetName)
+import Cardano.Types.BigNum (fromBigInt, toBigInt) as BigNum
+import Cardano.Types.DataHash (hashPlutusData)
+import Cardano.Types.OutputDatum (outputDatumDatum)
+import Contract.CborBytes (cborBytesToHex)
+import Contract.Hashing (datumHash)
+import Contract.PlutusData (PlutusData(Constr, Map, List, Integer, Bytes))
+import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
+import Contract.Utxos (UtxoMap)
+import Contract.Value (singleton, valueToCoin) as Value
 import Control.Alt ((<|>))
 import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
 import Control.Monad.Trans.Class (lift)
 import Control.Safely (foldM)
-import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
-import Ctl.Internal.Serialization.Address (addressFromBech32)
-import Ctl.Internal.Types.BigNum (fromBigInt, toBigInt) as BigNum
 import Data.Argonaut
   ( class DecodeJson
   , class EncodeJson
@@ -70,8 +70,7 @@ import Data.Traversable (for, traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 import DelegateServer.Helpers (printOref, readOref)
 import Foreign.Object (delete, fromFoldable, toUnfoldable) as Obj
-import HydraAuctionOffchain.Codec (byteArrayCodec)
-import HydraAuctionOffchain.Helpers (withoutRefScript)
+import HydraAuctionOffchain.Codec (addressCodec, byteArrayCodec)
 import HydraAuctionOffchain.Lib.Json (fromCaJsonDecodeError)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromNumber, toNumber) as BigInt
@@ -109,13 +108,10 @@ hydraUtxoMapCodec =
     CA.json
 
 fromUtxoMap :: UtxoMap -> HydraUtxoMap
-fromUtxoMap = wrap <<< Map.toUnfoldable <<< map (_.output <<< unwrap)
+fromUtxoMap = wrap <<< Map.toUnfoldable
 
 toUtxoMapWithoutRefScripts :: HydraUtxoMap -> UtxoMap
-toUtxoMapWithoutRefScripts =
-  Map.fromFoldable
-    <<< map (map withoutRefScript)
-    <<< unwrap
+toUtxoMapWithoutRefScripts = Map.fromFoldable <<< unwrap
 
 --
 
@@ -128,16 +124,17 @@ txOutCodec =
   fromHydraTxOut rec = wrap
     { address: rec.address
     , amount: rec.value
-    , datum: maybe NoOutputDatum (OutputDatum <<< wrap) rec.inlineDatum
-    , referenceScript: Nothing
+    , datum: OutputDatum <$> rec.inlineDatum
+    , scriptRef: Nothing
     }
 
   toHydraTxOut :: TransactionOutput -> HydraTxOut
   toHydraTxOut (TransactionOutput rec) =
     { address: rec.address
     , value: rec.amount
-    , inlineDatum: unwrap <$> outputDatumDatum rec.datum
-    , inlineDatumhash: unwrap <<< datumHash <$> outputDatumDatum rec.datum
+    , inlineDatum: outputDatumDatum =<< rec.datum
+    , inlineDatumhash: unwrap <<< encodeCbor <<< hashPlutusData <$>
+        (outputDatumDatum =<< rec.datum)
     }
 
 --
@@ -160,35 +157,27 @@ hydraTxOutCodec =
 
 --
 
-addressCodec :: CA.JsonCodec Address
-addressCodec =
-  CA.prismaticCodec "Address"
-    (toPlutusAddress <=< addressFromBech32)
-    (addressWithNetworkTagToBech32 <<< wrap <<< { address: _, networkId: TestnetId })
-    CA.string
-
---
-
 valueCodec :: CA.JsonCodec Value
 valueCodec =
   CA.prismaticCodec "Value" (hush <<< decodeValue) encodeValue
     CA.json
 
 encodeValue :: Value -> Json
-encodeValue value =
+encodeValue (Value coin multiAsset) =
   fromObject $ Obj.delete mempty $
     Obj.fromFoldable (lovelace : nonAdaAssets)
   where
   lovelace :: String /\ Json
-  lovelace = "lovelace" /\ encodeJson (BigInt.toNumber $ valueToCoin' value)
+  lovelace = "lovelace" /\ encodeJson (BigInt.toNumber $ BigNum.toBigInt $ unwrap coin)
 
   nonAdaAssets :: Array (String /\ Json)
   nonAdaAssets =
-    unwrap (getValue value) <#> \(cs /\ mp) ->
-      byteArrayToHex (getCurrencySymbol cs) /\
+    (Map.toUnfoldable :: _ -> Array _) (unwrap multiAsset) <#> \(cs /\ mp) ->
+      cborBytesToHex (encodeCbor cs) /\
         ( fromObject $ Obj.fromFoldable $
-            unwrap mp <#> \(tn /\ quantity) ->
-              byteArrayToHex (getTokenName tn) /\ encodeJson (BigInt.toNumber quantity)
+            (Map.toUnfoldable :: _ -> Array _) mp <#> \(tn /\ quantity) ->
+              byteArrayToHex (unAssetName tn) /\ encodeJson
+                (BigInt.toNumber $ BigNum.toBigInt quantity)
         )
 
 decodeValue :: Json -> Either JsonDecodeError Value
@@ -204,7 +193,7 @@ decodeValue json = do
         lift $ BigInt.fromNumber lovelaceNum #
           note (AtKey lovelaceKey $ UnexpectedValue $ fromNumber lovelaceNum)
 
-    decodeNonAdaAssets :: Either JsonDecodeError Value
+    decodeNonAdaAssets :: Either JsonDecodeError Plutus.Value
     decodeNonAdaAssets =
       foldM
         ( \acc (csStr /\ tnList) -> do
@@ -216,7 +205,7 @@ decodeValue json = do
                   tn <- note (TypeMismatch "TokenName") $ mkTokenName =<< hexToByteArray tnStr
                   quantity <- BigInt.fromNumber quantityNum #
                     note (AtKey tnStr $ UnexpectedValue $ fromNumber quantityNum)
-                  pure $ acc' <> Value.singleton cs tn quantity
+                  pure $ acc' <> Plutus.Value.singleton cs tn quantity
               )
               acc
               tnObj
@@ -226,7 +215,8 @@ decodeValue json = do
 
   lovelace <- decodeLovelace
   nonAdaAssets <- decodeNonAdaAssets
-  pure $ nonAdaAssets <> maybe mempty lovelaceValueOf lovelace
+  let plutusValue = nonAdaAssets <> maybe mempty Plutus.Value.lovelaceValueOf lovelace
+  note (TypeMismatch "Cardano.Value") $ Plutus.Value.toCardano plutusValue
 
 --
 

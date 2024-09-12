@@ -8,6 +8,7 @@ module HydraAuctionOffchain.Contract.StartBidding
       , StartBidding_Error_CouldNotBuildAuctionValidators
       , StartBidding_Error_InvalidAuctionInfo
       , StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
+      , StartBidding_Error_AuctionLotValueConversionFailure
       )
   , StartBiddingContractParams(StartBiddingContractParams)
   , mkStartBiddingContractWithErrors
@@ -16,9 +17,12 @@ module HydraAuctionOffchain.Contract.StartBidding
 
 import Contract.Prelude
 
-import Contract.Address (PaymentPubKeyHash, toPubKeyHash)
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Plutus.Types.Value (Value) as Plutus
+import Cardano.Plutus.Types.Value (toCardano) as Plutus.Value
+import Cardano.Types (NetworkId, PaymentPubKeyHash, PlutusData, RedeemerDatum)
+import Cardano.Types.BigNum (one) as BigNum
 import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
@@ -36,7 +40,7 @@ import Contract.TxConstraints
 import Contract.Value (TokenName, Value)
 import Contract.Value (singleton) as Value
 import Contract.Wallet (getWalletAddress)
-import Control.Error.Util ((!?))
+import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
@@ -70,6 +74,7 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
+import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import JS.BigInt (fromInt) as BigInt
 import Partial.Unsafe (unsafePartial)
 
@@ -113,9 +118,13 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
   validateAuctionTerms auctionTerms #
     validation (throwError <<< StartBidding_Error_InvalidAuctionTerms) pure
 
+  -- Convert auction lot Value:
+  auctionLotValue <- Plutus.Value.toCardano auctionTermsRec.auctionLot
+    ?? StartBidding_Error_AuctionLotValueConversionFailure
+
   -- Check that the contract is initiated by the seller:
   ownAddress <- getWalletAddress !? StartBidding_Error_CouldNotGetOwnAddress
-  when (ownAddress /= auctionTermsRec.sellerAddress) $
+  when (Plutus.Address.fromCardano ownAddress /= Just auctionTermsRec.sellerAddress) $
     throwError StartBidding_Error_ContractNotInitiatedBySeller
 
   -- Check that the current time is within the bidding period:
@@ -142,26 +151,27 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     validatorHashes = unwrap $ validatorHash <$> validators
 
     mkAuctionToken :: TokenName -> Value
-    mkAuctionToken tokenName = Value.singleton auctionCs tokenName one
+    mkAuctionToken tokenName = Value.singleton auctionCs tokenName BigNum.one
 
     -- AuctionEscrow -------------------------------------------------
 
     auctionEscrowOref :: TransactionInput
     auctionEscrowOref = fst auctionEscrowUtxo
 
-    auctionEscrowRedeemer :: Redeemer
+    auctionEscrowRedeemer :: RedeemerDatum
     auctionEscrowRedeemer = wrap $ toData StartBiddingRedeemer
 
-    auctionEscrowDatum :: Datum
-    auctionEscrowDatum = wrap $ toData BiddingStarted
+    auctionEscrowDatum :: PlutusData
+    auctionEscrowDatum = toData BiddingStarted
 
     auctionEscrowValue :: Value
-    auctionEscrowValue = auctionTermsRec.auctionLot <> mkAuctionToken auctionEscrowTokenName
+    auctionEscrowValue = unsafePartial $ auctionLotValue <> mkAuctionToken
+      auctionEscrowTokenName
 
     -- StandingBid ---------------------------------------------------
 
-    standingBidDatum :: Datum
-    standingBidDatum = wrap $ toData $ StandingBidState Nothing
+    standingBidDatum :: PlutusData
+    standingBidDatum = toData $ StandingBidState Nothing
 
     standingBidTokenValue :: Value
     standingBidTokenValue = mkAuctionToken standingBidTokenName
@@ -174,7 +184,8 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
         (auctionTermsRec.biddingEnd - wrap (BigInt.fromInt 1000))
 
     sellerPkh :: PaymentPubKeyHash
-    sellerPkh = wrap $ unsafePartial fromJust $ toPubKeyHash auctionTermsRec.sellerAddress
+    sellerPkh = wrap $ unwrap $ unsafePartial fromJust $ toPubKeyHash
+      auctionTermsRec.sellerAddress
 
     constraints :: TxConstraints
     constraints = mconcat
@@ -222,6 +233,7 @@ data StartBiddingContractError
   | StartBidding_Error_CouldNotBuildAuctionValidators MkAuctionValidatorsError
   | StartBidding_Error_InvalidAuctionInfo (Array AuctionInfoValidationError)
   | StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo
+  | StartBidding_Error_AuctionLotValueConversionFailure
 
 derive instance Generic StartBiddingContractError _
 derive instance Eq StartBiddingContractError
@@ -255,3 +267,6 @@ instance ToContractError StartBiddingContractError where
 
     StartBidding_Error_CouldNotFindCurrentAuctionEscrowUtxo ->
       "Could not find current auction escrow utxo."
+
+    StartBidding_Error_AuctionLotValueConversionFailure ->
+      "Could not convert auction lot Plutus.Value to Cardano.Value."

@@ -4,17 +4,19 @@ module PlutipEnv.Main
 
 import Prelude
 
-import Contract.Test.Plutip (InitialUTxOs, withPlutipContractEnv)
+import Cardano.Types.BigNum (fromInt) as BigNum
+import Cardano.Wallet.Key (getPrivatePaymentKey)
+import Contract.Test (InitialUTxOs)
 import Contract.Wallet (KeyWallet)
-import Contract.Wallet.Key (keyWalletPrivatePaymentKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
+import Ctl.Internal.Testnet.Contract (withTestnetContractEnv)
 import Effect (Effect)
 import Effect.AVar (tryPut) as AVar
 import Effect.Aff (Aff, launchAff_)
 import Effect.Aff.AVar (empty, take) as AVar
 import Effect.Class (liftEffect)
 import Effect.Console (log)
-import HydraAuctionOffchain.Types.ContractConfig (plutipConfig)
+import HydraAuctionOffchain.Types.ContractConfig (localnetConfig)
 import JS.BigInt (fromInt) as BigInt
 import Node.Encoding (Encoding(UTF8))
 import Node.Process (stdin)
@@ -46,11 +48,12 @@ main = launchAff_ do
 
 withPlutipEnv :: (KeyWallet -> Aff Unit) -> Aff Unit
 withPlutipEnv cont =
-  withPlutipContractEnv plutipConfig distr \_contractEnv wallet -> cont wallet
+  withTestnetContractEnv localnetConfig distr \_contractEnv wallet -> cont wallet
   where
   distr :: InitialUTxOs
-  distr = [ BigInt.fromInt 2_000_000_000 ]
+  distr = [ BigNum.fromInt 2_000_000_000 ]
 
 storeWalletKey :: PlutipEnvConfig -> KeyWallet -> Aff Unit
 storeWalletKey config wallet =
-  privatePaymentKeyToFile config.paymentSkeyFilePath $ keyWalletPrivatePaymentKey wallet
+  privatePaymentKeyToFile config.paymentSkeyFilePath
+    =<< getPrivatePaymentKey wallet

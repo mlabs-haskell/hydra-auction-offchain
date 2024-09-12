@@ -4,11 +4,11 @@ module DelegateServer.Contract.Collateral
 
 import Contract.Prelude
 
+import Cardano.Types (TransactionOutput(TransactionOutput))
+import Cardano.Types.Value (lovelaceValueOf) as Value
 import Contract.Monad (Contract, liftedM)
-import Contract.PlutusData (OutputDatum(NoOutputDatum))
-import Contract.Transaction (TransactionOutput(TransactionOutput), awaitTxConfirmed)
+import Contract.Transaction (awaitTxConfirmed)
 import Contract.TxConstraints (mustPayToPubKey) as Constraints
-import Contract.Value (lovelaceValueOf) as Value
 import Contract.Wallet (getWalletUtxos, ownPaymentPubKeyHash)
 import Data.Array (find) as Array
 import Data.Map (toUnfoldable) as Map
@@ -32,15 +32,15 @@ queryCollateralUtxo :: Contract (Maybe Utxo)
 queryCollateralUtxo =
   getWalletUtxos >>=
     maybe (pure Nothing)
-      ( pure <<< Array.find (isCollateralTxOut <<< _.output <<< unwrap <<< snd) <<<
+      ( pure <<< Array.find (isCollateralTxOut <<< snd) <<<
           Map.toUnfoldable
       )
 
 isCollateralTxOut :: TransactionOutput -> Boolean
 isCollateralTxOut (TransactionOutput txOut) =
   txOut.amount == Value.lovelaceValueOf appConst.collateralLovelace
-    && (txOut.datum == NoOutputDatum)
-    && isNothing txOut.referenceScript
+    && isNothing txOut.datum
+    && isNothing txOut.scriptRef
 
 createCollateralUtxo :: Contract Unit
 createCollateralUtxo = do

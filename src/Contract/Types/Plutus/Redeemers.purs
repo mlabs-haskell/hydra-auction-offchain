@@ -22,6 +22,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
 import Contract.PlutusData
 import Prelude
 
+import Cardano.Plutus.DataSchema (S, Z)
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 

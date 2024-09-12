@@ -33,7 +33,7 @@ import HTTPure
   ) as HTTPure
 import HTTPure (Method(Options, Post), (!!), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
-import HydraAuctionOffchain.Codec (currencySymbolCodec)
+import HydraAuctionOffchain.Codec (scriptHashCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import URI.Port (Port)
 import URI.Port (toInt) as Port
@@ -81,7 +81,7 @@ appLookupMiddleware
   -> Aff HTTPure.Response
 appLookupMiddleware router' (appLogger /\ appMap) request@{ headers }
   | Just auctionCsRaw <- headers !! "Auction-Cs" =
-      case caDecodeString currencySymbolCodec auctionCsRaw of
+      case caDecodeString scriptHashCodec auctionCsRaw of
         Left _ ->
           HTTPure.badRequest "Could not decode Auction-Cs request header"
         Right auctionCs ->

@@ -99,7 +99,6 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
       , BiddingStartNotBeforeBiddingEndError
       , BiddingEndNotBeforePurchaseDeadlineError
       , PurchaseDeadlineNotBeforeCleanupError
-      , NonPositiveMinBidIncrementError
       , InvalidStartingBidError
       , InvalidAuctionFeePerDelegateError
       , NoDelegatesError

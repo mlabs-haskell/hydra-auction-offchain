@@ -38,7 +38,7 @@ module DelegateServer.Types.HydraNodeApiMessage
 
 import Prelude
 
-import Contract.Value (CurrencySymbol)
+import Cardano.Types (ScriptHash)
 import Data.Codec.Argonaut (JsonCodec, int, object, string) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -50,7 +50,7 @@ import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.Types.HydraTx (HydraTx, hydraTxCodec)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
-import HydraAuctionOffchain.Codec (currencySymbolCodec)
+import HydraAuctionOffchain.Codec (scriptHashCodec)
 import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import Type.Proxy (Proxy(Proxy))
 
@@ -155,13 +155,13 @@ greetingsMessageCodec =
     }
 
 type HeadInitMessage =
-  { headId :: CurrencySymbol
+  { headId :: ScriptHash
   }
 
 headInitMessageCodec :: CA.JsonCodec HeadInitMessage
 headInitMessageCodec =
   CA.object "HeadInitMessage" $ CAR.record
-    { headId: currencySymbolCodec
+    { headId: scriptHashCodec
     }
 
 type CommittedMessage =

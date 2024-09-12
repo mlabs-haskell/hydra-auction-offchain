@@ -14,9 +14,10 @@ module DelegateServer.WsServer
 
 import Prelude
 
-import Contract.Config (NetworkId)
+import Cardano.AsCbor (decodeCbor)
+import Cardano.Types (NetworkId, ScriptHash)
+import Contract.CborBytes (hexToCborBytes)
 import Contract.Prim.ByteArray (hexToByteArray)
-import Contract.Value (CurrencySymbol, mkCurrencySymbol)
 import Data.Array (singleton, (:))
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -65,7 +66,7 @@ auctionCsMismatch =
   }
 
 type WsServerAppMap appState =
-  { lookupApp :: CurrencySymbol -> Maybe appState
+  { lookupApp :: ScriptHash -> Maybe appState
   , getHeadStatus :: appState -> Aff HydraHeadStatus
   , getStandingBid :: appState -> Aff (Maybe StandingBidState)
   }
@@ -93,7 +94,7 @@ wsServerGeneric wsServerPort network appMap = do
   liftEffect do
     wss.onConnect \{ connPath, sendMessages } -> do
       let auctionCsRaw = fromMaybe connPath $ String.stripPrefix (Pattern "/") connPath
-      case mkCurrencySymbol =<< hexToByteArray auctionCsRaw of
+      case decodeCbor =<< hexToCborBytes auctionCsRaw of
         Nothing -> do
           pure $ CloseWebSocketConn auctionCsDecodingFailure
         Just auctionCs ->

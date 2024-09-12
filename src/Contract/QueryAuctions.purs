@@ -4,7 +4,10 @@ module HydraAuctionOffchain.Contract.QueryAuctions
 
 import Contract.Prelude
 
-import Contract.Address (scriptHashAddress)
+import Cardano.Types (Asset(Asset))
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.PlutusScript (hash) as PlutusScript
+import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.Scripts (validatorHash)
@@ -16,7 +19,6 @@ import Contract.Value (valueOf) as Value
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
 import Control.Monad.Trans.Class (lift)
-import Ctl.Internal.Plutus.Types.Transaction (_output)
 import Data.Array (mapMaybe) as Array
 import Data.Lens ((^.))
 import Data.Map (toUnfoldable) as Map
@@ -38,6 +40,7 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Contract.Validators (mkAuctionMetadataValidator)
 import HydraAuctionOffchain.Helpers (getInlineDatum)
+import HydraAuctionOffchain.Lib.Cardano.Address (scriptHashAddress)
 
 -- | Queries all currently existing auctions at the auction metadata
 -- | validator address, filtering out invalid entries.
@@ -47,14 +50,15 @@ queryAuctions filters =
     Just actorRole ->
       fromMaybe mempty <$> queryOwnAuctions actorRole
     Nothing -> do
-      auctionMetadataAddr <- flip scriptHashAddress Nothing <<< validatorHash <$>
+      network <- getNetworkId
+      auctionMetadataAddr <- scriptHashAddress network <<< PlutusScript.hash <$>
         mkAuctionMetadataValidator
       utxosAt auctionMetadataAddr
         <#> Array.mapMaybe getValidAuctionInfo
         <<< Map.toUnfoldable
   where
   getValidAuctionInfo :: Utxo -> Maybe AuctionInfoExtended
-  getValidAuctionInfo (oref /\ txOutWithRefScript) = do
+  getValidAuctionInfo (oref /\ txOut) = do
     auctionInfo@(AuctionInfo { auctionId, auctionTerms }) <- getInlineDatum txOut
     case validAuctionTerms auctionTerms && validAuctionId auctionId of
       true ->
@@ -62,30 +66,28 @@ queryAuctions filters =
       false ->
         Nothing
     where
-    txOut :: TransactionOutput
-    txOut = txOutWithRefScript ^. _output
-
     validAuctionTerms :: AuctionTerms -> Boolean
     validAuctionTerms auctionTerms =
       V.isValid $ validateAuctionTerms auctionTerms
 
     validAuctionId :: CurrencySymbol -> Boolean
     validAuctionId cs =
-      Value.valueOf (unwrap txOut).amount cs auctionMetadataTokenName == one
+      Value.valueOf (Asset cs auctionMetadataTokenName) (unwrap txOut).amount
+        == BigNum.one
 
 queryOwnAuctions :: ActorRole -> Contract (Maybe (Array AuctionInfoExtended))
 queryOwnAuctions actorRole =
   runMaybeT do
+    network <- lift getNetworkId
     pkh <- MaybeT ownPaymentPubKeyHash
-    let personalOracle = mkPersonalOracle pkh
-    let oracleAddr = scriptHashAddress (wrap personalOracle.nativeScriptHash) Nothing
+    let personalOracle = mkPersonalOracle network pkh
     nowTime <- lift currentTime
-    (lift $ utxosAt oracleAddr)
+    (lift $ utxosAt personalOracle.address)
       <#> Array.mapMaybe (getValidAuctionInfoCached personalOracle.assetClass nowTime)
       <<< Map.toUnfoldable
   where
   getValidAuctionInfoCached :: AssetClass -> POSIXTime -> Utxo -> Maybe AuctionInfoExtended
-  getValidAuctionInfoCached (AssetClass asset) nowTime (oref /\ txOutWithRefScript) =
+  getValidAuctionInfoCached (AssetClass asset) nowTime (oref /\ txOut) =
     case authTokenPresent of
       false ->
         Nothing
@@ -104,13 +106,10 @@ queryOwnAuctions actorRole =
                     }
                 )
     where
-    txOut :: TransactionOutput
-    txOut = txOutWithRefScript ^. _output
-
     authTokenPresent :: Boolean
     authTokenPresent =
-      Value.valueOf (unwrap txOut).amount asset.currencySymbol asset.tokenName
-        == one
+      Value.valueOf (Asset asset.currencySymbol asset.tokenName) (unwrap txOut).amount
+        == BigNum.one
 
     validAuctionActor :: AuctionActor -> Maybe AuctionInfoExtended
     validAuctionActor (AuctionActor { auctionInfo, role })

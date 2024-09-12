@@ -6,7 +6,9 @@ module DelegateServer.Helpers
 
 import Prelude
 
-import Contract.Prim.ByteArray (byteArrayToHex, byteLength, hexToByteArray)
+import Cardano.AsCbor (decodeCbor, encodeCbor)
+import Contract.CborBytes (cborBytesToHex, hexToCborBytes)
+import Contract.Prim.ByteArray (byteLength)
 import Contract.Transaction (TransactionInput(TransactionInput))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
@@ -19,15 +21,14 @@ modifyF f t = wrap <$> f (unwrap t)
 
 printOref :: TransactionInput -> String
 printOref (TransactionInput rec) =
-  byteArrayToHex (unwrap rec.transactionId) <> "#" <> UInt.toString rec.index
+  cborBytesToHex (encodeCbor rec.transactionId) <> "#" <> UInt.toString rec.index
 
 readOref :: String -> Maybe TransactionInput
 readOref str =
   case String.split (Pattern "#") str of
     [ txHashStr, idx ]
-      | Just txHash <- hexToByteArray txHashStr
-      , byteLength txHash == 32
+      | Just transactionId <- decodeCbor =<< hexToCborBytes txHashStr
       , Just index <- UInt.fromString idx ->
-          Just $ wrap { transactionId: wrap txHash, index }
+          Just $ wrap { transactionId, index }
     _ ->
       Nothing

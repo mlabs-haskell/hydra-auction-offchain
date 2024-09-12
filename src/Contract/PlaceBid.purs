@@ -11,6 +11,7 @@ module HydraAuctionOffchain.Contract.PlaceBid
       , PlaceBid_Error_InvalidBidStateTransition
       , PlaceBid_Error_MissingMetadataOref
       , PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
+      , PlaceBid_Error_BidderAddressConversionFailure
       )
   , PlaceBidContractParams(PlaceBidContractParams)
   , mkPlaceBidContractWithErrors
@@ -19,9 +20,19 @@ module HydraAuctionOffchain.Contract.PlaceBid
 
 import Contract.Prelude
 
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Types
+  ( BigNum
+  , NetworkId
+  , PlutusData
+  , RedeemerDatum
+  , TransactionHash
+  , TransactionInput
+  , TransactionUnspentOutput
+  )
+import Cardano.Types.BigNum (one) as BigNum
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (Datum, Redeemer, toData)
 import Contract.Prim.ByteArray (ByteArray)
@@ -29,12 +40,6 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( TransactionHash
-  , TransactionInput
-  , TransactionUnspentOutput
-  , mkTxUnspentOut
-  )
 import Contract.TxConstraints
   ( DatumPresence(DatumInline)
   , InputWithScriptRef(RefInput)
@@ -58,7 +63,7 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (fromFoldable) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec)
+import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
@@ -83,7 +88,6 @@ import HydraAuctionOffchain.Contract.Types
   , validateNewBid
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 import JS.BigInt (BigInt)
@@ -92,7 +96,7 @@ import JS.BigInt (fromInt) as BigInt
 newtype PlaceBidContractParams = PlaceBidContractParams
   { auctionInfo :: AuctionInfoExtended
   , sellerSignature :: ByteArray
-  , bidAmount :: BigInt
+  , bidAmount :: BigNum
   }
 
 derive instance Generic PlaceBidContractParams _
@@ -111,7 +115,7 @@ placeBidContractParamsCodec network =
     CAR.record
       { auctionInfo: auctionInfoExtendedCodec network
       , sellerSignature: byteArrayCodec
-      , bidAmount: bigIntCodec
+      , bidAmount: bigNumCodec
       }
 
 placeBidContract :: PlaceBidContractParams -> Contract (ContractOutput TransactionHash)
@@ -163,11 +167,15 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     withExceptT PlaceBid_Error_CouldNotSignBidderMessage $
       signMessage payload
 
+  -- Convert bidder address:
+  bidderAddressPlutus <- Plutus.Address.fromCardano bidderAddress
+    ?? PlaceBid_Error_BidderAddressConversionFailure
+
   -- Check bid state transition:
   let
     newBidState :: StandingBidState
     newBidState = wrap $ Just $ BidTerms
-      { bidder: BidderInfo { bidderAddress, bidderVk }
+      { bidder: BidderInfo { bidderAddress: bidderAddressPlutus, bidderVk }
       , price: params.bidAmount
       , bidderSignature
       , sellerSignature: params.sellerSignature
@@ -184,20 +192,19 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     standingBidOref :: TransactionInput
     standingBidOref = fst standingBidUtxo
 
-    standingBidRedeemer :: Redeemer
+    standingBidRedeemer :: RedeemerDatum
     standingBidRedeemer = wrap $ toData NewBidRedeemer
 
-    standingBidDatum :: Datum
-    standingBidDatum = wrap $ toData newBidState
+    standingBidDatum :: PlutusData
+    standingBidDatum = toData newBidState
 
     standingBidTokenValue :: Value
-    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName one
+    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName BigNum.one
 
     -- AuctionMetadata -----------------------------------------------
 
     auctionMetadataUtxo :: TransactionUnspentOutput
-    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withEmptyPlutusV2Script
-      auctionMetadataTxOut
+    auctionMetadataUtxo = wrap { input: auctionMetadataOref, output: auctionMetadataTxOut }
 
     --
 
@@ -247,6 +254,7 @@ data PlaceBidContractError
   | PlaceBid_Error_InvalidBidStateTransition
   | PlaceBid_Error_MissingMetadataOref
   | PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo
+  | PlaceBid_Error_BidderAddressConversionFailure
 
 derive instance Generic PlaceBidContractError _
 derive instance Eq PlaceBidContractError
@@ -289,3 +297,6 @@ instance ToContractError PlaceBidContractError where
 
     PlaceBid_Error_CouldNotQueryAuctionMetadataUtxo ->
       "Could not query auction metadata utxo."
+
+    PlaceBid_Error_BidderAddressConversionFailure ->
+      "Could not convert bidder address to Plutus.Address."

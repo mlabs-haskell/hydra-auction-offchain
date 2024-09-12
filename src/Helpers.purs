@@ -12,30 +12,27 @@ module HydraAuctionOffchain.Helpers
   , randomElem
   , tokenNameFromAsciiUnsafe
   , waitSeconds
-  , withEmptyPlutusV2Script
-  , withoutRefScript
   , (!*)
   ) where
 
 import Prelude
 
+import Cardano.AsCbor (encodeCbor)
+import Cardano.Types (Address, AssetName, ScriptHash(..))
+import Cardano.Types.AssetName (mkAssetName, unAssetName)
+import Contract.CborBytes (cborBytesToHex)
 import Contract.Monad (Contract)
-import Contract.PlutusData (class FromData, Datum(Datum), OutputDatum(OutputDatum), fromData)
+import Contract.PlutusData (class FromData, OutputDatum(OutputDatum), fromData)
 import Contract.Prim.ByteArray (byteArrayFromAscii, byteArrayToHex)
 import Contract.Scripts (PlutusScript(PlutusScript))
 import Contract.Time (POSIXTime)
-import Contract.Transaction
-  ( Language(PlutusV2)
-  , ScriptRef(PlutusScriptRef)
-  , TransactionOutput
-  , TransactionOutputWithRefScript
-  )
+import Contract.Transaction (ScriptRef(PlutusScriptRef), TransactionOutput)
 import Contract.Utxos (utxosAt)
-import Contract.Value (CurrencySymbol, TokenName, getCurrencySymbol, mkTokenName)
+import Contract.Value (CurrencySymbol, TokenName)
 import Control.Error.Util (hush, (!?))
 import Control.Monad.Error.Class (class MonadError, class MonadThrow, liftEither, try)
 import Control.Monad.Except (ExceptT)
-import Ctl.Internal.Plutus.Types.Address (class PlutusAddress)
+import Data.Array (fromFoldable) as Array
 import Data.Array (unsafeIndex)
 import Data.Bifunctor (lmap)
 import Data.DateTime (DateTime)
@@ -43,7 +40,7 @@ import Data.DateTime.Instant (instant, toDateTime, unInstant)
 import Data.Either (Either)
 import Data.Foldable (length)
 import Data.Int (toNumber) as Int
-import Data.Map (toUnfoldable) as Map
+import Data.Map (toUnfoldable, values) as Map
 import Data.Maybe (Maybe(Just, Nothing), fromJust, fromMaybe')
 import Data.Newtype (unwrap, wrap)
 import Data.Time.Duration (class Duration, Seconds(Seconds), fromDuration)
@@ -68,9 +65,10 @@ dateTimeFromPosixTimeUnsafe =
     <<< BigInt.toNumber
     <<< unwrap
 
-tokenNameFromAsciiUnsafe :: String -> TokenName
+tokenNameFromAsciiUnsafe :: String -> AssetName
 tokenNameFromAsciiUnsafe tokenName =
-  unsafePartial fromJust $ mkTokenName =<< byteArrayFromAscii tokenName
+  fromJustWithErr "tokenNameFromAsciiUnsafe"
+    (mkAssetName =<< byteArrayFromAscii tokenName)
 
 liftEitherShow :: forall m e a. MonadThrow Error m => Show e => Either e a -> m a
 liftEitherShow = liftEither <<< lmap (error <<< show)
@@ -89,13 +87,11 @@ errV x error = if x then pure unit else invalid [ error ]
 getInlineDatum :: forall datum. FromData datum => TransactionOutput -> Maybe datum
 getInlineDatum txOut =
   case (unwrap txOut).datum of
-    OutputDatum (Datum plutusData) -> fromData plutusData
+    Just (OutputDatum plutusData) -> fromData plutusData
     _ -> Nothing
 
-getTxOutsAt :: forall addr. PlutusAddress addr => addr -> Contract (Array TransactionOutput)
-getTxOutsAt =
-  map (map (_.output <<< unwrap <<< snd) <<< Map.toUnfoldable)
-    <<< utxosAt
+getTxOutsAt :: Address -> Contract (Array TransactionOutput)
+getTxOutsAt = map (Array.fromFoldable <<< Map.values) <<< utxosAt
 
 mkPosixTimeUnsafe :: forall (a :: Type). Duration a => a -> POSIXTime
 mkPosixTimeUnsafe dur =
@@ -113,21 +109,5 @@ randomElem xs =
 waitSeconds :: forall m. MonadAff m => Int -> m Unit
 waitSeconds seconds = liftAff $ delay $ fromDuration $ Seconds $ Int.toNumber seconds
 
-withoutRefScript :: TransactionOutput -> TransactionOutputWithRefScript
-withoutRefScript output = wrap
-  { output
-  , scriptRef: Nothing
-  }
-
-withEmptyPlutusV2Script :: TransactionOutput -> TransactionOutputWithRefScript
-withEmptyPlutusV2Script output = wrap
-  { output
-  , scriptRef: Just scriptRefEmpty
-  }
-  where
-  scriptRefEmpty :: ScriptRef
-  scriptRefEmpty =
-    PlutusScriptRef $ PlutusScript (mempty /\ PlutusV2)
-
-csToHex :: CurrencySymbol -> String
-csToHex = byteArrayToHex <<< getCurrencySymbol
+csToHex :: ScriptHash -> String
+csToHex = cborBytesToHex <<< encodeCbor

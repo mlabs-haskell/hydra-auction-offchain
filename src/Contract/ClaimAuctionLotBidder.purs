@@ -12,6 +12,7 @@ module HydraAuctionOffchain.Contract.ClaimAuctionLotBidder
       , ClaimAuctionLotBidder_Error_EmptyStandingBid
       , ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh
       , ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh
+      , ClaimAuctionLotBidder_Error_AuctionLotValueConversionFailure
       )
   , claimAuctionLotBidderContract
   , mkClaimAuctionLotBidderContractWithErrors
@@ -19,7 +20,15 @@ module HydraAuctionOffchain.Contract.ClaimAuctionLotBidder
 
 import Contract.Prelude
 
-import Contract.Address (toPubKeyHash)
+import Cardano.Plutus.Types.Value (toCardano) as Plutus.Value
+import Cardano.Types
+  ( PlutusData
+  , RedeemerDatum
+  , TransactionHash
+  , TransactionInput
+  , TransactionUnspentOutput
+  )
+import Cardano.Types.BigNum (one) as BigNum
 import Contract.Chain (currentTime)
 import Contract.Log (logWarn')
 import Contract.Monad (Contract)
@@ -28,12 +37,6 @@ import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( TransactionHash
-  , TransactionInput
-  , TransactionUnspentOutput
-  , mkTxUnspentOut
-  )
 import Contract.TxConstraints
   ( DatumPresence(DatumInline)
   , InputWithScriptRef(RefInput)
@@ -86,8 +89,10 @@ import HydraAuctionOffchain.Contract.Types
   , validateAuctionTerms
   )
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
-import HydraAuctionOffchain.Helpers (withEmptyPlutusV2Script)
+import HydraAuctionOffchain.Helpers (fromJustWithErr)
+import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import JS.BigInt (fromInt) as BigInt
+import Partial.Unsafe (unsafePartial)
 
 claimAuctionLotBidderContract
   :: AuctionInfoExtended -> Contract (ContractOutput TransactionHash)
@@ -106,6 +111,10 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
   -- Check auction terms:
   validateAuctionTerms auctionTerms #
     validation (throwError <<< ClaimAuctionLotBidder_Error_InvalidAuctionTerms) pure
+
+  -- Convert auction lot Value:
+  auctionLotValue <- Plutus.Value.toCardano auctionTermsRec.auctionLot
+    ?? ClaimAuctionLotBidder_Error_AuctionLotValueConversionFailure
 
   -- Check that the current time is within the purchase period:
   nowTime <- lift currentTime
@@ -147,40 +156,43 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
     lift $ logWarn' "Could not find bidder deposit utxo."
 
   -- Get buyer pkh:
-  buyerPkh <- wrap <$> toPubKeyHash (unwrap bidderInfo).bidderAddress
+  buyerPkh <- wrap <<< unwrap <$> toPubKeyHash (unwrap bidderInfo).bidderAddress
     ?? ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh
 
   -- Get seller pkh:
-  sellerPkh <- wrap <$> toPubKeyHash auctionTermsRec.sellerAddress
+  sellerPkh <- wrap <<< unwrap <$> toPubKeyHash auctionTermsRec.sellerAddress
     ?? ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh
 
   let
     validatorHashes = unwrap $ validatorHash <$> validators
 
     mkAuctionToken :: TokenName -> Value
-    mkAuctionToken tokenName = Value.singleton auctionCs tokenName one
+    mkAuctionToken tokenName = Value.singleton auctionCs tokenName BigNum.one
 
     -- AuctionEscrow -------------------------------------------------
 
     auctionEscrowOref :: TransactionInput
     auctionEscrowOref = fst auctionEscrowUtxo
 
-    auctionEscrowRedeemer :: Redeemer
+    auctionEscrowRedeemer :: RedeemerDatum
     auctionEscrowRedeemer = wrap $ toData BidderBuysRedeemer
 
-    auctionEscrowDatum :: Datum
-    auctionEscrowDatum = wrap $ toData AuctionConcluded
+    auctionEscrowDatum :: PlutusData
+    auctionEscrowDatum = toData AuctionConcluded
 
     auctionEscrowValue :: Value
-    auctionEscrowValue = mkAuctionToken auctionEscrowTokenName
-      <> mkAuctionToken standingBidTokenName
+    auctionEscrowValue =
+      -- safe, no numeric overflow is possible here
+      unsafePartial do
+        mkAuctionToken auctionEscrowTokenName
+          <> mkAuctionToken standingBidTokenName
 
     -- StandingBid ---------------------------------------------------
 
     standingBidOref :: TransactionInput
     standingBidOref = fst standingBidUtxo
 
-    standingBidRedeemer :: Redeemer
+    standingBidRedeemer :: RedeemerDatum
     standingBidRedeemer = wrap $ toData ConcludeAuctionRedeemer
 
     -- BidderDeposit -------------------------------------------------
@@ -188,22 +200,26 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
     mBidderDepositOref :: Maybe TransactionInput
     mBidderDepositOref = fst <$> mBidderDepositUtxo
 
-    bidderDepositRedeemer :: Redeemer
+    bidderDepositRedeemer :: RedeemerDatum
     bidderDepositRedeemer = wrap $ toData UseDepositWinnerRedeemer
 
     -- AuctionMetadata -----------------------------------------------
 
     auctionMetadataUtxo :: TransactionUnspentOutput
-    auctionMetadataUtxo = mkTxUnspentOut auctionMetadataOref $ withEmptyPlutusV2Script
-      auctionMetadataTxOut
+    auctionMetadataUtxo = wrap { input: auctionMetadataOref, output: auctionMetadataTxOut }
 
     --
 
     totalAuctionFeesValue :: Value
-    totalAuctionFeesValue = Value.lovelaceValueOf $ totalAuctionFees auctionTerms
+    totalAuctionFeesValue =
+      -- safe, checked as part of AuctionTerms validation 
+      Value.lovelaceValueOf $ fromJustWithErr "totalAuctionFeesValue" $
+        totalAuctionFees auctionTerms
 
     sellerPayoutValue :: Value
-    sellerPayoutValue = Value.lovelaceValueOf $ sellerPayout auctionTerms bidTerms
+    sellerPayoutValue =
+      Value.lovelaceValueOf $ fromJustWithErr "sellerPayoutValue" $
+        sellerPayout auctionTerms bidTerms
 
     txValidRange :: POSIXTimeRange
     txValidRange =
@@ -230,7 +246,7 @@ mkClaimAuctionLotBidderContractWithErrors auctionInfo = do
           auctionEscrowValue
 
       , -- Send auction lot to the buyer:
-        Constraints.mustPayToPubKey buyerPkh auctionTermsRec.auctionLot
+        Constraints.mustPayToPubKey buyerPkh auctionLotValue
 
       , -- Send auction proceeds to the seller:
         Constraints.mustPayToPubKey sellerPkh sellerPayoutValue
@@ -278,6 +294,7 @@ data ClaimAuctionLotBidderContractError
   | ClaimAuctionLotBidder_Error_EmptyStandingBid
   | ClaimAuctionLotBidder_Error_CouldNotGetBuyerPkh
   | ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh
+  | ClaimAuctionLotBidder_Error_AuctionLotValueConversionFailure
 
 derive instance Generic ClaimAuctionLotBidderContractError _
 derive instance Eq ClaimAuctionLotBidderContractError
@@ -323,3 +340,6 @@ instance ToContractError ClaimAuctionLotBidderContractError where
 
     ClaimAuctionLotBidder_Error_CouldNotGetSellerPkh ->
       "Could not get seller pkh."
+
+    ClaimAuctionLotBidder_Error_AuctionLotValueConversionFailure ->
+      "Could not convert auction lot Plutus.Value to Cardano.Value."

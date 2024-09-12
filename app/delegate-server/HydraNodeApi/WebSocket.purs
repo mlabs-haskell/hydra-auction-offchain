@@ -119,7 +119,7 @@ mkHydraNodeApiWebSocket wsServer onConnect = do
         { baseWs: ws
         , initHead: ws.send Out_Init
         , abortHead: ws.send Out_Abort
-        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ } <=< mkHydraTx
+        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ } <<< mkHydraTx
         -- Close and Contest transactions may be silently dropped by cardano-node:
         -- https://github.com/input-output-hk/hydra/blob/d12addeeec0a08d879b567556cb0686bef618936/docs/docs/getting-started/quickstart.md?plain=1#L196-L212
         , closeHead:

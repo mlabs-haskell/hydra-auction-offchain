@@ -18,7 +18,9 @@ module HydraAuctionOffchain.Wallet
 
 import Prelude
 
-import Contract.Address (Address, PubKeyHash, getNetworkId, toPubKeyHash)
+import Cardano.Types (Address, Ed25519KeyHash)
+import Cardano.Types.Address (getPaymentCredential)
+import Cardano.Types.Credential (asPubKeyHash)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray, CborBytes, byteArrayFromAscii)
 import Contract.Wallet (getWalletAddress, signData)
@@ -26,8 +28,6 @@ import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.State.Trans (lift)
 import Ctl.Internal.FfiHelpers (MaybeFfiHelper, maybeFfiHelper)
-import Ctl.Internal.Plutus.Conversion (fromPlutusAddress)
-import Ctl.Internal.Plutus.Types.Address (getAddress)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Just), fromJust)
 import Data.Newtype (unwrap, wrap)
@@ -48,7 +48,7 @@ type SignMessageResult =
   { signature :: ByteArray -- actual signature, not COSESign1 structure
   , vkey :: VerificationKey
   , address :: Address
-  , pkh :: PubKeyHash
+  , pkh :: Ed25519KeyHash
   }
 
 data SignMessageError
@@ -86,12 +86,10 @@ askWalletVk' extraMessage =
 signMessage :: ByteArray -> ExceptT SignMessageError Contract SignMessageResult
 signMessage payload = do
   -- Get wallet address:
-  addrPlutus <- getWalletAddress !? CouldNotGetWalletAddressError
-  network <- lift getNetworkId
-  let addr = fromPlutusAddress network addrPlutus
+  address <- getWalletAddress !? CouldNotGetWalletAddressError
 
   -- Sign data, extract vkey and signature:
-  { key, signature: coseSign1 } <- lift $ signData addr (wrap payload)
+  { key, signature: coseSign1 } <- lift $ signData address (wrap payload)
   signature <- liftEffect (getCoseSign1Signature $ unwrap coseSign1)
     !* CouldNotGetSigFromCoseSign1Error
   coseKey <- liftEffect (fromBytesCoseKey key) !* CouldNotDecodeCoseKeyError
@@ -100,11 +98,12 @@ signMessage payload = do
   let vkeyBytes' = vkeyBytes vkey
 
   -- Check `pkh == hash vkey`:
-  pkh <- toPubKeyHash (getAddress addrPlutus) ?? CouldNotGetWalletPubKeyHashError
+  pkh <- (asPubKeyHash <<< unwrap =<< getPaymentCredential address)
+    ?? CouldNotGetWalletPubKeyHashError
   when (Just pkh /= hashVk vkeyBytes') $ throwError VkPkhMismatchError
 
   -- Verify signature:
-  sigStruct <- liftEffect (mkSigStructure network addrPlutus payload)
+  sigStruct <- liftEffect (mkSigStructure address payload)
     !* CouldNotBuildSigStructError
   success <- liftEffect (verifySignature vkeyBytes' sigStruct signature)
     !* CouldNotVerifySignatureError
@@ -114,5 +113,5 @@ signMessage payload = do
     { signature
     , vkey
     , pkh
-    , address: addrPlutus
+    , address
     }

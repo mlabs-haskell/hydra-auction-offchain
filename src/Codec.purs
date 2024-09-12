@@ -1,68 +1,62 @@
 module HydraAuctionOffchain.Codec
   ( addressCodec
-  , addressWithNetworkTagCodec
+  , assetNameCodec
   , bigIntCodec
   , bigIntCodecNum
+  , bigNumCodec
   , byteArrayCodec
-  , currencySymbolCodec
+  , ed25519KeyHashCodec
   , ed25519SignatureCodec
   , logLevelCodec
   , orefCodec
+  , plutusAddressCodec
+  , plutusPubKeyHashCodec
+  , plutusValueCodec
   , portCodec
   , posixTimeCodec
-  , pubKeyHashCodec
   , publicKeyCodec
+  , scriptHashCodec
   , serverConfigCodec
   , sysStartCodec
-  , tokenNameCodec
-  , transactionHashCodec
   , txCodec
-  , valueCodec
+  , txHashCodec
   , vkeyWitnessCodec
   ) where
 
 import Prelude
 
-import Contract.Address
+import Cardano.AsCbor (class AsCbor, decodeCbor, encodeCbor)
+import Cardano.Plutus.Types.Address (Address) as Plutus
+import Cardano.Plutus.Types.Address (fromCardano, toCardano) as Plutus.Address
+import Cardano.Plutus.Types.CurrencySymbol (CurrencySymbol) as Plutus
+import Cardano.Plutus.Types.CurrencySymbol (mkCurrencySymbol, unCurrencySymbol) as Plutus.CurrencySymbol
+import Cardano.Plutus.Types.PubKeyHash (PubKeyHash(PubKeyHash)) as Plutus
+import Cardano.Plutus.Types.TokenName (TokenName(TokenName)) as Plutus
+import Cardano.Plutus.Types.Value (Value) as Plutus
+import Cardano.Plutus.Types.Value (flattenValue, singleton) as Plutus.Value
+import Cardano.Types
   ( Address
-  , AddressWithNetworkTag
-  , PubKeyHash
-  , addressWithNetworkTagFromBech32
-  , addressWithNetworkTagToBech32
+  , AssetName
+  , BigNum
+  , CborBytes(CborBytes)
+  , Ed25519KeyHash
+  , Ed25519Signature
+  , NetworkId
+  , PublicKey
+  , RawBytes(RawBytes)
+  , ScriptHash
+  , Transaction
+  , TransactionHash
+  , TransactionInput(TransactionInput)
+  , Vkeywitness
   )
-import Contract.Config (NetworkId, ServerConfig)
+import Cardano.Types.Address (fromBech32, toBech32) as Address
+import Cardano.Types.AssetName (mkAssetName, unAssetName)
+import Cardano.Types.BigNum (fromString, toString) as BigNum
+import Cardano.Types.PublicKey (fromRawBytes, toRawBytes) as PublicKey
+import Contract.Config (ServerConfig)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Time (POSIXTime(POSIXTime), SystemStart)
-import Contract.Transaction
-  ( Ed25519Signature
-  , PublicKey
-  , Transaction
-  , TransactionHash(TransactionHash)
-  , TransactionInput(TransactionInput)
-  , Vkey(Vkey)
-  , Vkeywitness(Vkeywitness)
-  )
-import Contract.Value
-  ( CurrencySymbol
-  , TokenName
-  , Value
-  , getCurrencySymbol
-  , getTokenName
-  , mkCurrencySymbol
-  , mkTokenName
-  )
-import Contract.Value (flattenValue, singleton) as Value
-import Ctl.Internal.Cardano.Types.Transaction
-  ( convertEd25519Signature
-  , convertPubKey
-  , mkFromCslEd25519Signature
-  , mkFromCslPubKey
-  )
-import Ctl.Internal.Deserialization.FromBytes (fromBytes)
-import Ctl.Internal.Deserialization.Transaction (deserializeTransaction)
-import Ctl.Internal.Serialization (convertTransaction, toBytes)
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes, ed25519KeyHashToBytes)
-import Ctl.Internal.Serialization.Keys (bytesFromPublicKey)
 import Data.Codec.Argonaut
   ( JsonCodec
   , array
@@ -92,32 +86,55 @@ import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
 import URI.Port (Port)
 import URI.Port (fromInt, toInt) as Port
 
-addressCodec :: NetworkId -> CA.JsonCodec Address
-addressCodec network =
-  dimap (wrap <<< { address: _, networkId: network }) (_.address <<< unwrap)
-    addressWithNetworkTagCodec
-
-addressWithNetworkTagCodec :: CA.JsonCodec AddressWithNetworkTag
-addressWithNetworkTagCodec =
-  CA.prismaticCodec "AddressWithNetworkTag" addressWithNetworkTagFromBech32
-    addressWithNetworkTagToBech32
+addressCodec :: CA.JsonCodec Address
+addressCodec =
+  CA.prismaticCodec "Address" Address.fromBech32 Address.toBech32
     CA.string
 
-currencySymbolCodec :: CA.JsonCodec CurrencySymbol
-currencySymbolCodec =
-  CA.prismaticCodec "CurrencySymbol" mkCurrencySymbol getCurrencySymbol byteArrayCodec
+asCborCodec :: forall a. AsCbor a => String -> CA.JsonCodec a
+asCborCodec name =
+  CA.prismaticCodec name decodeCbor encodeCbor
+    cborBytesCodec
+
+assetNameCodec :: CA.JsonCodec AssetName
+assetNameCodec =
+  CA.prismaticCodec "AssetName" mkAssetName unAssetName
+    byteArrayCodec
 
 bigIntCodec :: CA.JsonCodec BigInt
-bigIntCodec = CA.prismaticCodec "BigInt" BigInt.fromString BigInt.toString CA.string
+bigIntCodec =
+  CA.prismaticCodec "BigInt" BigInt.fromString BigInt.toString
+    CA.string
 
 bigIntCodecNum :: CA.JsonCodec BigInt
-bigIntCodecNum = CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber CA.number
+bigIntCodecNum =
+  CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber
+    CA.number
+
+bigNumCodec :: CA.JsonCodec BigNum
+bigNumCodec =
+  CA.prismaticCodec "BigNum" BigNum.fromString BigNum.toString
+    CA.string
 
 byteArrayCodec :: CA.JsonCodec ByteArray
-byteArrayCodec = CA.prismaticCodec "ByteArray" hexToByteArray byteArrayToHex CA.string
+byteArrayCodec =
+  CA.prismaticCodec "ByteArray" hexToByteArray byteArrayToHex
+    CA.string
+
+cborBytesCodec :: CA.JsonCodec CborBytes
+cborBytesCodec = wrapIso CborBytes byteArrayCodec
+
+ed25519KeyHashCodec :: CA.JsonCodec Ed25519KeyHash
+ed25519KeyHashCodec = asCborCodec "Ed25519KeyHash"
+
+ed25519SignatureCodec :: CA.JsonCodec Ed25519Signature
+ed25519SignatureCodec =
+  asCborCodec "Ed25519Signature"
 
 logLevelCodec :: CA.JsonCodec LogLevel
-logLevelCodec = CA.prismaticCodec "LogLevel" readLogLevel printLogLevel CA.string
+logLevelCodec =
+  CA.prismaticCodec "LogLevel" readLogLevel printLogLevel
+    CA.string
   where
   readLogLevel :: String -> Maybe LogLevel
   readLogLevel = case _ of
@@ -139,8 +156,53 @@ logLevelCodec = CA.prismaticCodec "LogLevel" readLogLevel printLogLevel CA.strin
 orefCodec :: CA.JsonCodec TransactionInput
 orefCodec =
   wrapIso TransactionInput $ CA.object "TransactionInput" $ CAR.record
-    { transactionId: transactionHashCodec
+    { transactionId: txHashCodec
     , index: CA.prismaticCodec "UInt" UInt.fromString UInt.toString CA.string
+    }
+
+plutusAddressCodec :: NetworkId -> CA.JsonCodec Plutus.Address
+plutusAddressCodec network =
+  CA.prismaticCodec "Plutus.Address"
+    Plutus.Address.fromCardano
+    (fromJustWithErr "plutusAddressCodec" <<< Plutus.Address.toCardano network) -- FIXME
+    addressCodec
+
+plutusCurrencySymbolCodec :: CA.JsonCodec Plutus.CurrencySymbol
+plutusCurrencySymbolCodec =
+  CA.prismaticCodec
+    "Plutus.CurrencySymbol"
+    Plutus.CurrencySymbol.mkCurrencySymbol
+    Plutus.CurrencySymbol.unCurrencySymbol
+    byteArrayCodec
+
+plutusPubKeyHashCodec :: CA.JsonCodec Plutus.PubKeyHash
+plutusPubKeyHashCodec = wrapIso Plutus.PubKeyHash ed25519KeyHashCodec
+
+plutusTokenNameCodec :: CA.JsonCodec Plutus.TokenName
+plutusTokenNameCodec = wrapIso Plutus.TokenName assetNameCodec
+
+type ValueEntry =
+  { cs :: Plutus.CurrencySymbol
+  , tn :: Plutus.TokenName
+  , quantity :: BigInt
+  }
+
+plutusValueCodec :: CA.JsonCodec Plutus.Value
+plutusValueCodec = dimap fromValue toValue $ CA.array valueEntryCodec
+  where
+  fromValue :: Plutus.Value -> Array ValueEntry
+  fromValue =
+    map (\(cs /\ tn /\ quantity) -> { cs, tn, quantity })
+      <<< Plutus.Value.flattenValue
+
+  toValue :: Array ValueEntry -> Plutus.Value
+  toValue = foldMap \rec -> Plutus.Value.singleton rec.cs rec.tn rec.quantity
+
+  valueEntryCodec :: CA.JsonCodec ValueEntry
+  valueEntryCodec = CA.object "ValueEntry" $ CAR.record
+    { cs: plutusCurrencySymbolCodec
+    , tn: plutusTokenNameCodec
+    , quantity: bigIntCodec
     }
 
 portCodec :: CA.JsonCodec Port
@@ -149,11 +211,16 @@ portCodec = CA.prismaticCodec "Port" Port.fromInt Port.toInt CA.int
 posixTimeCodec :: CA.JsonCodec POSIXTime
 posixTimeCodec = wrapIso POSIXTime bigIntCodec
 
-pubKeyHashCodec :: CA.JsonCodec PubKeyHash
-pubKeyHashCodec =
-  CA.prismaticCodec "PubKeyHash" (map wrap <<< ed25519KeyHashFromBytes)
-    (unwrap <<< ed25519KeyHashToBytes <<< unwrap)
-    byteArrayCodec
+publicKeyCodec :: CA.JsonCodec PublicKey
+publicKeyCodec =
+  CA.prismaticCodec "PublicKey" PublicKey.fromRawBytes PublicKey.toRawBytes
+    rawBytesCodec
+
+rawBytesCodec :: CA.JsonCodec RawBytes
+rawBytesCodec = wrapIso RawBytes byteArrayCodec
+
+scriptHashCodec :: CA.JsonCodec ScriptHash
+scriptHashCodec = asCborCodec "ScriptHash"
 
 serverConfigCodec :: CA.JsonCodec ServerConfig
 serverConfigCodec =
@@ -174,61 +241,14 @@ sysStartCodec =
   formatter :: String
   formatter = "YYYY-MM-DDTHH:mm:ssZ"
 
-tokenNameCodec :: CA.JsonCodec TokenName
-tokenNameCodec =
-  CA.prismaticCodec "TokenName" mkTokenName getTokenName byteArrayCodec
-
-transactionHashCodec :: CA.JsonCodec TransactionHash
-transactionHashCodec = wrapIso TransactionHash byteArrayCodec
-
 txCodec :: CA.JsonCodec Transaction
-txCodec =
-  CA.prismaticCodec
-    "Transaction"
-    (hush <<< deserializeTransaction <<< wrap)
-    (unwrap <<< toBytes <<< unsafePerformEffect <<< convertTransaction)
-    byteArrayCodec
+txCodec = asCborCodec "Transaction"
+
+txHashCodec :: CA.JsonCodec TransactionHash
+txHashCodec = asCborCodec "TransactionHash"
 
 uintCodec :: CA.JsonCodec UInt
 uintCodec = CA.prismaticCodec "UInt" UInt.fromInt' UInt.toInt CA.int
 
-valueCodec :: CA.JsonCodec Value
-valueCodec = dimap fromValue toValue $ CA.array valueEntryCodec
-  where
-  fromValue :: Value -> Array ValueEntry
-  fromValue = map (\(cs /\ tn /\ quantity) -> { cs, tn, quantity }) <<< Value.flattenValue
-
-  toValue :: Array ValueEntry -> Value
-  toValue = foldMap \rec -> Value.singleton rec.cs rec.tn rec.quantity
-
-type ValueEntry =
-  { cs :: CurrencySymbol
-  , tn :: TokenName
-  , quantity :: BigInt
-  }
-
-valueEntryCodec :: CA.JsonCodec ValueEntry
-valueEntryCodec = CA.object "ValueEntry" $ CAR.record
-  { cs: currencySymbolCodec
-  , tn: tokenNameCodec
-  , quantity: bigIntCodec
-  }
-
 vkeyWitnessCodec :: CA.JsonCodec Vkeywitness
-vkeyWitnessCodec =
-  wrapIso Vkeywitness $
-    CA.tuple (wrapIso Vkey publicKeyCodec) ed25519SignatureCodec
-
-publicKeyCodec :: CA.JsonCodec PublicKey
-publicKeyCodec =
-  CA.prismaticCodec "PublicKey"
-    (map mkFromCslPubKey <<< fromBytes <<< wrap)
-    (unwrap <<< bytesFromPublicKey <<< convertPubKey)
-    byteArrayCodec
-
-ed25519SignatureCodec :: CA.JsonCodec Ed25519Signature
-ed25519SignatureCodec =
-  CA.prismaticCodec "Ed25519Signature"
-    (map mkFromCslEd25519Signature <<< fromBytes <<< wrap)
-    (unwrap <<< toBytes <<< convertEd25519Signature)
-    byteArrayCodec
+vkeyWitnessCodec = asCborCodec "Vkeywitness"
