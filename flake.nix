@@ -8,7 +8,7 @@
 
   inputs = {
     nixpkgs.follows = "ctl/nixpkgs";
-    ctl.url = "github:Plutonomicon/cardano-transaction-lib/v9.2.0";
+    ctl.url = "github:Plutonomicon/cardano-transaction-lib/v9.3.1";
     hydra.url = "github:input-output-hk/hydra/4fed4625f321d89b483c82f55252d24da63191c7";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/delegate-info";
   };
@@ -56,6 +56,37 @@
         };
     in
     {
+      packages = perSystem (system:
+        let
+          pkgs = nixpkgsFor system;
+          project = psProjectFor system pkgs;
+          hydra-auction-offchain = project.buildPursProject {
+            strictComp = true;
+            censorCodes = [
+              "ImplicitImport"
+              "ImplicitQualifiedImport"
+              "ImplicitQualifiedImportReExport"
+              "UserDefinedWarning"
+            ];
+          };
+
+        in
+        {
+          delegate-server = pkgs.writeShellApplication {
+            name = "delegate-server";
+            text = ''
+              TEMPD=$(mktemp -d)
+              cd "$TEMPD"
+              cp -r ${hydra-auction-offchain}/* .
+              ln -sfn ${project.nodeModules}/lib/node_modules node_modules
+              mkdir -p scripts && cp -r ${hydra-auction-onchain}/compiled/*.plutus scripts
+              node --enable-source-maps -e 'import("./output/DelegateServer.Main/index.js").then(m => m.main())' \
+                -- delegate-server "$@"
+            '';
+          };
+        }
+      );
+
       devShells = perSystem (system:
         let
           pkgs = nixpkgsFor system;

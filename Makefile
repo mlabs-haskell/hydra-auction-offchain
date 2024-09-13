@@ -1,6 +1,7 @@
 .PHONY: requires-nix-shell build bundle bundle-docker serve repl \
 			  format check-format localnet-env delegate-server-help \
-        delegate-cluster delegate-cluster-cleanup test test-nix
+        delegate-cluster delegate-cluster-cleanup test test-nix \
+				build-delegate-server-nix
 
 ps-sources := $(shell fd --no-ignore-parent -epurs)
 nix-sources := $(shell fd --no-ignore-parent -enix --exclude='spago*')
@@ -50,6 +51,9 @@ repl: requires-nix-shell
 
 localnet-env: requires-nix-shell
 	spago run --main PlutipEnv.Main --exec-args "--payment-skey-file plutip-env/payment.skey" 
+
+build-delegate-server-nix:
+	nix build .#packages.x86_64-linux.delegate-server
 
 delegate-server-help: requires-nix-shell
 	spago run --main DelegateServer.Main --exec-args '--help'
