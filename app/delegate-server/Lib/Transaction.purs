@@ -20,10 +20,8 @@ import Contract.Transaction (signTransaction)
 import Ctl.Internal.Transaction (setScriptDataHash)
 import Data.Lens (view, (%~), (.~), (<>~), (^.))
 import Data.Map (filterKeys) as Map
-import Data.Maybe (Maybe(Nothing), fromMaybe)
-import Data.Newtype (modify, unwrap, wrap)
-import Data.Traversable (traverse)
-import Effect.Class (class MonadEffect, liftEffect)
+import Data.Newtype (modify, unwrap)
+import Effect.Class (liftEffect)
 
 setAuxDataHash :: Transaction -> Transaction
 setAuxDataHash tx =

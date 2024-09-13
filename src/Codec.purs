@@ -67,7 +67,7 @@ import Data.Codec.Argonaut
   , prismaticCodec
   , string
   ) as CA
-import Data.Codec.Argonaut.Compat (maybe, tuple) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Foldable (foldMap)
@@ -79,7 +79,6 @@ import Data.Profunctor (dimap, wrapIso)
 import Data.Tuple.Nested ((/\))
 import Data.UInt (UInt)
 import Data.UInt (fromInt', fromString, toInt, toString) as UInt
-import Effect.Unsafe (unsafePerformEffect)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt

@@ -17,7 +17,6 @@ import Effect.Aff.AVar (empty, take) as AVar
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import HydraAuctionOffchain.Types.ContractConfig (localnetConfig)
-import JS.BigInt (fromInt) as BigInt
 import Node.Encoding (Encoding(UTF8))
 import Node.Process (stdin)
 import Node.Stream (destroy, onDataString)

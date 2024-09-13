@@ -1,5 +1,6 @@
 module HydraAuctionOffchain.Contract.Types.Plutus.DelegateGroupInfo where
 
+{-
 import Prelude
 
 import Cardano.Types (RawBytes, ScriptHash, URL)
@@ -10,7 +11,6 @@ import Data.Show.Generic (genericShow)
 import Data.Typelevel.Undefined (undefined)
 import Data.UInt (UInt)
 
-{-
 type Url = String
 
 newtype DelegateGroupMetadata = DelegateGroupMetadata

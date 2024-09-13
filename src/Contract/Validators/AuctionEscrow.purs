@@ -2,8 +2,6 @@ module HydraAuctionOffchain.Contract.Validators.AuctionEscrow
   ( mkAuctionEscrowValidator
   ) where
 
-import Prelude
-
 import Cardano.Types (PlutusScript)
 import Contract.Monad (Contract)
 import Contract.PlutusData (toData)

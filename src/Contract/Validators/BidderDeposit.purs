@@ -2,8 +2,6 @@ module HydraAuctionOffchain.Contract.Validators.BidderDeposit
   ( mkBidderDepositValidator
   ) where
 
-import Prelude
-
 import Cardano.ToData (toData)
 import Cardano.Types (PlutusScript)
 import Contract.Monad (Contract)

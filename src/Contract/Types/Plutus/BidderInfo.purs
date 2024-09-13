@@ -19,7 +19,7 @@ import Data.Maybe (Maybe(Nothing), fromJust)
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (addressCodec, plutusAddressCodec)
+import HydraAuctionOffchain.Codec (plutusAddressCodec)
 import HydraAuctionOffchain.Contract.Types.VerificationKey
   ( VerificationKey
   , vkeyBytes

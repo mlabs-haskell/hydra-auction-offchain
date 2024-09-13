@@ -24,7 +24,6 @@ import Cardano.Types (NetworkId, PlutusScript, ScriptHash)
 import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
-import Contract.Scripts (Validator, validatorHash)
 import Contract.Transaction (TransactionInput)
 import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec, object) as CA

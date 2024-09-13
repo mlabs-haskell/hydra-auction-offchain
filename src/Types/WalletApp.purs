@@ -12,7 +12,6 @@ import Data.Codec.Argonaut (JsonCodec, prismaticCodec, string) as CA
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
-import Data.Show.Generic (genericShow)
 import Data.String.Read (class Read, read)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 

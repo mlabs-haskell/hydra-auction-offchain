@@ -8,10 +8,10 @@ module Test.Contract.AnnounceAuction
 import Contract.Prelude
 
 import Cardano.Plutus.Types.Value (fromCardano) as Plutus.Value
-import Cardano.Types (Mint, ScriptHash, Value(Value))
+import Cardano.Types (Mint, ScriptHash, Value)
 import Cardano.Types.BigNum (one) as BigNum
 import Cardano.Types.Int (one) as Cardano.Int
-import Cardano.Types.Mint (singleton, toMultiAsset) as Mint
+import Cardano.Types.Mint (singleton) as Mint
 import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Cardano.Types.Value (singleton) as Value
 import Contract.Chain (currentTime)

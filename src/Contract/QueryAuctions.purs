@@ -10,9 +10,7 @@ import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTime)
-import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
 import Contract.Value (CurrencySymbol)
 import Contract.Value (valueOf) as Value
@@ -20,7 +18,6 @@ import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (mapMaybe) as Array
-import Data.Lens ((^.))
 import Data.Map (toUnfoldable) as Map
 import Data.Newtype (modify)
 import Data.Validation.Semigroup (isValid) as V

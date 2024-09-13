@@ -29,7 +29,7 @@ import Cardano.Types
 import Cardano.Types.BigNum (one) as BigNum
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, Redeemer, toData, unitDatum)
+import Contract.PlutusData (toData, unitDatum)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
@@ -180,7 +180,7 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
     standingBidOref :: TransactionInput
     standingBidOref = fst standingBidUtxo
 
-    standingBidRedeemer :: Redeemer
+    standingBidRedeemer :: RedeemerDatum
     standingBidRedeemer = wrap $ toData ConcludeAuctionRedeemer
 
     -- BidderDeposit -------------------------------------------------
@@ -188,7 +188,7 @@ mkClaimAuctionLotSellerContractWithErrors auctionInfo = do
     mBidderDepositOref :: Maybe TransactionInput
     mBidderDepositOref = fst <$> mBidderDepositUtxo
 
-    bidderDepositRedeemer :: Redeemer
+    bidderDepositRedeemer :: RedeemerDatum
     bidderDepositRedeemer = wrap $ toData ClaimDepositSellerRedeemer
 
     -- AuctionMetadata -----------------------------------------------

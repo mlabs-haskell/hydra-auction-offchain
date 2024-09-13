@@ -50,7 +50,7 @@ import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyFromBytes)
 import HydraAuctionOffchain.Helpers (fromJustWithErr, waitSeconds)
-import JS.BigInt (fromInt, toNumber) as BigInt
+import JS.BigInt (toNumber) as BigInt
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (exists, mkdir, writeTextFile) as FSSync
 import Node.Path (FilePath)

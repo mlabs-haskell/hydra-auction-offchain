@@ -32,7 +32,7 @@ import Cardano.Types.BigNum (one) as BigNum
 import Contract.Chain (currentTime)
 import Contract.Log (logWarn')
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, Redeemer, toData, unitDatum)
+import Contract.PlutusData (toData, unitDatum)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)

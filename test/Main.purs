@@ -10,7 +10,7 @@ import Contract.Test.Utils (interruptOnSignal)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
-import Mote (group, skip)
+import Mote (group)
 import Test.Contract.AnnounceAuction (suite) as AnnounceAuction
 import Test.Contract.AuthorizeBidders (suite) as AuthorizeBidders
 import Test.Contract.DelegateServer (suite) as DelegateServer
@@ -28,14 +28,13 @@ main = do
 suite :: TestPlanM (Aff Unit) Unit
 suite = do
   group "delegate-server" do
-    -- WsServer.suite
+    WsServer.suite
     testTestnetContracts localnetConfig do
       DelegateServer.suite
--- group "contracts" do
-{-
-AnnounceAuction.suite
-StartBidding.suite
-EnterAuction.suite
-AuthorizeBidders.suite
-PlaceBid.suite
--}
+
+      group "contracts" do
+        AnnounceAuction.suite
+        StartBidding.suite
+        EnterAuction.suite
+        AuthorizeBidders.suite
+        PlaceBid.suite

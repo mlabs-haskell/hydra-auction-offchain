@@ -26,7 +26,6 @@ import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
-import Contract.Value (CurrencySymbol)
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT(ExceptT), throwError, withExceptT)
@@ -39,7 +38,7 @@ import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidResponseCodec)
-import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec, byteArrayCodec, scriptHashCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
@@ -64,7 +63,6 @@ import HydraAuctionOffchain.Service.Common
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
-import JS.BigInt (BigInt)
 
 newtype SendBidContractParams = SendBidContractParams
   { auctionCs :: ScriptHash

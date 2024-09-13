@@ -9,7 +9,6 @@ import Cardano.Types (Address, NativeScript(ScriptPubkey), NetworkId, ScriptHash
 import Cardano.Types.AssetName (mkAssetName)
 import Cardano.Types.NativeScript (hash) as NativeScript
 import Contract.Address (PaymentPubKeyHash)
-import Contract.Hashing (nativeScriptHash)
 import Contract.Prim.ByteArray (byteArrayFromAscii)
 import Data.Newtype (unwrap)
 import HydraAuctionOffchain.Contract.Types (AssetClass, mkAssetClass)

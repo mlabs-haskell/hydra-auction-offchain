@@ -18,7 +18,6 @@ import Data.Show.Generic (genericShow)
 import DelegateServer.Types.HydraTx (HydraTx, hydraTxCodec, mkHydraTx)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
 import DelegateServer.Types.HydraUtxoMap (fromUtxoMap) as HydraUtxoMap
-import Effect (Effect)
 
 data HydraCommitRequest
   = SimpleCommitRequest HydraUtxoMap

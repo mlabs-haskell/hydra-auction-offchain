@@ -26,27 +26,23 @@ import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
 import Cardano.Plutus.Types.Address (Address) as Plutus
-import Cardano.Plutus.Types.Credential (Credential(PubKeyCredential)) as Plutus
 import Cardano.Plutus.Types.Value (Value) as Plutus
 import Cardano.Plutus.Types.Value (gt, valueToCoin) as Plutus.Value
 import Cardano.Types (BigNum, Ed25519KeyHash, NetworkId)
 import Contract.Numeric.BigNum (fromInt, mul, zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Time (POSIXTime)
-import Contract.Value (gt) as Value
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Just, Nothing), isJust, maybe)
+import Data.Maybe (Maybe(Nothing), isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V)
 import HydraAuctionOffchain.Codec
-  ( addressCodec
-  , bigIntCodec
-  , bigNumCodec
+  ( bigNumCodec
   , ed25519KeyHashCodec
   , plutusAddressCodec
   , plutusValueCodec
@@ -60,9 +56,6 @@ import HydraAuctionOffchain.Contract.Types.VerificationKey
 import HydraAuctionOffchain.Helpers (errV)
 import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
-import JS.BigInt (BigInt)
-import JS.BigInt (fromInt) as BigInt
-import Partial.Unsafe (unsafePartial)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------

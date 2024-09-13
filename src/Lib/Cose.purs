@@ -6,7 +6,7 @@ module HydraAuctionOffchain.Lib.Cose
 import Prelude
 
 import Cardano.AsCbor (encodeCbor)
-import Cardano.Types (Address, NetworkId)
+import Cardano.Types (Address)
 import Contract.Prim.ByteArray (ByteArray, CborBytes)
 import Effect (Effect)
 

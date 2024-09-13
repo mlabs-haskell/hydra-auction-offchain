@@ -16,7 +16,6 @@ import Cardano.Types.Int (fromInt) as Cardano.Int
 import Cardano.Types.PublicKey (hash) as PublicKey
 import Cardano.Wallet.Key (KeyWallet(KeyWallet))
 import Contract.Config (QueryBackendParams, mkCtlBackendParams)
-import Contract.Hashing (publicKeyHash)
 import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
 import Contract.Test.Testnet (TestnetConfig)
@@ -63,7 +62,7 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
 import Effect.Unsafe (unsafePerformEffect)
-import HydraAuctionOffchain.Codec (bigIntCodecNum, bigNumCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended
   , BidTerms
@@ -72,7 +71,6 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (fromJustWithErr, randomElem)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile, caEncodeString)
-import JS.BigInt (BigInt)
 import Node.Buffer (toString) as Buffer
 import Node.ChildProcess (defaultExecSyncOptions, execSync)
 import Node.Encoding (Encoding(UTF8)) as Encoding

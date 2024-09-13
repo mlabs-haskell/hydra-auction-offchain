@@ -17,7 +17,6 @@ import Prelude
 import Cardano.AsCbor (decodeCbor)
 import Cardano.Types (NetworkId, ScriptHash)
 import Contract.CborBytes (hexToCborBytes)
-import Contract.Prim.ByteArray (hexToByteArray)
 import Data.Array (singleton, (:))
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV

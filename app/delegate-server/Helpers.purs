@@ -8,7 +8,6 @@ import Prelude
 
 import Cardano.AsCbor (decodeCbor, encodeCbor)
 import Contract.CborBytes (cborBytesToHex, hexToCborBytes)
-import Contract.Prim.ByteArray (byteLength)
 import Contract.Transaction (TransactionInput(TransactionInput))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)

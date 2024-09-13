@@ -19,7 +19,7 @@ import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended(AuctionInfoExtended)
   , BidderInfo
@@ -27,7 +27,6 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import JS.BigInt (BigInt)
 
 newtype BidderInfoCandidate = BidderInfoCandidate
   { bidderInfo :: BidderInfo

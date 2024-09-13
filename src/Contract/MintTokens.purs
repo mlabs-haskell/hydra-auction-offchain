@@ -16,7 +16,6 @@ import Contract.TxConstraints (mustMintCurrency) as Constraints
 import Contract.Value (TokenName)
 import HydraAuctionOffchain.Contract.MintingPolicies (mkAlwaysMintsPolicy)
 import HydraAuctionOffchain.Contract.Types (emptySubmitTxData, submitTxReturningContractResult)
-import JS.BigInt (BigInt)
 
 mintTokenUsingAlwaysMints :: TokenName -> BigNum -> Contract TransactionHash
 mintTokenUsingAlwaysMints tokenName quantity = do

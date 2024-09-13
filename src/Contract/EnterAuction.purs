@@ -21,7 +21,7 @@ import Cardano.Types.Int (one) as Cardano.Int
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, toData)
+import Contract.PlutusData (toData)
 import Contract.Scripts (ValidatorHash, validatorHash)
 import Contract.Time (POSIXTimeRange, to)
 import Contract.Transaction (TransactionHash)
@@ -42,7 +42,7 @@ import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -66,7 +66,6 @@ import HydraAuctionOffchain.Contract.Types
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk')
-import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
 
 newtype EnterAuctionContractParams = EnterAuctionContractParams

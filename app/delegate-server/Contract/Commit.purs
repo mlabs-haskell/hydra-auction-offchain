@@ -38,7 +38,7 @@ import Contract.TxConstraints
   ) as Constraints
 import Contract.UnbalancedTx (mkUnbalancedTx)
 import Contract.Wallet (ownPaymentPubKeyHash)
-import Control.Error.Util ((!?), (??))
+import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Argonaut (Json, encodeJson)
@@ -48,7 +48,6 @@ import Data.Map (fromFoldable) as Map
 import Data.Show.Generic (genericShow)
 import DelegateServer.App (runContract, runContractLift)
 import DelegateServer.Handlers.SignCommitTx (signCommitTxErrorCodec)
-import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Transaction (appendTxSignatures, reSignTransaction, setAuxDataHash)

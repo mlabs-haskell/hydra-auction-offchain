@@ -17,8 +17,6 @@ import Control.Monad.Except (runExceptT)
 import HydraAuctionOffchain.Contract (mkEnterAuctionContractWithErrors)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, ContractResult)
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
-import JS.BigInt (BigInt)
-import JS.BigInt (fromInt, toInt) as BigInt
 import Mote (group, test)
 import Test.Contract.AnnounceAuction (announceAuction)
 import Test.Helpers (defDistribution)

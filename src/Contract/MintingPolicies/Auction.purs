@@ -5,8 +5,6 @@ module HydraAuctionOffchain.Contract.MintingPolicies.Auction
   , standingBidTokenName
   ) where
 
-import Prelude
-
 import Cardano.ToData (toData)
 import Cardano.Types (AssetName, PlutusScript, ScriptHash)
 import Contract.Monad (Contract)

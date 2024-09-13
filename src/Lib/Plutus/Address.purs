@@ -2,8 +2,6 @@ module HydraAuctionOffchain.Lib.Plutus.Address
   ( toPubKeyHash
   ) where
 
-import Prelude
-
 import Cardano.Plutus.Types.Address (Address) as Plutus
 import Cardano.Plutus.Types.Credential (Credential(PubKeyCredential)) as Plutus
 import Cardano.Plutus.Types.PubKeyHash (PubKeyHash) as Plutus

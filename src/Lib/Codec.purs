@@ -16,7 +16,6 @@ import Prelude
 import Cardano.Types (AssetName, BigNum)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Transaction (TransactionHash)
-import Contract.Value (TokenName)
 import Control.Alt ((<|>))
 import Data.Argonaut (Json)
 import Data.Argonaut (caseJsonObject, fromObject) as A

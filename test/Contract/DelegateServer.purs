@@ -52,7 +52,6 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, randomElem, waitSeconds)
 import HydraAuctionOffchain.Wallet (signMessage)
-import JS.BigInt (BigInt, fromInt)
 import Mote (group, skip, test)
 import Partial.Unsafe (unsafePartial)
 import Test.Contract.AnnounceAuction (AuctionTermsMutator, announceAuctionFix)

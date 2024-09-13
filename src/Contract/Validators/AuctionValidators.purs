@@ -14,14 +14,13 @@ import Prelude
 import Cardano.Types (PlutusScript)
 import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Contract.Monad (Contract)
-import Contract.Scripts (validatorHash)
 import Contract.Value (CurrencySymbol)
 import Control.Monad.Except (ExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Generic.Rep (class Generic)
-import Data.Newtype (class Newtype, unwrap)
+import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms (AuctionTerms)
 import HydraAuctionOffchain.Contract.Types.Scripts

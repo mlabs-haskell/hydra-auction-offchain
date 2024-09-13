@@ -5,7 +5,6 @@ module DelegateServer.Const
 
 import Cardano.Types (BigNum)
 import Cardano.Types.BigNum (fromInt) as BigNum
-import JS.BigInt (fromInt) as BigInt
 import Node.Path (FilePath)
 
 type AppConst =

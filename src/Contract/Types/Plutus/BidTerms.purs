@@ -33,7 +33,7 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
-import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec, byteArrayCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
   , totalAuctionFees
@@ -45,7 +45,6 @@ import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
 import HydraAuctionOffchain.Lib.Crypto (verifySignature)
 import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import HydraAuctionOffchain.Lib.ToData (serializeData)
-import JS.BigInt (BigInt)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidTerms = BidTerms

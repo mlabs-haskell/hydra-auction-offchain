@@ -10,16 +10,10 @@ module DelegateServer.Types.HydraUtxoMap
 import Prelude
 
 import Cardano.AsCbor (encodeCbor)
-import Cardano.Plutus.Types.CurrencySymbol (mkCurrencySymbol, unCurrencySymbol)
+import Cardano.Plutus.Types.CurrencySymbol (mkCurrencySymbol)
 import Cardano.Plutus.Types.TokenName (mkTokenName)
 import Cardano.Plutus.Types.Value (Value) as Plutus
-import Cardano.Plutus.Types.Value
-  ( getValue
-  , lovelaceValueOf
-  , singleton
-  , toCardano
-  , valueToCoin'
-  ) as Plutus.Value
+import Cardano.Plutus.Types.Value (lovelaceValueOf, singleton, toCardano) as Plutus.Value
 import Cardano.Types
   ( Address
   , OutputDatum(OutputDatum)
@@ -32,11 +26,9 @@ import Cardano.Types.BigNum (fromBigInt, toBigInt) as BigNum
 import Cardano.Types.DataHash (hashPlutusData)
 import Cardano.Types.OutputDatum (outputDatumDatum)
 import Contract.CborBytes (cborBytesToHex)
-import Contract.Hashing (datumHash)
 import Contract.PlutusData (PlutusData(Constr, Map, List, Integer, Bytes))
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Utxos (UtxoMap)
-import Contract.Value (singleton, valueToCoin) as Value
 import Control.Alt ((<|>))
 import Control.Monad.Maybe.Trans (MaybeT(MaybeT), runMaybeT)
 import Control.Monad.Trans.Class (lift)
@@ -57,7 +49,7 @@ import Data.Argonaut
 import Data.Array ((:))
 import Data.Bifunctor (bimap, lmap)
 import Data.Bitraversable (bitraverse)
-import Data.Codec.Argonaut (JsonCodec, decode, encode, json, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut (JsonCodec, decode, encode, json, object, prismaticCodec) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Either (Either, hush, note)

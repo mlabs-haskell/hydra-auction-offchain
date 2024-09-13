@@ -34,7 +34,7 @@ import Cardano.Types.BigNum (one) as BigNum
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, Redeemer, toData)
+import Contract.PlutusData (toData)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs) as Lookups
@@ -63,7 +63,7 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (fromFoldable) as Map
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import HydraAuctionOffchain.Codec (bigIntCodec, bigNumCodec, byteArrayCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
@@ -90,7 +90,6 @@ import HydraAuctionOffchain.Contract.Types
 import HydraAuctionOffchain.Contract.Validators (MkAuctionValidatorsError, mkAuctionValidators)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
-import JS.BigInt (BigInt)
 import JS.BigInt (fromInt) as BigInt
 
 newtype PlaceBidContractParams = PlaceBidContractParams

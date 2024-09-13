@@ -14,7 +14,6 @@ import Control.Monad.Gen.Common (genMaybe)
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (wrap)
 import HydraAuctionOffchain.Contract.Types (BidTerms, BidderInfo, StandingBidState)
-import JS.BigInt (fromInt) as BigInt
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (Gen, chooseInt)
 

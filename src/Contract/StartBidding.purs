@@ -18,13 +18,12 @@ module HydraAuctionOffchain.Contract.StartBidding
 import Contract.Prelude
 
 import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
-import Cardano.Plutus.Types.Value (Value) as Plutus
 import Cardano.Plutus.Types.Value (toCardano) as Plutus.Value
 import Cardano.Types (NetworkId, PaymentPubKeyHash, PlutusData, RedeemerDatum)
 import Cardano.Types.BigNum (one) as BigNum
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.PlutusData (Datum, Redeemer, toData)
+import Contract.PlutusData (toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)

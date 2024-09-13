@@ -8,19 +8,11 @@ module HydraAuctionOffchain.Contract.QueryStandingBidState
 
 import Contract.Prelude
 
-import Cardano.Types (Asset(Asset))
-import Cardano.Types.BigNum (one) as BigNum
-import Contract.Address (Address)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.Transaction (TransactionOutput)
-import Contract.Value (CurrencySymbol)
-import Contract.Value (valueOf) as Value
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find) as Array
-import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -30,7 +22,6 @@ import HydraAuctionOffchain.Contract.Types
   , StandingBidState
   , mkContractOutput
   )
-import HydraAuctionOffchain.Helpers (getInlineDatum, getTxOutsAt)
 
 queryStandingBidState :: AuctionInfoExtended -> Contract (ContractOutput StandingBidState)
 queryStandingBidState =
@@ -42,7 +33,6 @@ queryStandingBidStateWithErrors
 queryStandingBidStateWithErrors auctionInfo = do
   let
     AuctionInfoExtended auctionInfoRec = auctionInfo
-    auctionCs = auctionInfoRec.auctionId
     AuctionTerms auctionTermsRec = auctionInfoRec.auctionTerms
 
   -- Check that the query is executed after the bidding start time:

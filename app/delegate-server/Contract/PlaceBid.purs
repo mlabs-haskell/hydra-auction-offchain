@@ -51,11 +51,10 @@ import Data.Array (find) as Array
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Map (fromFoldable, toUnfoldable) as Map
-import Data.Newtype (modify, unwrap)
+import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.App (runContractNullCosts)
-import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
 import DelegateServer.State (class AppOpen, readAppState)
