@@ -4,11 +4,15 @@ module Test.Contract.DelegateServer
 
 import Contract.Prelude
 
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Types (BigNum)
+import Cardano.Types.BigNum (fromInt) as BigNum
 import Contract.Monad (Contract, liftedE, liftedM)
 import Contract.Test (ContractTest, withKeyWallet)
 import Contract.Test.Mote (TestPlanM)
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (ownPaymentPubKeyHash)
+import Control.Monad.Error.Class (liftMaybe)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (untilJust)
 import Control.Parallel (parTraverse_)
@@ -36,6 +40,7 @@ import DelegateServer.Types.HydraHeadStatus
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   )
+import Effect.Exception (error)
 import HydraAuctionOffchain.Contract (discoverBidders)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
@@ -194,14 +199,17 @@ moveBidTest { autoInit } =
         untilM (eq (Just $ StandingBidState Nothing))
           appHandle.queryStandingBidL2
 
-mkBidTerms :: AuctionInfoExtended -> BigInt -> Contract BidTerms
+mkBidTerms :: AuctionInfoExtended -> BigNum -> Contract BidTerms
 mkBidTerms auctionInfo bidAmount = do
   sellerSignature <- discoverSellerSignature auctionInfo Nothing
   pkh <- liftedM "Could not get bidder pkh" ownPaymentPubKeyHash
   let payload = bidderSignatureMessage (unwrap auctionInfo).auctionId (unwrap pkh) bidAmount
   { signature, vkey, address } <- liftedE $ runExceptT $ signMessage payload
+  bidderAddress <-
+    liftMaybe (error "Could not convert bidder address to Plutus.Address.") $
+      Plutus.Address.fromCardano address
   pure $ BidTerms
-    { bidder: BidderInfo { bidderAddress: address, bidderVk: vkey }
+    { bidder: BidderInfo { bidderAddress, bidderVk: vkey }
     , price: bidAmount
     , bidderSignature: signature
     , sellerSignature
@@ -280,7 +288,7 @@ placeL2Bids params fixAuctionTerms cont =
           ( \{ bidAmount, valid } -> do
               bidder <- randomElem bidderKws
               withKeyWallet bidder do
-                bidTerms <- mkBidTerms auctionInfo $ fromInt bidAmount
+                bidTerms <- mkBidTerms auctionInfo $ BigNum.fromInt bidAmount
                 if valid then do
                   appHandle.placeBidL2 bidTerms `shouldReturn`
                     ServerResponseSuccess PlaceBidSuccess_SubmittedTransaction

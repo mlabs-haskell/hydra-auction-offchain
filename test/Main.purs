@@ -18,7 +18,7 @@ import Test.Contract.EnterAuction (suite) as EnterAuction
 import Test.Contract.PlaceBid (suite) as PlaceBid
 import Test.Contract.StartBidding (suite) as StartBidding
 import Test.DelegateServer.WsServer (suite) as WsServer
-import Test.Localnet.Config (plutipConfig)
+import Test.Localnet.Config (localnetConfig)
 
 main :: Effect Unit
 main = do
@@ -29,7 +29,7 @@ suite :: TestPlanM (Aff Unit) Unit
 suite = do
   group "delegate-server" do
     -- WsServer.suite
-    testTestnetContracts plutipConfig do
+    testTestnetContracts localnetConfig do
       DelegateServer.suite
 -- group "contracts" do
 {-
