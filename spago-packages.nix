@@ -185,18 +185,6 @@ let
         installPhase = "ln -s $src $out";
       };
 
-    "bigints" = pkgs.stdenv.mkDerivation {
-        name = "bigints";
-        version = "v7.0.1";
-        src = pkgs.fetchgit {
-          url = "https://github.com/purescript-contrib/purescript-bigints.git";
-          rev = "e73f55b866e437c7bf04c7d262de7c205c47bbca";
-          sha256 = "0msh5sv6g0k69fi0qv4xi1g89bfwai099f0ycjb8a69mnjq8x21n";
-        };
-        phases = "installPhase";
-        installPhase = "ln -s $src $out";
-      };
-
     "bignumber" = pkgs.stdenv.mkDerivation {
         name = "bignumber";
         version = "760d11b41ece31b8cdd3c53349c5c2fd48d3ff89";
@@ -1356,18 +1344,6 @@ let
           url = "https://github.com/mlabs-haskell/purescript-plutus-types";
           rev = "dfec05e2dee79ee8dafad3d698906966ea6628bb";
           sha256 = "0milz16kdl1pd0i6b8ibxpacdd2r7p6n96gl1g6h41v9bccs69p9";
-        };
-        phases = "installPhase";
-        installPhase = "ln -s $src $out";
-      };
-
-    "ply-ctl" = pkgs.stdenv.mkDerivation {
-        name = "ply-ctl";
-        version = "727b811b0d561cf13d5594b9352a7294e5a20378";
-        src = pkgs.fetchgit {
-          url = "https://github.com/mlabs-haskell/ply-ctl.git";
-          rev = "727b811b0d561cf13d5594b9352a7294e5a20378";
-          sha256 = "1i5v0q1fxar1kpa03vccdmw3mirp4gg2lyl503ky05n3jl4b7mds";
         };
         phases = "installPhase";
         installPhase = "ln -s $src $out";
