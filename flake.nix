@@ -44,6 +44,11 @@
             shellHook = ''
               mkdir -p scripts
               cp -rf ${hydra-auction-onchain}/compiled/*.plutus scripts
+              for script in scripts/*.plutus; do
+                jq '. | {cborHex: .cborHex, description: .description, type: "PlutusScriptV2"}' "$script" \
+                  > "$script.tmp"
+                mv -f "$script.tmp" "$script"
+              done
             '';
             packages = with pkgs; [
               fd

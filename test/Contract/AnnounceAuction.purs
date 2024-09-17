@@ -7,10 +7,13 @@ module Test.Contract.AnnounceAuction
 
 import Contract.Prelude
 
-import Cardano.Plutus.Types.Value (fromCardano) as Plutus.Value
+import Cardano.Plutus.Types.CurrencySymbol (fromScriptHash)
+import Cardano.Plutus.Types.Value (Value) as Plutus
+import Cardano.Plutus.Types.Value (singleton) as Plutus.Value
 import Cardano.Types (Mint, ScriptHash, Value)
 import Cardano.Types.BigNum (one) as BigNum
-import Cardano.Types.Int (one) as Cardano.Int
+import Cardano.Types.Int (Int) as Cardano
+import Cardano.Types.Int (one, toBigInt) as Cardano.Int
 import Cardano.Types.Mint (singleton) as Mint
 import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Cardano.Types.Value (singleton) as Value
@@ -56,7 +59,7 @@ announceAuction = announceAuctionFix identity
 
 announceAuctionFix :: AuctionTermsMutator -> Contract AnnounceAuctionContractResult
 announceAuctionFix fixAuctionTerms = do
-  auctionLotValue <- Plutus.Value.fromCardano <$> mintAuctionLot
+  auctionLotValue <- mintAuctionLot
   biddingStart <-
     currentTime <#>
       add (mkPosixTimeUnsafe $ Seconds 5.0)
@@ -71,15 +74,24 @@ announceAuctionFix fixAuctionTerms = do
       }
   liftedE $ runExceptT $ mkAnnounceAuctionContractWithErrors params
 
-mintAuctionLot :: Contract Value
+mintAuctionLot :: Contract Plutus.Value
 mintAuctionLot = do
   alwaysMintsPolicy <- mkAlwaysMintsPolicy
   let
     cs :: ScriptHash
     cs = PlutusScript.hash alwaysMintsPolicy
 
+    mintQuantity :: Cardano.Int
+    mintQuantity = Cardano.Int.one
+
     auctionLotValue :: Mint
-    auctionLotValue = Mint.singleton cs auctionLotTokenNameFixture Cardano.Int.one
+    auctionLotValue = Mint.singleton cs auctionLotTokenNameFixture mintQuantity
+
+    auctionLotValuePlutus :: Plutus.Value
+    auctionLotValuePlutus = Plutus.Value.singleton
+      (fromScriptHash cs)
+      (wrap auctionLotTokenNameFixture)
+      (Cardano.Int.toBigInt mintQuantity)
 
     constraints :: TxConstraints
     constraints = Constraints.mustMintValue auctionLotValue
@@ -92,4 +104,4 @@ mintAuctionLot = do
     , constraints = constraints
     }
   awaitTxConfirmed txHash
-  pure $ Value.singleton cs auctionLotTokenNameFixture BigNum.one
+  pure auctionLotValuePlutus

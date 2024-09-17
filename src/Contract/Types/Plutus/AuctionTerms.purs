@@ -205,8 +205,7 @@ validateAuctionTerms :: AuctionTerms -> V (Array AuctionTermsValidationError) Un
 validateAuctionTerms auctionTerms@(AuctionTerms rec) = fold
   [ (Plutus.Value.valueToCoin rec.auctionLot == mempty)
       `errV` AuctionLotNonZeroAdaError
-  , (rec.auctionLot `Plutus.Value.gt` mempty) -- FIXME
-
+  , (rec.auctionLot `Plutus.Value.gt` mempty)
       `errV` NonPositiveAuctionLotValueError
   , (isJust sellerPkh)
       `errV` SellerAddressLacksPubKeyCredentialError
