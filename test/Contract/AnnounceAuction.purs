@@ -10,13 +10,11 @@ import Contract.Prelude
 import Cardano.Plutus.Types.CurrencySymbol (fromScriptHash)
 import Cardano.Plutus.Types.Value (Value) as Plutus
 import Cardano.Plutus.Types.Value (singleton) as Plutus.Value
-import Cardano.Types (Mint, ScriptHash, Value)
-import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types (Mint, ScriptHash)
 import Cardano.Types.Int (Int) as Cardano
 import Cardano.Types.Int (one, toBigInt) as Cardano.Int
 import Cardano.Types.Mint (singleton) as Mint
 import Cardano.Types.PlutusScript (hash) as PlutusScript
-import Cardano.Types.Value (singleton) as Value
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract, liftedE)
 import Contract.ScriptLookups (ScriptLookups)
