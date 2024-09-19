@@ -25,6 +25,7 @@ import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (ask, local)
 import Control.Parallel (parTraverse, parTraverse_)
+import Ctl.Internal.Contract.Hooks (ClusterParameters)
 import Ctl.Internal.Helpers (concatPaths, (<</>>))
 import Ctl.Internal.Testnet.Utils (tmpdir)
 import Data.Array (concat, deleteAt, replicate)
@@ -46,7 +47,7 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
 import DelegateServer.App (AppM, runApp, runContract)
-import DelegateServer.Config (AppConfig', Network(Mainnet), AuctionConfig)
+import DelegateServer.Config (AppConfig', AuctionConfig, Network(Testnet))
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
@@ -61,6 +62,8 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
+import Effect.Ref (Ref)
+import Effect.Ref (read) as Ref
 import Effect.Unsafe (unsafePerformEffect)
 import HydraAuctionOffchain.Codec (bigNumCodec)
 import HydraAuctionOffchain.Contract.Types
@@ -100,29 +103,24 @@ type TestAppHandle =
 withWallets'
   :: forall (distr :: Type) (wallets :: Type)
    . UtxoDistribution distr wallets
-  => distr
+  => Ref ClusterParameters
+  -> distr
   -> ( wallets
        -> Array Ed25519KeyHash
        -> (AuctionInfoExtended -> (TestAppHandle -> Contract Unit) -> Contract Unit)
        -> Contract Unit
      )
   -> ContractTest
-withWallets' distr tests =
+withWallets' localnetClusterParamsRef distr tests =
   ContractTest \h ->
     let
-      numDelegates =
-        unsafePerformEffect $ randomSampleOne $ chooseInt 1 3
+      numDelegates = unsafePerformEffect $ randomSampleOne $ chooseInt 1 3
       distrDelegates =
         concat $ replicate numDelegates [ defDistribution, defDistribution ]
     in
-      h (distr /\ distrDelegates) \ {- mPlutipClusterParams -}(wallets /\ delegateWallets) ->
+      h (distr /\ distrDelegates) \(wallets /\ delegateWallets) ->
         do
           contractEnv <- ask
-          {-
-        plutipClusterParams <-
-          liftContractM "Could not get Plutip cluster params"
-            mPlutipClusterParams
-        -}
           delegateWalletsGrouped <-
             liftContractM "Expected even number of delegate wallets"
               (chunksOf2 delegateWallets)
@@ -136,10 +134,11 @@ withWallets' distr tests =
             auctionMetadataOref <-
               liftContractM "Could not get auction metadata oref"
                 (unwrap auctionInfo).metadataOref
+            localnetClusterParams <- liftEffect $ Ref.read localnetClusterParamsRef
             let
               clusterConfig =
                 { auctionMetadataOref
-                -- , plutipClusterParams
+                , localnetClusterParams
                 , localnetConfig
                 }
             peers <-
@@ -212,7 +211,7 @@ type DelegateServerPeer =
 
 type DelegateServerClusterConfig =
   { auctionMetadataOref :: TransactionInput
-  -- , plutipClusterParams :: ClusterStartupParameters
+  , localnetClusterParams :: ClusterParameters
   , localnetConfig :: TestnetConfig
   }
 
@@ -248,7 +247,7 @@ genDelegateServerConfigs
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
   hydraScriptsTxHash <- publishHydraScripts
-    "" -- FIXME: clusterConfig.plutipClusterParams.nodeSocketPath
+    clusterConfig.localnetClusterParams.nodeSocketPath
     (ops.mkCardanoSk $ snd $ NEArray.head peers')
   pure $ worker (NEArray.toArray peers') hydraScriptsTxHash
   where
@@ -296,8 +295,8 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
       , wsServerPort: ops.mkWsServerPort idx
       , hydraPersistDir: ops.mkPersistDir workdir
       , hydraSk: ops.mkHydraSk workdir
-      , nodeSocket: "" -- FIXME: clusterConfig.plutipClusterParams.nodeSocketPath
-      , network: Mainnet
+      , nodeSocket: clusterConfig.localnetClusterParams.nodeSocketPath
+      , network: Testnet { magic: localnetConfig.clusterConfig.testnetMagic }
       , queryBackend:
           mkCtlBackendParams
             { ogmiosConfig:
@@ -337,7 +336,7 @@ publishHydraScripts nodeSocket cardanoSk =
   liftEffect do
     let
       cmd =
-        "hydra-node publish-scripts --mainnet --node-socket "
+        "hydra-node publish-scripts --testnet-magic 2 --node-socket "
           <> nodeSocket
           <> " --cardano-signing-key "
           <> cardanoSk

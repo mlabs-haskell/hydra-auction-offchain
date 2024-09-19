@@ -8,12 +8,14 @@
 
   inputs = {
     nixpkgs.follows = "ctl/nixpkgs";
-    ctl.url = "github:Plutonomicon/cardano-transaction-lib/v9.3.1";
-    hydra.url = "github:input-output-hk/hydra/4fed4625f321d89b483c82f55252d24da63191c7";
+    cardano-node.url = "github:input-output-hk/cardano-node/9.2.0";
+    ctl.url = "github:Plutonomicon/cardano-transaction-lib/566e7153c88fdab7005a3b4b02e6fec41c7d5c94";
+    ctl.inputs.cardano-node.follows = "cardano-node";
+    hydra.url = "github:input-output-hk/hydra/0.19.0";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/delegate-info";
   };
 
-  outputs = { self, nixpkgs, ctl, hydra, hydra-auction-onchain }@inputs:
+  outputs = { self, nixpkgs, ctl, hydra, hydra-auction-onchain, ... }@inputs:
     let
       supportedSystems = [ "x86_64-linux" ];
       perSystem = nixpkgs.lib.genAttrs supportedSystems;

@@ -56,6 +56,7 @@
   , "random"
   , "read"
   , "record"
+  , "refs"
   , "safely"
   , "spec"
   , "strings"
