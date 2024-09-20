@@ -25,15 +25,15 @@ import Node.ChildProcess (ChildProcess, kill)
 appCleanupHandler
   :: (Effect Unit -> Effect Unit)
   -> DelegateWebSocketServer
-  -> Array (AppExitReason -> Effect Unit)
+  -> (AppExitReason -> Effect Unit)
   -> Effect Unit
-appCleanupHandler closeHttpServer wsServer handlers = do
+appCleanupHandler closeHttpServer wsServer cleanupAppInstances = do
   log "Stopping HTTP server."
     *> closeHttpServer (pure unit)
   log "Stopping WebSocket server."
     *> launchAff_ wsServer.close
   log "Executing app instance cleanup handlers."
-    *> traverse_ (_ $ AppExitReason_Cleanup) handlers
+    *> cleanupAppInstances AppExitReason_Cleanup
 
 appInstanceCleanupHandler
   :: ChildProcess

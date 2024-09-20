@@ -8,14 +8,16 @@ import Data.Either (Either(Left, Right))
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap)
-import Data.Tuple.Nested (type (/\), (/\))
-import DelegateServer.App (AppLogger, AppM, runApp)
-import DelegateServer.AppMap (AppMap)
+import Data.Tuple.Nested ((/\))
+import DelegateServer.App (AppM, runApp)
+import DelegateServer.AppManager.Types (AppManager')
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.Handlers.SignCommitTx (signCommitTxHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import Effect.Aff (Aff)
+import Effect.Aff.AVar (AVar)
+import Effect.Aff.AVar (read) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Console (log)
 import HTTPure
@@ -38,25 +40,25 @@ import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import URI.Port (Port)
 import URI.Port (toInt) as Port
 
-type AppMap' = AppMap HydraNodeApiWebSocket
+type AppManager (wsServer :: Type) = AppManager' HydraNodeApiWebSocket wsServer
 
-httpServer :: Port -> AppLogger -> AppMap' -> HTTPure.ServerM
-httpServer serverPort appLogger appMap = do
+httpServer :: forall a. Port -> AVar (AppManager a) -> HTTPure.ServerM
+httpServer serverPort appManagerAvar = do
   let port = Port.toInt serverPort
-  HTTPure.serve port (router (appLogger /\ appMap)) do
+  HTTPure.serve port (router appManagerAvar) do
     -- TODO: Add a top-level logger that is not associated with a
     -- specific app instance   
     log $ "Http server now accepts connections on port " <> show port <> "."
 
-router :: AppLogger /\ AppMap' -> HTTPure.Request -> Aff HTTPure.Response
+router :: forall a. AVar (AppManager a) -> HTTPure.Request -> Aff HTTPure.Response
 router _ { method: Options, headers }
   | unwrap headers !? "Access-Control-Request-Method" = corsPreflightHandler headers
   | otherwise = HTTPure.notFound
 
-router appMap request = corsMiddleware routerCors appMap request
+router appManagerAvar request = corsMiddleware routerCors appManagerAvar request
 
-routerCors :: AppLogger /\ AppMap' -> HTTPure.Request -> Aff HTTPure.Response
-routerCors appMap request = appLookupMiddleware routerCorsApp appMap request
+routerCors :: forall a. AVar (AppManager a) -> HTTPure.Request -> Aff HTTPure.Response
+routerCors appManagerAvar request = appLookupMiddleware routerCorsApp appManagerAvar request
 
 routerCorsApp :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
 routerCorsApp ws { method: Post, path: [ "moveBid" ] } =
@@ -75,23 +77,25 @@ routerCorsApp _ _ = HTTPure.notFound
 -- Middleware --------------------------------------------------------
 
 appLookupMiddleware
-  :: (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
-  -> AppLogger /\ AppMap'
+  :: forall a
+   . (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
+  -> AVar (AppManager a)
   -> HTTPure.Request
   -> Aff HTTPure.Response
-appLookupMiddleware router' (appLogger /\ appMap) request@{ headers }
+appLookupMiddleware router' appManagerAvar request@{ headers }
   | Just auctionCsRaw <- headers !! "Auction-Cs" =
       case caDecodeString scriptHashCodec auctionCsRaw of
         Left _ ->
           HTTPure.badRequest "Could not decode Auction-Cs request header"
-        Right auctionCs ->
-          case Map.lookup auctionCs appMap of
+        Right auctionCs -> do
+          { activeAuctions } <- unwrap <$> AVar.read appManagerAvar
+          case Map.lookup auctionCs activeAuctions of
             Nothing ->
               HTTPure.badRequest
                 "Provided Auction-Cs does not correspond to any auction served by this \
                 \delegate server"
-            Just (appState /\ ws) ->
-              runApp appState appLogger $ router' ws request
+            Just { appState, appLogger, hydraNodeApiWs } ->
+              runApp appState appLogger $ router' hydraNodeApiWs request
   | otherwise =
       HTTPure.badRequest "Missing Auction-Cs request header"
 

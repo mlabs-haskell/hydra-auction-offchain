@@ -97,7 +97,7 @@ appMapMock
   -> Maybe StandingBidState
   -> WsServerAppMap Unit
 appMapMock auctionsToServe headStatus standingBid = do
-  { lookupApp: \auctionCs -> unit <$ Array.elemIndex auctionCs auctionsToServe
+  { lookupApp: \auctionCs -> pure $ unit <$ Array.elemIndex auctionCs auctionsToServe
   , getHeadStatus: const (pure headStatus)
   , getStandingBid: const (pure standingBid)
   }

@@ -18,7 +18,6 @@ import Prelude
 import Contract.Config
   ( ContractParams
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
-  , QueryBackendParams
   , WalletSpec(UseKeys)
   , defaultTimeParams
   , disabledSynchronizationParams
@@ -31,18 +30,14 @@ import Control.Monad.Logger.Trans (class MonadLogger, LoggerT(LoggerT), runLogge
 import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, ask, asks, runReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
+import Data.Identity (Identity)
 import Data.Log.Formatter.Pretty (prettyFormatter)
 import Data.Log.Message (Message)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config
-  ( AppConfig
-  , AppConfig'(AppConfig)
-  , AuctionConfig
-  , networkToNetworkId
-  )
+import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), networkToNetworkId)
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -145,7 +140,7 @@ runContractNullCosts contract = do
 -- AppState
 
 type AppState =
-  { config :: AppConfig
+  { config :: AppConfig Identity
   , contractEnv :: ContractEnvWrapper
   , auctionInfo :: AVar AuctionInfoExtended
   , headStatus :: AVar HydraHeadStatus
@@ -157,7 +152,7 @@ type AppState =
   , snapshot :: AVar HydraSnapshot
   }
 
-instance MonadAccess AppM "config" AppConfig where
+instance MonadAccess AppM "config" (AppConfig Identity) where
   access _ = asks _.config
 
 instance MonadAccess AppM "contractEnv" ContractEnvWrapper where
@@ -187,8 +182,8 @@ instance MonadAccess AppM "commitStatus" (AVar CommitStatus) where
 instance MonadAccess AppM "snapshot" (AVar HydraSnapshot) where
   access _ = asks _.snapshot
 
-initApp :: forall ac. AppConfig' ac QueryBackendParams -> AuctionConfig -> Aff AppState
-initApp (AppConfig appConfig) auctionConfig = do
+initApp :: AppConfig Identity -> Aff AppState
+initApp config@(AppConfig appConfig) = do
   contractEnv <- wrap <$> mkContractEnv contractParams
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
@@ -199,7 +194,7 @@ initApp (AppConfig appConfig) auctionConfig = do
   commitStatus <- AVar.new ShouldCommitCollateral
   snapshot <- AVar.new emptySnapshot
   pure
-    { config: wrap $ appConfig { auctionConfig = auctionConfig }
+    { config
     , contractEnv
     , auctionInfo
     , headStatus
@@ -216,8 +211,9 @@ initApp (AppConfig appConfig) auctionConfig = do
     { backendParams: appConfig.queryBackend
     , networkId: networkToNetworkId appConfig.network
     , logLevel: appConfig.ctlLogLevel
-    , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile auctionConfig.cardanoSk) Nothing
-        Nothing
+    , walletSpec:
+        Just $ UseKeys (PrivatePaymentKeyFile appConfig.auctionConfig.cardanoSk) Nothing
+          Nothing
     , customLogger: Nothing
     , suppressLogs: true
     , hooks: emptyHooks

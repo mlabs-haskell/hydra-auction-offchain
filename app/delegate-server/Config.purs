@@ -1,7 +1,7 @@
 module DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
-  , AuctionConfig
+  , AuctionSlotConfig
   , Network(Testnet, Mainnet)
   , execAppConfigParser
   , networkToNetworkId
@@ -13,12 +13,14 @@ import Cardano.Types (NetworkId(TestnetId, MainnetId))
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
 import Contract.Transaction (TransactionInput)
 import Data.Codec.Argonaut (JsonCodec, array, int, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right), either)
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
 import Data.Log.Level (LogLevel)
+import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, wrap)
 import Data.Profunctor (dimap, wrapIso)
 import Data.Show.Generic (genericShow)
@@ -47,8 +49,8 @@ import URI.Port (Port)
 -- TODO: check that `auctionMetadataOref` exists and points to a valid auction
 -- TODO: check the balance of `cardanoSk`
 -- TODO: generate `hydraNodeId` using UUID
-type AuctionConfig =
-  { auctionMetadataOref :: TransactionInput
+type AuctionSlotConfig (f :: Type -> Type) =
+  { auctionMetadataOref :: f TransactionInput
   -- ^ Reference of the tx output with auction metadata record,
   -- used to access onchain data of the target auction.
   , hydraNodeId :: String
@@ -68,12 +70,13 @@ type AuctionConfig =
   -- by this key will be used as 'fuel'.
   }
 
-auctionConfigCodec :: CA.JsonCodec AuctionConfig
+auctionConfigCodec :: CA.JsonCodec (AuctionSlotConfig Maybe)
 auctionConfigCodec =
-  CA.object "AuctionConfig" $ CAR.record
+  CA.object "AuctionSlotConfig" $ CAR.record
     { auctionMetadataOref:
-        CA.prismaticCodec "TransactionInput" readOref printOref
-          CA.string
+        CA.maybe $
+          CA.prismaticCodec "TransactionInput" readOref printOref
+            CA.string
     , hydraNodeId: CA.string
     , hydraNode: hostPortCodec
     , hydraNodeApi: hostPortCodec
@@ -120,9 +123,10 @@ newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
 
 derive instance Newtype (AppConfig' ac qb) _
 
-type AppConfig = AppConfig' AuctionConfig QueryBackendParams
+type AppConfig (f :: Type -> Type) = AppConfig' (AuctionSlotConfig f) QueryBackendParams
 
-appConfigCodec :: CA.JsonCodec (AppConfig' (Array AuctionConfig) QueryBackendParamsSimple)
+appConfigCodec
+  :: CA.JsonCodec (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParamsSimple)
 appConfigCodec =
   wrapIso AppConfig $ CA.object "AppConfig" $ CAR.record
     { auctionConfig: CA.array auctionConfigCodec
@@ -174,7 +178,7 @@ networkToNetworkId =
     Testnet _ -> TestnetId
     Mainnet -> MainnetId
 
-execAppConfigParser :: Effect (AppConfig' (Array AuctionConfig) QueryBackendParams)
+execAppConfigParser :: Effect (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams)
 execAppConfigParser = do
   fp <- Optparse.execParser parserInfo
   appConfig <- either throw pure =<< caDecodeFile appConfigCodec fp

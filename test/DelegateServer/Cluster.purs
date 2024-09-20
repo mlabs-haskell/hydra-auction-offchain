@@ -38,7 +38,7 @@ import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
 import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Map (singleton, values) as Map
-import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (modify, unwrap, wrap)
 import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
@@ -47,7 +47,7 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
 import DelegateServer.App (AppM, runApp, runContract)
-import DelegateServer.Config (AppConfig', AuctionConfig, Network(Testnet))
+import DelegateServer.Config (AppConfig', Network(Testnet), AuctionSlotConfig)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
@@ -57,7 +57,7 @@ import DelegateServer.State (access, readAppState)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import Effect (Effect)
 import Effect.Aff (Aff, bracket)
-import Effect.Aff.AVar (tryRead) as AVar
+import Effect.Aff.AVar (read, tryRead) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
@@ -173,10 +173,12 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
           withRandomApp f =
             liftAff do
               appHandle <- randomElem apps
+              appManager <- liftAff $ unwrap <$> AVar.read appHandle.appManager
               let
-                (appState /\ ws) = unsafeHead $ Array.fromFoldable $ Map.values
-                  appHandle.appMap
-              runApp appState appHandle.appLogger $ f ws
+                { appState, appLogger, hydraNodeApiWs } =
+                  unsafeHead $ Array.fromFoldable $ Map.values
+                    appManager.activeAuctions
+              runApp appState appLogger $ f hydraNodeApiWs
 
           withRandomApp_ :: forall a. AppM a -> Contract a
           withRandomApp_ = withRandomApp <<< const
@@ -243,7 +245,7 @@ genDelegateServerConfigs
   :: FilePath
   -> DelegateServerClusterConfig
   -> NonEmptyArray DelegateServerPeer
-  -> Aff (Array (AppConfig' (Array AuctionConfig) QueryBackendParams))
+  -> Aff (Array (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams))
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
   hydraScriptsTxHash <- publishHydraScripts
@@ -267,11 +269,11 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   worker
     :: Array (Int /\ FilePath)
     -> String
-    -> Array (AppConfig' (Array AuctionConfig) QueryBackendParams)
+    -> Array (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams)
   worker peers' hydraScriptsTxHash =
     peers' <#> \(idx /\ workdir) -> wrap
       { auctionConfig:
-          [ { auctionMetadataOref: clusterConfig.auctionMetadataOref
+          [ { auctionMetadataOref: Just clusterConfig.auctionMetadataOref
             , hydraNodeId: toStringAs decimal idx
             , hydraNode: ops.mkHydraNode idx
             , hydraNodeApi: ops.mkHydraNodeApi idx

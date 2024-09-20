@@ -26,6 +26,7 @@ import Contract.Value (CurrencySymbol)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Class (class MonadLogger)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
+import Data.Identity (Identity)
 import Data.Newtype (class Newtype)
 import Data.Set (Set)
 import Data.Symbol (class IsSymbol)
@@ -89,7 +90,7 @@ class
   , MonadThrow Error m
   , MonadError Error m
   , MonadLogger m
-  , MonadAccess m "config" AppConfig
+  , MonadAccess m "config" (AppConfig Identity)
   , MonadAccess m "contractEnv" ContractEnvWrapper
   , MonadAccess m "auctionInfo" (AVar AuctionInfoExtended)
   , MonadAccess m "headStatus" (AVar HydraHeadStatus)
