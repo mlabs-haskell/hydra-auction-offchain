@@ -8,11 +8,13 @@ import Data.Either (Either(Left, Right))
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap)
+import Data.Time.Duration (Seconds)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runApp)
 import DelegateServer.AppManager.Types (AppManager')
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
+import DelegateServer.Handlers.ReserveSlot (reserveSlotHandler)
 import DelegateServer.Handlers.SignCommitTx (signCommitTxHandler)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import Effect.Aff (Aff)
@@ -42,23 +44,39 @@ import URI.Port (toInt) as Port
 
 type AppManager (wsServer :: Type) = AppManager' HydraNodeApiWebSocket wsServer
 
-httpServer :: forall a. Port -> AVar (AppManager a) -> HTTPure.ServerM
-httpServer serverPort appManagerAvar = do
-  let port = Port.toInt serverPort
-  HTTPure.serve port (router appManagerAvar) do
+type HttpServerParams (wsServer :: Type) =
+  { serverPort :: Port
+  , appManagerAvar :: AVar (AppManager wsServer)
+  , slotReservationPeriod :: Seconds
+  }
+
+httpServer :: forall wsServer. HttpServerParams wsServer -> HTTPure.ServerM
+httpServer params = do
+  let port = Port.toInt params.serverPort
+  HTTPure.serve port (router params) do
     -- TODO: Add a top-level logger that is not associated with a
     -- specific app instance   
     log $ "Http server now accepts connections on port " <> show port <> "."
 
-router :: forall a. AVar (AppManager a) -> HTTPure.Request -> Aff HTTPure.Response
+router :: forall wsServer. HttpServerParams wsServer -> HTTPure.Request -> Aff HTTPure.Response
 router _ { method: Options, headers }
   | unwrap headers !? "Access-Control-Request-Method" = corsPreflightHandler headers
   | otherwise = HTTPure.notFound
 
-router appManagerAvar request = corsMiddleware routerCors appManagerAvar request
+router params request = corsMiddleware routerCors params request
 
-routerCors :: forall a. AVar (AppManager a) -> HTTPure.Request -> Aff HTTPure.Response
-routerCors appManagerAvar request = appLookupMiddleware routerCorsApp appManagerAvar request
+routerCors
+  :: forall wsServer
+   . HttpServerParams wsServer
+  -> HTTPure.Request
+  -> Aff HTTPure.Response
+routerCors params { body, method: Post, path: [ "reserveSlot" ] } = do
+  bodyStr <- liftAff $ HTTPure.toString body
+  reserveSlotHandler params.appManagerAvar params.slotReservationPeriod
+    bodyStr
+
+routerCors params request =
+  appLookupMiddleware routerCorsApp params.appManagerAvar request
 
 routerCorsApp :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
 routerCorsApp ws { method: Post, path: [ "moveBid" ] } =

@@ -12,7 +12,7 @@ import Prelude
 import Cardano.Types (NetworkId(TestnetId, MainnetId))
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
 import Contract.Transaction (TransactionInput)
-import Data.Codec.Argonaut (JsonCodec, array, int, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut (JsonCodec, array, int, number, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -24,6 +24,7 @@ import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, wrap)
 import Data.Profunctor (dimap, wrapIso)
 import Data.Show.Generic (genericShow)
+import Data.Time.Duration (Seconds(Seconds))
 import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
@@ -62,12 +63,12 @@ type AuctionSlotConfig (f :: Type -> Type) =
   , hydraNodeApi :: HostPort
   -- ^ Listen address + port for incoming client Hydra Node API
   -- connections.
-  , peers :: Array HydraHeadPeer
-  -- ^ Info about other Head participants (max 5 entries).
   , cardanoSk :: FilePath
   -- ^ Cardano signing key of the underlying Hydra node, used to
   -- authorize Hydra protocol transactions, and any funds owned
   -- by this key will be used as 'fuel'.
+  , peers :: Array HydraHeadPeer
+  -- ^ Info about other Head participants (max 5 entries).
   }
 
 auctionConfigCodec :: CA.JsonCodec (AuctionSlotConfig Maybe)
@@ -117,6 +118,7 @@ newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
   -- value is not in sync with other participants hydra-node will
   -- ignore the initial tx. Additionally, this value needs to make
   -- sense compared to the current network we are running.
+  , slotReservationPeriod :: Seconds
   , logLevel :: LogLevel
   , ctlLogLevel :: LogLevel
   }
@@ -139,6 +141,7 @@ appConfigCodec =
     , queryBackend: queryBackendParamsSimpleCodec
     , hydraScriptsTxHash: CA.string
     , hydraContestPeriod: CA.int
+    , slotReservationPeriod: wrapIso Seconds CA.number
     , logLevel: logLevelCodec
     , ctlLogLevel: logLevelCodec
     }

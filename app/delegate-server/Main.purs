@@ -55,7 +55,11 @@ startDelegateServer
 startDelegateServer appConfig@(AppConfig appConfigRec) = do
   appManagerAvar <- AVar.empty
   wsServer' <- wsServer appConfigRec.wsServerPort appConfigRec.network appManagerAvar
-  closeHttpServer <- liftEffect $ httpServer appConfigRec.serverPort appManagerAvar
+  closeHttpServer <- liftEffect $ httpServer
+    { serverPort: appConfigRec.serverPort
+    , appManagerAvar
+    , slotReservationPeriod: appConfigRec.slotReservationPeriod
+    }
   initAppManager appConfig appManagerAvar wsServer'
   cleanupSem <- liftAff $ AVar.new unit
   let

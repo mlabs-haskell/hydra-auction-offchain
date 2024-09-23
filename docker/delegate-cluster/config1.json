@@ -1,44 +1,48 @@
 {
-    "auctionMetadataOref": "4ae36fd86f28c480c3616878e60fdd4a5e611d12ba24660c21e8a97fa81a6651#0",
-    "serverPort": 7010,
-    "wsServerPort": 7020,
-    "hydraNodeId": "A",
-    "hydraNode": "0.0.0.0:7000",
-    "hydraNodeApi": "127.0.0.1:7001",
-    "hydraPersistDir": "./hydra-persist",
-    "hydraSk": "keys/hydra.sk",
-    "cardanoSk": "keys/cardano.sk",
-    "walletSk": "keys/wallet.sk",
-    "nodeSocket": "node.socket",
-    "network": {
-        "tag": "testnet",
-        "magic": 2
+  "serverPort": 7010,
+  "wsServerPort": 7020,
+  "hydraPersistDir": "./hydra-persist",
+  "hydraSk": "keys/hydra.sk",
+  "nodeSocket": "node.socket",
+  "network": {
+    "tag": "testnet",
+    "magic": 1
+  },
+  "queryBackend": {
+    "tag": "blockfrost",
+    "config": {
+        "port": 443,
+        "host": "cardano-preprod.blockfrost.io",
+        "secure": true,
+        "path": "/api/v0"
     },
-    "queryBackend": {
-        "tag": "blockfrost",
-        "config": {
-            "port": 443,
-            "host": "cardano-preview.blockfrost.io",
-            "secure": true,
-            "path": "/api/v0"
-        },
-        "apiKey": null
-    },
-    "hydraScriptsTxHash": "1f34e4ee2404a5e4fc8ef970b7b8717af34c1a5a22107b82cde79c5d11da93b9",
-    "hydraContestPeriod": 60,
-    "logLevel": "info",
-    "ctlLogLevel": "warn",
-    "peers": [
+    "apiKey": null
+  },
+  "hydraScriptsTxHash": "03f8deb122fbbd98af8eb58ef56feda37728ec957d39586b78198a0cf624412a",
+  "hydraContestPeriod": 60,
+  "slotReservationPeriod": 300,
+  "logLevel": "debug",
+  "ctlLogLevel": "warn",
+  "auctionConfig": [
+    {
+      "auctionMetadataOref": null,
+      "hydraNodeId": "aebc0f2f-c817-4fa9-a0b1-a39c99a39495",
+      "hydraNode": "0.0.0.0:7000",
+      "hydraNodeApi": "127.0.0.1:7001",
+      "cardanoSk": "keys/cardano.sk",
+      "peers": [
         { 
-            "hydraNode": "delegate-server-b:7002",
-            "hydraVk": "keys/hydra2.vk",
-            "cardanoVk": "keys/cardano2.vk",
-            "httpServer": {
-              "port": 7011,
-              "host": "delegate-server-b",
-              "secure": false,
-              "path": null
-            }
+          "hydraNode": "delegate-server-b:7002",
+          "hydraVk": "keys/hydra2.vk",
+          "cardanoVk": "keys/cardano2.vk",
+          "httpServer": {
+            "port": 7011,
+            "host": "delegate-server-b",
+            "secure": false,
+            "path": null
+          }
         }
-    ]
+      ]
+    }
+  ]
 }

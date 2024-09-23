@@ -11,15 +11,16 @@ import Cardano.Types (ScriptHash, TransactionInput)
 import Contract.Address (getNetworkId)
 import Contract.Config (QueryBackendParams)
 import Contract.Log (logInfo', logTrace', logWarn')
+import Control.Alt (alt)
 import Control.Error.Util (bool)
-import Control.Monad.Except (ExceptT(ExceptT), runExceptT, throwError)
+import Control.Monad.Except (ExceptT(ExceptT), except, runExceptT, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Safely (foldM)
 import Ctl.Internal.Helpers ((<</>>))
 import Data.Array ((..))
 import Data.Array (length, zip) as Array
 import Data.Bifunctor (lmap)
-import Data.Either (Either(Left, Right), either)
+import Data.Either (Either(Left, Right), either, note)
 import Data.Foldable (foldMap)
 import Data.Generic.Rep (class Generic)
 import Data.Identity (Identity(Identity))
@@ -33,6 +34,7 @@ import Data.String (contains) as String
 import Data.Traversable (sequence)
 import Data.Tuple.Nested ((/\))
 import Data.UInt (toString) as UInt
+import Data.UUID (UUID)
 import DelegateServer.App
   ( AppM
   , appLoggerDefault
@@ -111,6 +113,7 @@ initAppManager (AppConfig appConfig) appManagerAvar wsServer = do
   let
     appManager = AppManager
       { activeAuctions: Map.empty
+      , reservedSlots: Map.empty
       , availableSlots:
           Map.fromFoldable $ Array.zip (zero .. Array.length slotConfigs)
             slotConfigs
@@ -127,6 +130,7 @@ initAppManager (AppConfig appConfig) appManagerAvar wsServer = do
                 , auctionMetadataOref: oref
                 , appManager: appManagerAcc
                 , appManagerAvar
+                , reservationCode: Nothing
                 }
               either
                 ( \appManagerErr -> do
@@ -156,10 +160,12 @@ type HostAuctionParams =
   , auctionMetadataOref :: TransactionInput
   , appManager :: AppManager
   , appManagerAvar :: AVar AppManager
+  , reservationCode :: Maybe UUID
   }
 
 data HostAuctionError
   = AuctionSlotNotAvailable
+  | IncorrectReservationCode
   | MissingOrInvalidAuctionInfo QueryAuctionError
 
 derive instance Generic HostAuctionError _
@@ -168,63 +174,86 @@ instance Show HostAuctionError where
   show = genericShow
 
 hostAuction :: HostAuctionParams -> Aff (Either HostAuctionError AppManager)
-hostAuction { slot, auctionMetadataOref, appManager: AppManager appManager, appManagerAvar } =
+hostAuction
+  params@{ slot, auctionMetadataOref, appManager: AppManager appManager, appManagerAvar } =
   runExceptT do
-    case Map.lookup slot appManager.availableSlots of
-      Nothing ->
-        throwError AuctionSlotNotAvailable
-      Just (AppConfig appConfigAvailable) -> do
-        let
-          appConfig =
-            wrap $ appConfigAvailable
-              { auctionConfig = appConfigAvailable.auctionConfig
-                  { auctionMetadataOref = Identity auctionMetadataOref
-                  }
+    AppConfig appConfigAvailable <- except $ findAvailableSlot params
+    let
+      appConfig =
+        wrap $ appConfigAvailable
+          { auctionConfig = appConfigAvailable.auctionConfig
+              { auctionMetadataOref = Identity auctionMetadataOref
               }
-        appState <- lift $ initApp appConfig
-        let appLogger = appLoggerDefault
-        auctionId <- ExceptT $ lmap MissingOrInvalidAuctionInfo <$>
-          runApp appState appLogger setAuction
-        hydraNodeApiWs <- lift $ runApp appState appLogger do
-          prepareCollateralUtxo
-          hydraNodeProcess <- startHydraNode
-          hydraNodeApiWs <- initHydraApiWsConn appManager.wsServer
-          timers <-
-            sequence
-              [ initHeadAtBiddingStart hydraNodeApiWs
-              , closeHeadAtBiddingEnd hydraNodeApiWs
-              ]
-          contractEnv <- unwrap <$> access (Proxy :: _ "contractEnv")
-          cleanupSem <- liftAff $ AVar.new unit
-          let
-            cleanupHandler exitReason =
-              AVarSync.tryTake cleanupSem >>=
-                maybe (pure unit) \_ -> do
-                  log $ withGraphics (foreground Red) $ show exitReason
-                  appInstanceCleanupHandler hydraNodeProcess hydraNodeApiWs contractEnv timers
-                  launchAff_ $ modifyAVar_ appManagerAvar \appManager' ->
-                    maybe
-                      ( do
-                          liftEffect $ log $
-                            "Could not find active auction in AppManager, auction id: "
-                              <> show auctionId
-                          pure appManager'
-                      )
-                      pure
-                      (removeAuction auctionId appManager')
-          putAppState (Proxy :: _ "exit") cleanupHandler -- attach cleanup handler to each app instance
-          pure hydraNodeApiWs
-        pure $ AppManager $ appManager
-          { availableSlots = Map.delete slot appManager.availableSlots
-          , activeAuctions =
-              Map.insert auctionId
-                { appState
-                , appLogger
-                , hydraNodeApiWs
-                , occupiedSlot: slot
-                }
-                appManager.activeAuctions
           }
+    appState <- lift $ initApp appConfig
+    let appLogger = appLoggerDefault
+    auctionId <- ExceptT $ lmap MissingOrInvalidAuctionInfo <$>
+      runApp appState appLogger setAuction
+    hydraNodeApiWs <- lift $ runApp appState appLogger do
+      prepareCollateralUtxo
+      hydraNodeProcess <- startHydraNode
+      hydraNodeApiWs <- initHydraApiWsConn appManager.wsServer
+      timers <-
+        sequence
+          [ initHeadAtBiddingStart hydraNodeApiWs
+          , closeHeadAtBiddingEnd hydraNodeApiWs
+          ]
+      contractEnv <- unwrap <$> access (Proxy :: _ "contractEnv")
+      cleanupSem <- liftAff $ AVar.new unit
+      let
+        cleanupHandler exitReason =
+          AVarSync.tryTake cleanupSem >>=
+            maybe (pure unit) \_ -> do
+              log $ withGraphics (foreground Red) $ show exitReason
+              appInstanceCleanupHandler hydraNodeProcess hydraNodeApiWs contractEnv timers
+              launchAff_ $ modifyAVar_ appManagerAvar \appManager' ->
+                maybe
+                  ( do
+                      liftEffect $ log $
+                        "Could not find active auction in AppManager, auction id: "
+                          <> show auctionId
+                      pure appManager'
+                  )
+                  pure
+                  (removeAuction auctionId appManager')
+      putAppState (Proxy :: _ "exit") cleanupHandler -- attach cleanup handler to each app instance
+      pure hydraNodeApiWs
+    pure $ AppManager $ appManager
+      { availableSlots = Map.delete slot appManager.availableSlots
+      , activeAuctions =
+          Map.insert auctionId
+            { appState
+            , appLogger
+            , hydraNodeApiWs
+            , occupiedSlot: slot
+            }
+            appManager.activeAuctions
+      }
+
+findAvailableSlot
+  :: forall (r :: Row Type)
+   . { slot :: AuctionSlot
+     , appManager :: AppManager
+     , reservationCode :: Maybe UUID
+     | r
+     }
+  -> Either HostAuctionError (AppConfig Maybe)
+findAvailableSlot params@{ appManager: AppManager appManager, slot } =
+  alt
+    ( maybe (Left AuctionSlotNotAvailable)
+        ( \code ->
+            case Map.lookup slot appManager.reservedSlots of
+              Just { appConfig, reservationCode } | reservationCode == code ->
+                Right appConfig
+              Just _ -> Left IncorrectReservationCode
+              Nothing -> Left AuctionSlotNotAvailable
+
+        )
+        params.reservationCode
+    )
+    ( note AuctionSlotNotAvailable $
+        Map.lookup slot appManager.availableSlots
+    )
 
 removeAuction :: ScriptHash -> AppManager -> Maybe AppManager
 removeAuction auctionId (AppManager appManager) = do

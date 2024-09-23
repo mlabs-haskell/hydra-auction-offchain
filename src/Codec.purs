@@ -20,6 +20,7 @@ module HydraAuctionOffchain.Codec
   , sysStartCodec
   , txCodec
   , txHashCodec
+  , uuidCodec
   , vkeyWitnessCodec
   ) where
 
@@ -79,6 +80,8 @@ import Data.Profunctor (dimap, wrapIso)
 import Data.Tuple.Nested ((/\))
 import Data.UInt (UInt)
 import Data.UInt (fromInt', fromString, toInt, toString) as UInt
+import Data.UUID (UUID, parseUUID)
+import Data.UUID (toString) as UUID
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
 import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
@@ -248,6 +251,11 @@ txHashCodec = asCborCodec "TransactionHash"
 
 uintCodec :: CA.JsonCodec UInt
 uintCodec = CA.prismaticCodec "UInt" UInt.fromInt' UInt.toInt CA.int
+
+uuidCodec :: CA.JsonCodec UUID
+uuidCodec =
+  CA.prismaticCodec "UUID" parseUUID UUID.toString
+    CA.string
 
 vkeyWitnessCodec :: CA.JsonCodec Vkeywitness
 vkeyWitnessCodec = asCborCodec "Vkeywitness"

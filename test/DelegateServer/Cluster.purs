@@ -40,6 +40,7 @@ import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Map (singleton, values) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (modify, unwrap, wrap)
+import Data.Time.Duration (Minutes(Minutes), convertDuration)
 import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
@@ -308,6 +309,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
             }
       , hydraScriptsTxHash
       , hydraContestPeriod: 5
+      , slotReservationPeriod: convertDuration $ Minutes 5.0
       , logLevel: Info
       , ctlLogLevel: Warn
       }
