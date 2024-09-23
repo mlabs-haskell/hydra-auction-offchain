@@ -11,7 +11,8 @@ import Data.Newtype (unwrap)
 import Data.Time.Duration (Seconds)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runApp)
-import DelegateServer.AppManager.Types (AppManager')
+import DelegateServer.AppManager (AppManager)
+import DelegateServer.Handlers.HostAuction (hostAuctionHandler)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.Handlers.ReserveSlot (reserveSlotHandler)
@@ -42,15 +43,13 @@ import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import URI.Port (Port)
 import URI.Port (toInt) as Port
 
-type AppManager (wsServer :: Type) = AppManager' HydraNodeApiWebSocket wsServer
-
-type HttpServerParams (wsServer :: Type) =
+type HttpServerParams =
   { serverPort :: Port
-  , appManagerAvar :: AVar (AppManager wsServer)
+  , appManagerAvar :: AVar AppManager
   , slotReservationPeriod :: Seconds
   }
 
-httpServer :: forall wsServer. HttpServerParams wsServer -> HTTPure.ServerM
+httpServer :: HttpServerParams -> HTTPure.ServerM
 httpServer params = do
   let port = Port.toInt params.serverPort
   HTTPure.serve port (router params) do
@@ -58,22 +57,22 @@ httpServer params = do
     -- specific app instance   
     log $ "Http server now accepts connections on port " <> show port <> "."
 
-router :: forall wsServer. HttpServerParams wsServer -> HTTPure.Request -> Aff HTTPure.Response
+router :: HttpServerParams -> HTTPure.Request -> Aff HTTPure.Response
 router _ { method: Options, headers }
   | unwrap headers !? "Access-Control-Request-Method" = corsPreflightHandler headers
   | otherwise = HTTPure.notFound
 
 router params request = corsMiddleware routerCors params request
 
-routerCors
-  :: forall wsServer
-   . HttpServerParams wsServer
-  -> HTTPure.Request
-  -> Aff HTTPure.Response
+routerCors :: HttpServerParams -> HTTPure.Request -> Aff HTTPure.Response
 routerCors params { body, method: Post, path: [ "reserveSlot" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   reserveSlotHandler params.appManagerAvar params.slotReservationPeriod
     bodyStr
+
+routerCors params { body, method: Post, path: [ "hostAuction" ] } = do
+  bodyStr <- liftAff $ HTTPure.toString body
+  hostAuctionHandler params.appManagerAvar bodyStr
 
 routerCors params request =
   appLookupMiddleware routerCorsApp params.appManagerAvar request
@@ -95,9 +94,8 @@ routerCorsApp _ _ = HTTPure.notFound
 -- Middleware --------------------------------------------------------
 
 appLookupMiddleware
-  :: forall a
-   . (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
-  -> AVar (AppManager a)
+  :: (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
+  -> AVar AppManager
   -> HTTPure.Request
   -> Aff HTTPure.Response
 appLookupMiddleware router' appManagerAvar request@{ headers }

@@ -15,16 +15,17 @@ import Data.Map (insert, pop) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype)
 import Data.Time.Duration (Seconds, fromDuration)
-import Data.Tuple (Tuple(Tuple))
+import Data.Tuple (Tuple(Tuple), snd)
 import Data.UUID (UUID, genUUID)
 import DelegateServer.App (AppLogger, AppState)
 import DelegateServer.Config (AppConfig)
-import Effect.Aff (Fiber, delay, forkAff)
+import Effect.Aff (Aff, Fiber, delay, forkAff, generalBracket)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar (put, take) as AVar
-import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
+import Effect.Exception (Error)
 
 type AuctionSlot = Int
 
@@ -50,24 +51,28 @@ newtype AppManager' (hydraNodeApiWs :: Type) (wsServer :: Type) = AppManager
 derive instance Newtype (AppManager' a b) _
 
 withAppManager
-  :: forall m ws wsServer a
-   . MonadAff m
-  => AVar (AppManager' ws wsServer)
-  -> (AppManager' ws wsServer -> m (Tuple (AppManager' ws wsServer) a))
-  -> m a
-withAppManager appManagerAvar f = do
-  appManager <- liftAff $ AVar.take appManagerAvar
-  Tuple appManager' result <- f appManager
-  liftAff $ AVar.put appManager' appManagerAvar
-  pure result
+  :: forall ws wsServer a
+   . AVar (AppManager' ws wsServer)
+  -> (AppManager' ws wsServer -> Aff (Tuple (AppManager' ws wsServer) a))
+  -> Aff a
+withAppManager appManagerAvar =
+  map snd <<< generalBracket (AVar.take appManagerAvar)
+    { killed: handleFailure
+    , failed: handleFailure
+    , completed:
+        \(Tuple appManager' _) _ ->
+          AVar.put appManager' appManagerAvar
+    }
+  where
+  handleFailure :: Error -> AppManager' ws wsServer -> Aff Unit
+  handleFailure = const (flip AVar.put appManagerAvar)
 
 reserveSlot
-  :: forall m ws wsServer
-   . MonadAff m
-  => AVar (AppManager' ws wsServer)
+  :: forall ws wsServer
+   . AVar (AppManager' ws wsServer)
   -> Seconds
   -> AuctionSlot
-  -> m (Maybe { reservationCode :: UUID })
+  -> Aff (Maybe { reservationCode :: UUID })
 reserveSlot appManagerAvar slotReservationPeriod slot =
   withAppManager appManagerAvar \(AppManager appManager) ->
     case Map.pop slot appManager.availableSlots of
@@ -86,12 +91,11 @@ reserveSlot appManagerAvar slotReservationPeriod slot =
           (Just { reservationCode })
 
 forkReservationMonitor
-  :: forall m ws wsServer
-   . MonadAff m
-  => AVar (AppManager' ws wsServer)
+  :: forall ws wsServer
+   . AVar (AppManager' ws wsServer)
   -> Seconds
   -> AuctionSlot
-  -> m (Fiber Unit)
+  -> Aff (Fiber Unit)
 forkReservationMonitor appManagerAvar slotReservationPeriod slot =
   liftAff $ forkAff do
     delay $ fromDuration slotReservationPeriod

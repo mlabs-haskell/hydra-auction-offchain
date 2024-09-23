@@ -1,6 +1,12 @@
 module DelegateServer.AppManager
   ( AppManager
+  , HostAuctionError
+      ( AuctionSlotNotAvailable
+      , IncorrectReservationCode
+      , MissingOrInvalidAuctionInfo
+      )
   , initAppManager
+  , hostAuction
   ) where
 
 import Prelude
