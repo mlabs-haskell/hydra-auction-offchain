@@ -58,6 +58,8 @@
               nixpkgs-fmt
               nodePackages.prettier
               nodePackages.purs-tidy
+              inputs.cardano-node.packages.${system}."preview/node"
+              inputs.cardano-node.packages.${system}."preprod/node"
             ];
           };
         };

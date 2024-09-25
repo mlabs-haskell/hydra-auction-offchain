@@ -1,8 +1,29 @@
 services:
+  cardano-node:
+    image: ghcr.io/intersectmbo/cardano-node:9.2.0
+    environment:
+      - NETWORK=preprod
+    volumes:
+      - node-db:/data/db
+      - node-ipc:/ipc
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$(cardano-cli query tip --testnet-magic=1 --socket-path=/ipc/node.socket | tail -c 8 | head -c 5)\" == \"100.0\" ]"]
+      interval: 10s
+      retries: 8640
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   delegate-server-a:
     build:
       context: "../.."
       dockerfile: "docker/delegate-server/Dockerfile"
+    depends_on:
+      cardano-node:
+        condition: service_healthy
     command: "'--config config.json'"
     volumes:
       - type: "bind"
@@ -11,9 +32,9 @@ services:
       - type: "bind"
         source: "../../keys"
         target: "/app/keys"
-      - type: "bind"
-        source: "${CARDANO_NODE_SOCKET_PATH}"
-        target: "/app/node.socket"
+      - type: "volume"
+        source: "node-ipc"
+        target: "/app/node-ipc"
       - type: "volume"
         source: "hydra-persist-a"
         target: "/app/hydra-persist"
@@ -25,6 +46,9 @@ services:
     build:
       context: "../.."
       dockerfile: "docker/delegate-server/Dockerfile"
+    depends_on:
+      cardano-node:
+        condition: service_healthy
     command: "'--config config.json'"
     volumes:
       - type: "bind"
@@ -33,9 +57,9 @@ services:
       - type: "bind"
         source: "../../keys"
         target: "/app/keys"
-      - type: "bind"
-        source: "${CARDANO_NODE_SOCKET_PATH}"
-        target: "/app/node.socket"
+      - type: "volume"
+        source: "node-ipc"
+        target: "/app/node-ipc"
       - type: "volume"
         source: "hydra-persist-b"
         target: "/app/hydra-persist"
@@ -47,3 +71,5 @@ services:
 volumes:
   hydra-persist-a:
   hydra-persist-b:
+  node-db:
+  node-ipc:

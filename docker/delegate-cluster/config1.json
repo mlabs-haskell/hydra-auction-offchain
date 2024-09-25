@@ -3,7 +3,7 @@
   "wsServerPort": 7020,
   "hydraPersistDir": "./hydra-persist",
   "hydraSk": "keys/hydra.sk",
-  "nodeSocket": "node.socket",
+  "nodeSocket": "node-ipc/node.socket",
   "network": {
     "tag": "testnet",
     "magic": 1

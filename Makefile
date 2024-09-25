@@ -59,7 +59,7 @@ delegate-server-help: requires-nix-shell
 	spago run --main DelegateServer.Main --exec-args '--help'
 
 delegate-cluster:
-	docker compose -f ${delegate-cluster-docker-compose} up --build
+	docker compose -f ${delegate-cluster-docker-compose} up --build --no-attach cardano-node
 
 delegate-cluster-cleanup:
 	docker compose -f ${delegate-cluster-docker-compose} rm --force --stop --volumes
