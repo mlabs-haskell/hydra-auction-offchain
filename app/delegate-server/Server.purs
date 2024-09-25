@@ -12,6 +12,7 @@ import Data.Time.Duration (Seconds)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runApp)
 import DelegateServer.AppManager (AppManager)
+import DelegateServer.Handler.GetAvailableSlots (getAvailableSlotsHandler)
 import DelegateServer.Handlers.HostAuction (hostAuctionHandler)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
@@ -36,7 +37,7 @@ import HTTPure
   , serve
   , toString
   ) as HTTPure
-import HTTPure (Method(Options, Post), (!!), (!?), (!@))
+import HTTPure (Method(Get, Options, Post), (!!), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
 import HydraAuctionOffchain.Codec (scriptHashCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
@@ -65,6 +66,9 @@ router _ { method: Options, headers }
 router params request = corsMiddleware routerCors params request
 
 routerCors :: HttpServerParams -> HTTPure.Request -> Aff HTTPure.Response
+routerCors params { method: Get, path: [ "availableSlots" ] } =
+  getAvailableSlotsHandler params.appManagerAvar
+
 routerCors params { body, method: Post, path: [ "reserveSlot" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
   reserveSlotHandler params.appManagerAvar params.slotReservationPeriod

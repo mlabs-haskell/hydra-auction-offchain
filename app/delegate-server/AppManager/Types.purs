@@ -3,6 +3,7 @@ module DelegateServer.AppManager.Types
   , AppManager'(AppManager)
   , AuctionSlot
   , ReservedAuction
+  , getAvailableSlots
   , reserveSlot
   , withAppManager
   ) where
@@ -10,8 +11,9 @@ module DelegateServer.AppManager.Types
 import Prelude
 
 import Cardano.Types (Ed25519KeyHash, ScriptHash)
+import Data.Array (fromFoldable) as Array
 import Data.Map (Map)
-import Data.Map (insert, pop) as Map
+import Data.Map (insert, keys, pop) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap)
 import Data.Time.Duration (Seconds, fromDuration)
@@ -66,6 +68,15 @@ withAppManager appManagerAvar =
   where
   handleFailure :: Error -> AppManager' ws wsServer -> Aff Unit
   handleFailure = const (flip AVar.put appManagerAvar)
+
+getAvailableSlots
+  :: forall ws wsServer
+   . AVar (AppManager' ws wsServer)
+  -> Aff (Array AuctionSlot)
+getAvailableSlots appManagerAvar =
+  withAppManager appManagerAvar \appManager ->
+    pure $ Tuple appManager $ Array.fromFoldable $ Map.keys
+      (unwrap appManager).availableSlots
 
 reserveSlot
   :: forall ws wsServer
