@@ -8,7 +8,6 @@ import Prelude
 
 import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
-import Contract.Config (QueryBackendParams)
 import Data.Either (Either(Left, Right))
 import Data.Map (values) as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
@@ -18,7 +17,7 @@ import Data.Traversable (traverse_)
 import DelegateServer.AppManager (AppManager, initAppManager)
 import DelegateServer.AppManager.Types (AuctionSlot)
 import DelegateServer.Cleanup (appCleanupHandler)
-import DelegateServer.Config (AppConfig'(AppConfig), AuctionSlotConfig, execAppConfigParser)
+import DelegateServer.Config (AppConfig'(AppConfig), DelegateServerConfig, execAppConfigParser)
 import DelegateServer.Server (httpServer)
 import DelegateServer.WsServer (wsServer)
 import Effect (Effect)
@@ -35,7 +34,7 @@ import Node.Process (onSignal, onUncaughtException)
 
 main :: Effect Unit
 main = launchAff_ do
-  appConfig <- liftEffect execAppConfigParser
+  appConfig <- execAppConfigParser
   appHandle <- startDelegateServer appConfig
   liftEffect do
     onUncaughtException \err -> do
@@ -49,9 +48,7 @@ type AppHandle =
   , cleanupHandler :: Effect Unit
   }
 
-startDelegateServer
-  :: AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams
-  -> Aff AppHandle
+startDelegateServer :: DelegateServerConfig -> Aff AppHandle
 startDelegateServer appConfig@(AppConfig appConfigRec) = do
   appManagerAvar <- AVar.empty
   wsServer' <- wsServer appConfigRec.wsServerPort appConfigRec.network appManagerAvar

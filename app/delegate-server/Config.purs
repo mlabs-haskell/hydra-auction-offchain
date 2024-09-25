@@ -2,16 +2,23 @@ module DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
   , AuctionSlotConfig
+  , AuctionSlotRuntimeConfig
+  , AuctionSlotConfigRec
+  , DelegateServerConfig
   , Network(Testnet, Mainnet)
+  , deriveAuctionSlotRuntimeConfig
   , execAppConfigParser
   , networkToNetworkId
   ) where
 
 import Prelude
 
-import Cardano.Types (NetworkId(TestnetId, MainnetId))
+import Cardano.Types (Ed25519KeyHash, NetworkId(TestnetId, MainnetId))
+import Cardano.Types.PrivateKey (toPublicKey) as PrivateKey
+import Cardano.Types.PublicKey (hash) as PublicKey
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
 import Contract.Transaction (TransactionInput)
+import Contract.Wallet.KeyFile (privatePaymentKeyFromFile)
 import Data.Codec.Argonaut (JsonCodec, array, int, number, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
@@ -21,10 +28,11 @@ import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
 import Data.Log.Level (LogLevel)
 import Data.Maybe (Maybe)
-import Data.Newtype (class Newtype, over, wrap)
+import Data.Newtype (class Newtype, over, unwrap, wrap)
 import Data.Profunctor (dimap, wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Time.Duration (Seconds(Seconds))
+import Data.Traversable (traverse)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
@@ -33,7 +41,8 @@ import DelegateServer.Types.QueryBackendParamsSimple
   , queryBackendParamsSimpleCodec
   , toQueryBackendParams
   )
-import Effect (Effect)
+import Effect.Aff (Aff)
+import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
 import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
@@ -42,6 +51,7 @@ import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec)
 import Node.Path (FilePath)
 import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
+import Record (merge) as Record
 import Type.Proxy (Proxy(Proxy))
 import URI.Port (Port)
 
@@ -50,8 +60,8 @@ import URI.Port (Port)
 -- TODO: check that `auctionMetadataOref` exists and points to a valid auction
 -- TODO: check the balance of `cardanoSk`
 -- TODO: generate `hydraNodeId` using UUID
-type AuctionSlotConfig (f :: Type -> Type) =
-  { auctionMetadataOref :: f TransactionInput
+type AuctionSlotConfigRec (f :: Type -> Type) (ext :: Row Type) =
+  ( auctionMetadataOref :: f TransactionInput
   -- ^ Reference of the tx output with auction metadata record,
   -- used to access onchain data of the target auction.
   , hydraNodeId :: String
@@ -69,7 +79,17 @@ type AuctionSlotConfig (f :: Type -> Type) =
   -- by this key will be used as 'fuel'.
   , peers :: Array HydraHeadPeer
   -- ^ Info about other Head participants (max 5 entries).
-  }
+  | ext
+  )
+
+type AuctionSlotConfig (f :: Type -> Type) = Record (AuctionSlotConfigRec f ())
+
+type AuctionSlotRuntimeConfig (f :: Type -> Type) =
+  Record
+    ( AuctionSlotConfigRec f
+        ( delegatePkh :: Ed25519KeyHash
+        )
+    )
 
 auctionConfigCodec :: CA.JsonCodec (AuctionSlotConfig Maybe)
 auctionConfigCodec =
@@ -125,7 +145,11 @@ newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
 
 derive instance Newtype (AppConfig' ac qb) _
 
-type AppConfig (f :: Type -> Type) = AppConfig' (AuctionSlotConfig f) QueryBackendParams
+type AppConfig (f :: Type -> Type) =
+  AppConfig' (AuctionSlotRuntimeConfig f) QueryBackendParams
+
+type DelegateServerConfig =
+  AppConfig' (Array (AuctionSlotRuntimeConfig Maybe)) QueryBackendParams
 
 appConfigCodec
   :: CA.JsonCodec (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParamsSimple)
@@ -181,13 +205,26 @@ networkToNetworkId =
     Testnet _ -> TestnetId
     Mainnet -> MainnetId
 
-execAppConfigParser :: Effect (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams)
+deriveAuctionSlotRuntimeConfig
+  :: forall (f :: Type -> Type)
+   . AuctionSlotConfig f
+  -> Aff (AuctionSlotRuntimeConfig f)
+deriveAuctionSlotRuntimeConfig slotConfig = do
+  cardanoSk <- unwrap <$> privatePaymentKeyFromFile slotConfig.cardanoSk
+  let delegatePkh = PublicKey.hash $ PrivateKey.toPublicKey cardanoSk
+  pure $ Record.merge slotConfig
+    { delegatePkh
+    }
+
+execAppConfigParser :: Aff DelegateServerConfig
 execAppConfigParser = do
-  fp <- Optparse.execParser parserInfo
-  appConfig <- either throw pure =<< caDecodeFile appConfigCodec fp
+  fp <- liftEffect $ Optparse.execParser parserInfo
+  appConfig <- liftEffect $ either throw pure =<< caDecodeFile appConfigCodec fp
+  auctionConfig <- traverse deriveAuctionSlotRuntimeConfig (unwrap appConfig).auctionConfig
   pure $ over wrap
     ( \rec -> rec
-        { queryBackend =
+        { auctionConfig = auctionConfig
+        , queryBackend =
             toQueryBackendParams rec.queryBackend defaultConfirmTxDelay
         }
     )

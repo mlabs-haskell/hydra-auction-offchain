@@ -15,7 +15,6 @@ import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
 import Cardano.Types (ScriptHash, TransactionInput)
 import Contract.Address (getNetworkId)
-import Contract.Config (QueryBackendParams)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Control.Alt (alt)
 import Control.Error.Util (bool)
@@ -55,7 +54,7 @@ import DelegateServer.Config
   ( AppConfig
   , AppConfig'(AppConfig)
   , Network(Testnet, Mainnet)
-  , AuctionSlotConfig
+  , DelegateServerConfig
   )
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
@@ -111,7 +110,7 @@ import Type.Proxy (Proxy(Proxy))
 type AppManager = AppManager' HydraNodeApiWebSocket DelegateWebSocketServer
 
 initAppManager
-  :: AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams
+  :: DelegateServerConfig
   -> AVar AppManager
   -> DelegateWebSocketServer
   -> Aff Unit

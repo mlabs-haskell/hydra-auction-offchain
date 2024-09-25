@@ -15,7 +15,7 @@ import Cardano.Types
 import Cardano.Types.Int (fromInt) as Cardano.Int
 import Cardano.Types.PublicKey (hash) as PublicKey
 import Cardano.Wallet.Key (KeyWallet(KeyWallet))
-import Contract.Config (QueryBackendParams, mkCtlBackendParams)
+import Contract.Config (mkCtlBackendParams)
 import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
 import Contract.Test.Testnet (TestnetConfig)
@@ -41,14 +41,18 @@ import Data.Map (singleton, values) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (modify, unwrap, wrap)
 import Data.Time.Duration (Minutes(Minutes), convertDuration)
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
 import DelegateServer.App (AppM, runApp, runContract)
-import DelegateServer.Config (AppConfig', Network(Testnet), AuctionSlotConfig)
+import DelegateServer.Config
+  ( DelegateServerConfig
+  , Network(Testnet)
+  , deriveAuctionSlotRuntimeConfig
+  )
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
@@ -246,13 +250,13 @@ genDelegateServerConfigs
   :: FilePath
   -> DelegateServerClusterConfig
   -> NonEmptyArray DelegateServerPeer
-  -> Aff (Array (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams))
+  -> Aff (Array DelegateServerConfig)
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
   hydraScriptsTxHash <- publishHydraScripts
     clusterConfig.localnetClusterParams.nodeSocketPath
     (ops.mkCardanoSk $ snd $ NEArray.head peers')
-  pure $ worker (NEArray.toArray peers') hydraScriptsTxHash
+  worker (NEArray.toArray peers') hydraScriptsTxHash
   where
   ops =
     { mkServerPort: \idx -> Port.unsafeFromInt (7040 + idx)
@@ -270,49 +274,51 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   worker
     :: Array (Int /\ FilePath)
     -> String
-    -> Array (AppConfig' (Array (AuctionSlotConfig Maybe)) QueryBackendParams)
+    -> Aff (Array DelegateServerConfig)
   worker peers' hydraScriptsTxHash =
-    peers' <#> \(idx /\ workdir) -> wrap
-      { auctionConfig:
-          [ { auctionMetadataOref: Just clusterConfig.auctionMetadataOref
-            , hydraNodeId: toStringAs decimal idx
-            , hydraNode: ops.mkHydraNode idx
-            , hydraNodeApi: ops.mkHydraNodeApi idx
-            , peers:
-                fromJustWithErr "genDelegateServerConfigs" $
-                  deleteAt idx peers' <#> map \(idx' /\ workdir') ->
-                    { hydraNode: ops.mkHydraNode idx'
-                    , hydraVk: ops.mkHydraVk workdir'
-                    , cardanoVk: ops.mkCardanoVk workdir'
-                    , httpServer:
-                        { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
-                        , host: localhost
-                        , secure: false
-                        , path: Nothing
-                        }
-                    }
-            , cardanoSk: ops.mkCardanoSk workdir
-            }
-          ]
-      , serverPort: ops.mkServerPort idx
-      , wsServerPort: ops.mkWsServerPort idx
-      , hydraPersistDir: ops.mkPersistDir workdir
-      , hydraSk: ops.mkHydraSk workdir
-      , nodeSocket: clusterConfig.localnetClusterParams.nodeSocketPath
-      , network: Testnet { magic: localnetConfig.clusterConfig.testnetMagic }
-      , queryBackend:
-          mkCtlBackendParams
-            { ogmiosConfig:
-                clusterConfig.localnetConfig.ogmiosConfig
-            , kupoConfig:
-                clusterConfig.localnetConfig.kupoConfig
-            }
-      , hydraScriptsTxHash
-      , hydraContestPeriod: 5
-      , slotReservationPeriod: convertDuration $ Minutes 5.0
-      , logLevel: Info
-      , ctlLogLevel: Warn
-      }
+    for peers' \(idx /\ workdir) -> do
+      auctionConfig <- traverse deriveAuctionSlotRuntimeConfig
+        [ { auctionMetadataOref: Just clusterConfig.auctionMetadataOref
+          , hydraNodeId: toStringAs decimal idx
+          , hydraNode: ops.mkHydraNode idx
+          , hydraNodeApi: ops.mkHydraNodeApi idx
+          , peers:
+              fromJustWithErr "genDelegateServerConfigs" $
+                deleteAt idx peers' <#> map \(idx' /\ workdir') ->
+                  { hydraNode: ops.mkHydraNode idx'
+                  , hydraVk: ops.mkHydraVk workdir'
+                  , cardanoVk: ops.mkCardanoVk workdir'
+                  , httpServer:
+                      { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
+                      , host: localhost
+                      , secure: false
+                      , path: Nothing
+                      }
+                  }
+          , cardanoSk: ops.mkCardanoSk workdir
+          }
+        ]
+      pure $ wrap
+        { auctionConfig
+        , serverPort: ops.mkServerPort idx
+        , wsServerPort: ops.mkWsServerPort idx
+        , hydraPersistDir: ops.mkPersistDir workdir
+        , hydraSk: ops.mkHydraSk workdir
+        , nodeSocket: clusterConfig.localnetClusterParams.nodeSocketPath
+        , network: Testnet { magic: localnetConfig.clusterConfig.testnetMagic }
+        , queryBackend:
+            mkCtlBackendParams
+              { ogmiosConfig:
+                  clusterConfig.localnetConfig.ogmiosConfig
+              , kupoConfig:
+                  clusterConfig.localnetConfig.kupoConfig
+              }
+        , hydraScriptsTxHash
+        , hydraContestPeriod: 5
+        , slotReservationPeriod: convertDuration $ Minutes 5.0
+        , logLevel: Info
+        , ctlLogLevel: Warn
+        }
 
   createWorkdirsStoreKeys :: Aff (NonEmptyArray (Int /\ FilePath))
   createWorkdirsStoreKeys =

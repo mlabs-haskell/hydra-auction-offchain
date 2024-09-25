@@ -12,6 +12,7 @@ module DelegateServer.Handlers.ReserveSlot
 
 import Prelude
 
+import Cardano.Types (Ed25519KeyHash)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (except, runExceptT)
 import Data.Bifunctor (lmap)
@@ -34,7 +35,7 @@ import DelegateServer.Types.ServerResponse (fromEither) as ServerResponse
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar)
 import HTTPure (Response) as HTTPure
-import HydraAuctionOffchain.Codec (uuidCodec)
+import HydraAuctionOffchain.Codec (ed25519KeyHashCodec, uuidCodec)
 import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
 
@@ -85,12 +86,14 @@ reserveSlotResponseCodec = serverResponseCodec reserveSlotSuccessCodec reserveSl
 
 type ReserveSlotSuccess =
   { reservationCode :: UUID
+  , delegatePkh :: Ed25519KeyHash
   }
 
 reserveSlotSuccessCodec :: CA.JsonCodec ReserveSlotSuccess
 reserveSlotSuccessCodec =
   CA.object "ReserveSlotSuccess" $ CAR.record
     { reservationCode: uuidCodec
+    , delegatePkh: ed25519KeyHashCodec
     }
 
 -- ReserveSlotError --------------------------------------------------

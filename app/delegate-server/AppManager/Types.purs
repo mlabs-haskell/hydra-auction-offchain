@@ -9,11 +9,11 @@ module DelegateServer.AppManager.Types
 
 import Prelude
 
-import Cardano.Types (ScriptHash)
+import Cardano.Types (Ed25519KeyHash, ScriptHash)
 import Data.Map (Map)
 import Data.Map (insert, pop) as Map
 import Data.Maybe (Maybe(Just, Nothing))
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Time.Duration (Seconds, fromDuration)
 import Data.Tuple (Tuple(Tuple), snd)
 import Data.UUID (UUID, genUUID)
@@ -72,7 +72,7 @@ reserveSlot
    . AVar (AppManager' ws wsServer)
   -> Seconds
   -> AuctionSlot
-  -> Aff (Maybe { reservationCode :: UUID })
+  -> Aff (Maybe { reservationCode :: UUID, delegatePkh :: Ed25519KeyHash })
 reserveSlot appManagerAvar slotReservationPeriod slot =
   withAppManager appManagerAvar \(AppManager appManager) ->
     case Map.pop slot appManager.availableSlots of
@@ -88,7 +88,11 @@ reserveSlot appManagerAvar slotReservationPeriod slot =
                     appManager.reservedSlots
               }
           )
-          (Just { reservationCode })
+          ( Just
+              { reservationCode
+              , delegatePkh: (unwrap appConfig).auctionConfig.delegatePkh
+              }
+          )
 
 forkReservationMonitor
   :: forall ws wsServer
