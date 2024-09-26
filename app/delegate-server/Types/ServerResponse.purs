@@ -1,5 +1,6 @@
 module DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
+  , fromEither
   , respCreatedOrBadRequest
   , serverResponseCodec
   ) where
@@ -9,7 +10,7 @@ import Prelude
 import Data.Argonaut (stringify)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
-import Data.Either (Either(Right))
+import Data.Either (Either(Right), either)
 import Data.Generic.Rep (class Generic)
 import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
@@ -35,6 +36,9 @@ instance (HasJson success p, HasJson err p) => HasJson (ServerResponse success e
     serverResponseCodec
       (jsonCodec params Proxy)
       (jsonCodec params Proxy)
+
+fromEither :: forall success err. Either err success -> ServerResponse success err
+fromEither = either ServerResponseError ServerResponseSuccess
 
 serverResponseCodec
   :: forall success err

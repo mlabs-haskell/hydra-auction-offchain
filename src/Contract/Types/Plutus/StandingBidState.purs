@@ -6,13 +6,14 @@ module HydraAuctionOffchain.Contract.Types.Plutus.StandingBidState
 
 import Prelude
 
-import Contract.Config (NetworkId)
+import Cardano.Types (NetworkId)
+import Cardano.Types.BigNum (add) as BigNum
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Just, Nothing))
+import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
@@ -76,4 +77,5 @@ validateStartingBid auctionTerms newTerms =
 
 validateBidIncrement :: AuctionTerms -> BidTerms -> BidTerms -> Boolean
 validateBidIncrement auctionTerms oldTerms newTerms =
-  (unwrap oldTerms).price + (unwrap auctionTerms).minBidIncrement <= (unwrap newTerms).price
+  maybe false (_ <= (unwrap newTerms).price) $
+    BigNum.add (unwrap oldTerms).price (unwrap auctionTerms).minBidIncrement

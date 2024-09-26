@@ -11,7 +11,6 @@ import Contract.Scripts (ScriptHash)
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
-import Ply.Typename (class PlyTypeName)
 
 ----------------------------------------------------------------------
 -- AuctionEscrow
@@ -25,9 +24,6 @@ derive newtype instance ToData AuctionEscrowScriptHash
 instance Show AuctionEscrowScriptHash where
   show = genericShow
 
-instance PlyTypeName AuctionEscrowScriptHash where
-  plyTypeName _ = "HydraAuctionOnchain.Types.Scripts:AuctionEscrowScriptHash"
-
 ----------------------------------------------------------------------
 -- StandingBid
 
@@ -40,9 +36,6 @@ derive newtype instance ToData StandingBidScriptHash
 instance Show StandingBidScriptHash where
   show = genericShow
 
-instance PlyTypeName StandingBidScriptHash where
-  plyTypeName _ = "HydraAuctionOnchain.Types.Scripts:StandingBidScriptHash"
-
 ----------------------------------------------------------------------
 -- FeeEscrow
 
@@ -54,6 +47,3 @@ derive newtype instance ToData FeeEscrowScriptHash
 
 instance Show FeeEscrowScriptHash where
   show = genericShow
-
-instance PlyTypeName FeeEscrowScriptHash where
-  plyTypeName _ = "HydraAuctionOnchain.Types.Scripts:FeeEscrowScriptHash"

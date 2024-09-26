@@ -3,19 +3,19 @@ module DelegateServer.Const
   , appConst
   ) where
 
-import JS.BigInt (BigInt)
-import JS.BigInt (fromInt) as BigInt
+import Cardano.Types (BigNum)
+import Cardano.Types.BigNum (fromInt) as BigNum
 import Node.Path (FilePath)
 
 type AppConst =
   { testnetMagic :: String
   , protocolParams :: FilePath
-  , collateralLovelace :: BigInt
+  , collateralLovelace :: BigNum
   }
 
 appConst :: AppConst
 appConst =
   { testnetMagic: "1"
   , protocolParams: "protocol-parameters.json"
-  , collateralLovelace: BigInt.fromInt 10_000_000
+  , collateralLovelace: BigNum.fromInt 10_000_000
   }

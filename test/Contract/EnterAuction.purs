@@ -7,6 +7,8 @@ module Test.Contract.EnterAuction
 
 import Contract.Prelude
 
+import Cardano.Types (BigNum)
+import Cardano.Types.BigNum (add, fromInt, toInt) as BigNum
 import Contract.Monad (Contract, liftedE)
 import Contract.Test (ContractTest, withKeyWallet, withWallets)
 import Contract.Test.Mote (TestPlanM)
@@ -14,8 +16,7 @@ import Contract.Transaction (awaitTxConfirmed)
 import Control.Monad.Except (runExceptT)
 import HydraAuctionOffchain.Contract (mkEnterAuctionContractWithErrors)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, ContractResult)
-import JS.BigInt (BigInt)
-import JS.BigInt (fromInt, toInt) as BigInt
+import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import Mote (group, test)
 import Test.Contract.AnnounceAuction (announceAuction)
 import Test.Helpers (defDistribution)
@@ -40,7 +41,7 @@ suite =
         withKeyWallet bidder do
           void $ enterAuction auctionInfo depositAmount
 
-enterAuction :: AuctionInfoExtended -> BigInt -> Contract ContractResult
+enterAuction :: AuctionInfoExtended -> BigNum -> Contract ContractResult
 enterAuction auctionInfo depositAmount =
   liftedE $ runExceptT $
     mkEnterAuctionContractWithErrors
@@ -50,15 +51,16 @@ enterAuction auctionInfo depositAmount =
           }
       )
 
-genValidBidderDeposit :: AuctionInfoExtended -> Gen BigInt
+genValidBidderDeposit :: AuctionInfoExtended -> Gen BigNum
 genValidBidderDeposit auctionInfo = do
   let minDepositAmount = (unwrap (unwrap auctionInfo).auctionTerms).minDepositAmount
   delta <- chooseInt zero 10_000_000
-  pure $ minDepositAmount + BigInt.fromInt delta
+  pure $ fromJustWithErr "genValidBidderDeposit" $ BigNum.add minDepositAmount
+    (BigNum.fromInt delta)
 
-genInvalidBidderDeposit :: AuctionInfoExtended -> Gen BigInt
+genInvalidBidderDeposit :: AuctionInfoExtended -> Gen BigNum
 genInvalidBidderDeposit auctionInfo = do
   let
     minDepositAmount = (unwrap (unwrap auctionInfo).auctionTerms).minDepositAmount
-    upperBound = fromMaybe top $ BigInt.toInt minDepositAmount
-  BigInt.fromInt <$> chooseInt zero (upperBound - one)
+    upperBound = fromMaybe top $ BigNum.toInt minDepositAmount
+  BigNum.fromInt <$> chooseInt zero (upperBound - one)

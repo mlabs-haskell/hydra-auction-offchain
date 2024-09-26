@@ -10,13 +10,12 @@ module HydraAuctionOffchain.Contract.DiscoverSellerSignature
 
 import Contract.Prelude
 
-import Contract.Address (Address, PubKeyHash, scriptHashAddress, toPubKeyHash)
-import Contract.Config (NetworkId)
+import Cardano.Types (Address, Ed25519KeyHash, ScriptHash)
+import Contract.Address (getNetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
-import Contract.Value (CurrencySymbol)
 import Control.Error.Util (bool, (??))
 import Control.Monad.Except (ExceptT, withExceptT)
 import Control.Monad.Trans.Class (lift)
@@ -29,8 +28,8 @@ import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (addressCodec, currencySymbolCodec)
-import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
+import HydraAuctionOffchain.Codec (addressCodec, scriptHashCodec)
+import HydraAuctionOffchain.Contract.PersonalOracle (mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionAuth(AuctionAuth)
@@ -40,11 +39,12 @@ import HydraAuctionOffchain.Contract.Types
   , vkeyCodec
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
+import HydraAuctionOffchain.Lib.Cardano.Address (toPubKeyHash)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 
 newtype DiscoverSellerSigContractParams = DiscoverSellerSigContractParams
-  { auctionCs :: CurrencySymbol
+  { auctionCs :: ScriptHash
   , sellerAddress :: Address
   , bidderVk :: Maybe VerificationKey
   }
@@ -56,16 +56,15 @@ derive instance Eq DiscoverSellerSigContractParams
 instance Show DiscoverSellerSigContractParams where
   show = genericShow
 
-instance HasJson DiscoverSellerSigContractParams NetworkId where
-  jsonCodec network = const (discoverSellerSigContractParamsCodec network)
+instance HasJson DiscoverSellerSigContractParams anyParams where
+  jsonCodec _ = const discoverSellerSigContractParamsCodec
 
-discoverSellerSigContractParamsCodec
-  :: NetworkId -> CA.JsonCodec DiscoverSellerSigContractParams
-discoverSellerSigContractParamsCodec network =
+discoverSellerSigContractParamsCodec :: CA.JsonCodec DiscoverSellerSigContractParams
+discoverSellerSigContractParamsCodec =
   wrapIso DiscoverSellerSigContractParams $ CA.object "DiscoverSellerSigContractParams" $
     CAR.record
-      { auctionCs: currencySymbolCodec
-      , sellerAddress: addressCodec network
+      { auctionCs: scriptHashCodec
+      , sellerAddress: addressCodec
       , bidderVk: CA.maybe vkeyCodec
       }
 
@@ -94,18 +93,14 @@ discoverSellerSignatureWithErrors (DiscoverSellerSigContractParams params) = do
 
   lift $ findSignature sellerPkh params.auctionCs bidderVk
 
-findSignature :: PubKeyHash -> CurrencySymbol -> VerificationKey -> Contract (Maybe ByteArray)
+findSignature :: Ed25519KeyHash -> ScriptHash -> VerificationKey -> Contract (Maybe ByteArray)
 findSignature sellerPkh auctionCs bidderVk = do
-  utxos <- utxosAt sellerOracleAddr
-  let txOuts = Map.toUnfoldable utxos <#> _.output <<< unwrap <<< snd
+  network <- getNetworkId
+  let sellerOracle = mkPersonalOracle network $ wrap sellerPkh
+  utxos <- utxosAt sellerOracle.address
+  let txOuts = snd <$> Map.toUnfoldable utxos
   pure $ Array.findMap worker txOuts
   where
-  sellerOracle :: PersonalOracle
-  sellerOracle = mkPersonalOracle $ wrap sellerPkh
-
-  sellerOracleAddr :: Address
-  sellerOracleAddr = scriptHashAddress (wrap sellerOracle.nativeScriptHash) Nothing
-
   worker :: TransactionOutput -> Maybe ByteArray
   worker txOut = do
     AuctionAuth auctionAuth <- getInlineDatum txOut

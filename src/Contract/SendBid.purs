@@ -7,6 +7,7 @@ module HydraAuctionOffchain.Contract.SendBid
       , SendBid_Error_CouldNotGetOwnPubKeyHash
       , SendBid_Error_CouldNotSignBidderMessage
       , SendBid_Error_PlaceBidRequestServiceError
+      , SendBid_Error_BidderAddressConversionFailure
       )
   , SendBidContractParams(SendBidContractParams)
   , sendBidContract
@@ -19,14 +20,14 @@ import Affjax (Error, Response, defaultRequest) as Affjax
 import Affjax.RequestBody (RequestBody(Json)) as Affjax
 import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
 import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Types (BigNum, NetworkId, ScriptHash)
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
-import Contract.Value (CurrencySymbol)
 import Contract.Wallet (ownPaymentPubKeyHash)
-import Control.Error.Util ((!?))
+import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT(ExceptT), throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.Affjax (request) as Affjax
@@ -37,7 +38,7 @@ import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidResponseCodec)
-import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec, currencySymbolCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
@@ -62,14 +63,13 @@ import HydraAuctionOffchain.Service.Common
   ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
-import JS.BigInt (BigInt)
 
 newtype SendBidContractParams = SendBidContractParams
-  { auctionCs :: CurrencySymbol
+  { auctionCs :: ScriptHash
   , auctionTerms :: AuctionTerms
   , delegateInfo :: DelegateInfo
   , sellerSignature :: ByteArray
-  , bidAmount :: BigInt
+  , bidAmount :: BigNum
   }
 
 derive instance Generic SendBidContractParams _
@@ -86,11 +86,11 @@ sendBidContractParamsCodec :: NetworkId -> CA.JsonCodec SendBidContractParams
 sendBidContractParamsCodec network =
   wrapIso SendBidContractParams $ CA.object "SendBidContractParams" $
     CAR.record
-      { auctionCs: currencySymbolCodec
+      { auctionCs: scriptHashCodec
       , auctionTerms: auctionTermsCodec network
       , delegateInfo: delegateInfoCodec
       , sellerSignature: byteArrayCodec
-      , bidAmount: bigIntCodec
+      , bidAmount: bigNumCodec
       }
 
 sendBidContract :: SendBidContractParams -> Contract (ContractOutput PlaceBidResponse)
@@ -129,10 +129,14 @@ mkSendBidContractWithErrors (SendBidContractParams params) = do
     withExceptT SendBid_Error_CouldNotSignBidderMessage $
       signMessage payload
 
+  -- Convert bidder address:
+  bidderAddressPlutus <- Plutus.Address.fromCardano bidderAddress
+    ?? SendBid_Error_BidderAddressConversionFailure
+
   -- Send `placeBid` request to a randomly picked delegate:
   let
     bidTerms = BidTerms
-      { bidder: BidderInfo { bidderAddress, bidderVk }
+      { bidder: BidderInfo { bidderAddress: bidderAddressPlutus, bidderVk }
       , price: params.bidAmount
       , bidderSignature
       , sellerSignature: params.sellerSignature
@@ -183,6 +187,7 @@ data SendBidContractError
   | SendBid_Error_CouldNotGetOwnPubKeyHash
   | SendBid_Error_CouldNotSignBidderMessage SignMessageError
   | SendBid_Error_PlaceBidRequestServiceError ServiceError
+  | SendBid_Error_BidderAddressConversionFailure
 
 derive instance Generic SendBidContractError _
 
@@ -212,3 +217,6 @@ instance ToContractError SendBidContractError where
 
     SendBid_Error_PlaceBidRequestServiceError err ->
       "PlaceBid request failed with error: " <> show err <> "."
+
+    SendBid_Error_BidderAddressConversionFailure ->
+      "Could not convert bidder address to Plutus.Address."

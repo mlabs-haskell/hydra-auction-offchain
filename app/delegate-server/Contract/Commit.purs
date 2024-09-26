@@ -20,6 +20,7 @@ module DelegateServer.Contract.Commit
 
 import Contract.Prelude
 
+import Cardano.Types (Transaction, TransactionHash, TransactionInput)
 import Contract.Chain (currentTime)
 import Contract.Log (logDebug', logWarn')
 import Contract.Monad (Contract)
@@ -27,14 +28,7 @@ import Contract.PlutusData (Redeemer, toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( BalancedSignedTransaction
-  , Transaction
-  , TransactionHash
-  , TransactionInput
-  , signTransaction
-  , submit
-  )
+import Contract.Transaction (submit)
 import Contract.TxConstraints (TxConstraints)
 import Contract.TxConstraints
   ( mustBeSignedBy
@@ -42,16 +36,11 @@ import Contract.TxConstraints
   , mustSpendScriptOutput
   , mustValidateIn
   ) as Constraints
-import Contract.UnbalancedTx (UnbalancedTx(UnbalancedTx), mkUnbalancedTx)
+import Contract.UnbalancedTx (mkUnbalancedTx)
 import Contract.Wallet (ownPaymentPubKeyHash)
-import Control.Error.Util ((!?), (??))
+import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Ctl.Internal.BalanceTx.RedeemerIndex
-  ( attachIndexedRedeemers
-  , indexRedeemers
-  , mkRedeemersContext
-  )
 import Data.Argonaut (Json, encodeJson)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
@@ -59,11 +48,9 @@ import Data.Map (fromFoldable) as Map
 import Data.Show.Generic (genericShow)
 import DelegateServer.App (runContract, runContractLift)
 import DelegateServer.Handlers.SignCommitTx (signCommitTxErrorCodec)
-import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Transaction (appendTxSignatures, reSignTransaction, setAuxDataHash)
-import DelegateServer.Lib.Wallet (withWallet)
 import DelegateServer.PeerDelegate.Http (signCommitTx)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
 import DelegateServer.Types.HydraCommitRequest (mkFullCommitRequest, mkSimpleCommitRequest)
@@ -86,19 +73,16 @@ import HydraAuctionOffchain.Service.Common (ServiceError)
 import JS.BigInt (fromInt) as BigInt
 import Type.Proxy (Proxy(Proxy))
 
-buildCommitTx
-  :: forall m. AppBase m => Json -> ExceptT ServiceError m BalancedSignedTransaction
+buildCommitTx :: forall m. AppBase m => Json -> ExceptT ServiceError m Transaction
 buildCommitTx commitRequest = do
-  { hydraNodeApi, cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
+  { auctionConfig: { hydraNodeApi } } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig hydraNodeApi.port
   draftCommitTx <- ExceptT $ liftAff $ commit serverConfig commitRequest
   runContractLift do
     -- NOTE: recompute auxiliary data hash, because auxiliary data
     -- CBOR may be altered after re-serialization
-    commitTx <- wrap <$> setAuxDataHash draftCommitTx.cborHex
-    signedTx <-
-      (withWallet cardanoSk <<< signTransaction)
-        =<< reSignTransaction commitTx
+    let commitTx = setAuxDataHash draftCommitTx.cborHex
+    signedTx <- reSignTransaction commitTx
     pure signedTx
 
 ----------------------------------------------------------------------
@@ -161,13 +145,13 @@ commitStandingBid = do
     mapExceptT runContract $
       moveToHydraUnbalancedTx auctionInfo collateralUtxo
   let utxos = Map.fromFoldable [ standingBidUtxo, collateralUtxo ]
-  commitRequest <- liftEffect $ encodeJson <$> mkFullCommitRequest blueprintTx utxos
+  let commitRequest = encodeJson $ mkFullCommitRequest blueprintTx utxos
   logDebug' $ "Standing bid commit request: " <> printJson commitRequest
   commitTx <-
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       buildCommitTx commitRequest
-  { peers } <- unwrap <$> access (Proxy :: _ "config")
-  commitTxMultiSigned <- multiSignCommitTx peers `modifyF` commitTx
+  { auctionConfig: { peers } } <- unwrap <$> access (Proxy :: _ "config")
+  commitTxMultiSigned <- multiSignCommitTx peers commitTx
   txHash <- runContract (submit commitTxMultiSigned) !* CommitBid_Error_SubmitTxFailed
   pure $ standingBid /\ txHash
 
@@ -179,10 +163,8 @@ multiSignCommitTx
   -> Transaction
   -> ExceptT CommitStandingBidError m Transaction
 multiSignCommitTx peers commitTx = do
-  { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
   responses <- do
-    pkh <- runContract (withWallet cardanoSk $ ownPaymentPubKeyHash)
-      !? CommitBid_Error_CouldNotGetOwnPubKeyHash
+    pkh <- runContract ownPaymentPubKeyHash !? CommitBid_Error_CouldNotGetOwnPubKeyHash
     let reqPayload = { commitTx, commitLeader: unwrap pkh }
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       -- TODO: use parTraverse
@@ -273,12 +255,14 @@ moveToHydraUnbalancedTx auctionInfo collateralUtxo = do
       , Lookups.validator standingBidValidator
       ]
 
-  UnbalancedTx { transaction, redeemers } <- lift $ mkUnbalancedTx lookups constraints
+  blueprintTx /\ _usedUtxos <- lift $ mkUnbalancedTx lookups constraints
+  {-
   indexedRedeemers <-
     hush (indexRedeemers (mkRedeemersContext transaction) redeemers)
       ?? CommitBid_Error_CouldNotIndexRedeemers
+  -}
   pure
-    { blueprintTx: attachIndexedRedeemers indexedRedeemers transaction
+    { blueprintTx
     , standingBid
     , standingBidUtxo
     }

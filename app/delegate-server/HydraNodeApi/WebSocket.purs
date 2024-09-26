@@ -80,7 +80,7 @@ import DelegateServer.Types.HydraNodeApiMessage
   )
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
 import DelegateServer.Types.HydraTx (mkHydraTx)
-import DelegateServer.WebSocket (WebSocket, mkWebSocket)
+import DelegateServer.WebSocket (WebSocket, mkWebSocket, mkWsUrl)
 import DelegateServer.WsServer
   ( DelegateWebSocketServer
   , DelegateWebSocketServerMessage(HydraHeadStatus, StandingBid)
@@ -104,11 +104,11 @@ type HydraNodeApiWebSocket =
 mkHydraNodeApiWebSocket
   :: DelegateWebSocketServer -> (HydraNodeApiWebSocket -> AppM Unit) -> AppM Unit
 mkHydraNodeApiWebSocket wsServer onConnect = do
-  config <- unwrap <$> asks _.config
+  { auctionConfig: { hydraNodeApi } } <- unwrap <$> asks _.config
   runM <- getAppEffRunner
   liftEffect do
     ws /\ wsUrl <- mkWebSocket
-      { hostPort: config.hydraNodeApi
+      { url: mkWsUrl hydraNodeApi
       , inMsgCodec: hydraNodeApiInMessageCodec
       , outMsgCodec: hydraNodeApiOutMessageCodec
       , runM
@@ -119,7 +119,7 @@ mkHydraNodeApiWebSocket wsServer onConnect = do
         { baseWs: ws
         , initHead: ws.send Out_Init
         , abortHead: ws.send Out_Abort
-        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ } <=< mkHydraTx
+        , submitTxL2: ws.send <<< Out_NewTx <<< { transaction: _ } <<< mkHydraTx
         -- Close and Contest transactions may be silently dropped by cardano-node:
         -- https://github.com/input-output-hk/hydra/blob/d12addeeec0a08d879b567556cb0686bef618936/docs/docs/getting-started/quickstart.md?plain=1#L196-L212
         , closeHead:
@@ -188,29 +188,29 @@ msgGreetingsHandler wsServer { headStatus, snapshotUtxo } = do
 
 msgPeerConnectedHandler :: forall m. AppBase m => PeerConnMessage -> m Unit
 msgPeerConnectedHandler { peer } = do
-  { config: AppConfig config, livePeers: livePeersAVar } <- accessRec
+  { config: AppConfig { auctionConfig }, livePeers: livePeersAVar } <- accessRec
     (Proxy :: _ ("config" :> "livePeers" :> Nil'))
   modifyAVar_ livePeersAVar \livePeers ->
-    case Set.member peer livePeers, peer /= config.hydraNodeId of
+    case Set.member peer livePeers, peer /= auctionConfig.hydraNodeId of
       false, true -> do
         let livePeers' = Set.insert peer livePeers
         logInfo' $ "Peer connected (live peers " <> show (Set.size livePeers') <> "/"
-          <> show (Array.length config.peers)
+          <> show (Array.length auctionConfig.peers)
           <> ")."
         pure livePeers'
       _, _ -> pure livePeers
 
 msgPeerDisconnectedHandler :: forall m. AppBase m => PeerConnMessage -> m Unit
 msgPeerDisconnectedHandler { peer } = do
-  { config: AppConfig config, livePeers: livePeersAVar } <- accessRec
+  { config: AppConfig { auctionConfig }, livePeers: livePeersAVar } <- accessRec
     (Proxy :: _ ("config" :> "livePeers" :> Nil'))
   modifyAVar_ livePeersAVar \livePeers ->
-    case Set.member peer livePeers, peer /= config.hydraNodeId of
+    case Set.member peer livePeers, peer /= auctionConfig.hydraNodeId of
       true, true -> do
         let livePeers' = Set.delete peer livePeers
         logInfo' $ "Peer disconnected (live peers " <> show (Set.size livePeers')
           <> "/"
-          <> show (Array.length config.peers)
+          <> show (Array.length auctionConfig.peers)
           <> ")."
         pure livePeers'
       _, _ -> pure livePeers
@@ -307,7 +307,8 @@ setHeadStatus' :: forall m. AppBase m => DelegateWebSocketServer -> HydraHeadSta
 setHeadStatus' wsServer status = do
   setHeadStatus status
   logInfo' $ "New head status: " <> printHeadStatus status <> "."
-  liftEffect $ wsServer.broadcast (HydraHeadStatus status)
+  auctionCs <- _.auctionId <<< unwrap <$> readAppState (Proxy :: _ "auctionInfo")
+  liftEffect $ wsServer.broadcast auctionCs (HydraHeadStatus status)
 
 setSnapshot' :: forall m. AppOpen m => DelegateWebSocketServer -> HydraSnapshot -> m Unit
 setSnapshot' wsServer snapshot = do
@@ -315,5 +316,6 @@ setSnapshot' wsServer snapshot = do
   logInfo' $ "New confirmed snapshot: " <> printJsonUsingCodec hydraSnapshotCodec
     snapshot
   standingBid <- map snd <$> queryStandingBidL2
-  liftEffect $ traverse_ (wsServer.broadcast <<< StandingBid)
+  auctionCs <- _.auctionId <<< unwrap <$> readAppState (Proxy :: _ "auctionInfo")
+  liftEffect $ traverse_ (wsServer.broadcast auctionCs <<< StandingBid)
     standingBid

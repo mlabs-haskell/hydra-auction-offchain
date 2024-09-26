@@ -20,6 +20,7 @@ import Data.Codec.Argonaut (JsonCodec, prismaticCodec, string) as CA
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(Just))
 import Data.Show.Generic (genericShow)
+import Test.QuickCheck.Arbitrary (class Arbitrary, genericArbitrary)
 
 data HydraHeadStatus
   = HeadStatus_Unknown
@@ -42,6 +43,9 @@ derive instance Ord HydraHeadStatus
 
 instance Show HydraHeadStatus where
   show = genericShow
+
+instance Arbitrary HydraHeadStatus where
+  arbitrary = genericArbitrary
 
 headStatusCodec :: CA.JsonCodec HydraHeadStatus
 headStatusCodec =

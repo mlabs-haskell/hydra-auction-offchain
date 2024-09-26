@@ -9,7 +9,6 @@ module DelegateServer.App
   , runApp
   , runAppEff
   , runContract
-  , runContractExitOnErr
   , runContractLift
   , runContractNullCosts
   ) where
@@ -18,7 +17,6 @@ import Prelude
 
 import Contract.Config
   ( ContractParams
-  , NetworkId(TestnetId, MainnetId)
   , PrivatePaymentKeySource(PrivatePaymentKeyFile)
   , WalletSpec(UseKeys)
   , defaultTimeParams
@@ -32,13 +30,14 @@ import Control.Monad.Logger.Trans (class MonadLogger, LoggerT(LoggerT), runLogge
 import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, ask, asks, runReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
+import Data.Identity (Identity)
 import Data.Log.Formatter.Pretty (prettyFormatter)
 import Data.Log.Message (Message)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), Network(Testnet, Mainnet))
+import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), networkToNetworkId)
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -61,14 +60,7 @@ import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (Error)
-import HydraAuctionOffchain.Contract.Types
-  ( AuctionInfoExtended
-  , ContractOutput(ContractOutputError, ContractOutputResult)
-  , Utxo
-  , contractErrorCodec
-  )
-import HydraAuctionOffchain.Lib.Json (caEncodeString)
-import Node.Process (exit)
+import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, Utxo)
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------
@@ -139,15 +131,6 @@ runContract contract = do
 runContractLift :: forall t m a. MonadTrans t => AppBase m => Contract a -> t m a
 runContractLift = lift <<< runContract
 
-runContractExitOnErr :: forall m a. AppBase m => Contract (ContractOutput a) -> m a
-runContractExitOnErr =
-  runContract >=> case _ of
-    ContractOutputResult res -> pure res
-    ContractOutputError err ->
-      liftEffect do
-        log $ caEncodeString contractErrorCodec err
-        exit one
-
 runContractNullCosts :: forall m a. AppBase m => Contract a -> m a
 runContractNullCosts contract = do
   contractEnv <- access (Proxy :: _ "contractEnv")
@@ -157,19 +140,19 @@ runContractNullCosts contract = do
 -- AppState
 
 type AppState =
-  { config :: AppConfig
+  { config :: AppConfig Identity
   , contractEnv :: ContractEnvWrapper
   , auctionInfo :: AVar AuctionInfoExtended
   , headStatus :: AVar HydraHeadStatus
   , livePeers :: AVar (Set String)
-  , exitSem :: AVar AppExitReason
+  , exit :: AVar (AppExitReason -> Effect Unit)
   , headCs :: AVar CurrencySymbol
   , collateralUtxo :: AVar Utxo
   , commitStatus :: AVar CommitStatus
   , snapshot :: AVar HydraSnapshot
   }
 
-instance MonadAccess AppM "config" AppConfig where
+instance MonadAccess AppM "config" (AppConfig Identity) where
   access _ = asks _.config
 
 instance MonadAccess AppM "contractEnv" ContractEnvWrapper where
@@ -184,8 +167,8 @@ instance MonadAccess AppM "headStatus" (AVar HydraHeadStatus) where
 instance MonadAccess AppM "livePeers" (AVar (Set String)) where
   access _ = asks _.livePeers
 
-instance MonadAccess AppM "exitSem" (AVar AppExitReason) where
-  access _ = asks _.exitSem
+instance MonadAccess AppM "exit" (AVar (AppExitReason -> Effect Unit)) where
+  access _ = asks _.exit
 
 instance MonadAccess AppM "headCs" (AVar CurrencySymbol) where
   access _ = asks _.headCs
@@ -199,13 +182,13 @@ instance MonadAccess AppM "commitStatus" (AVar CommitStatus) where
 instance MonadAccess AppM "snapshot" (AVar HydraSnapshot) where
   access _ = asks _.snapshot
 
-initApp :: AppConfig -> Aff AppState
-initApp config = do
-  contractEnv <- wrap <$> mkContractEnv (mkContractParams config)
+initApp :: AppConfig Identity -> Aff AppState
+initApp config@(AppConfig appConfig) = do
+  contractEnv <- wrap <$> mkContractEnv contractParams
   auctionInfo <- AVar.empty
   headStatus <- AVar.new HeadStatus_Unknown
   livePeers <- AVar.new Set.empty
-  exitSem <- AVar.empty
+  exit <- AVar.empty
   headCs <- AVar.empty
   collateralUtxo <- AVar.empty
   commitStatus <- AVar.new ShouldCommitCollateral
@@ -216,25 +199,24 @@ initApp config = do
     , auctionInfo
     , headStatus
     , livePeers
-    , exitSem
+    , exit
     , headCs
     , collateralUtxo
     , commitStatus
     , snapshot
     }
-
-mkContractParams :: AppConfig -> ContractParams
-mkContractParams (AppConfig appConfig) =
-  { backendParams: appConfig.queryBackend
-  , networkId:
-      case appConfig.network of
-        Testnet _ -> TestnetId
-        Mainnet -> MainnetId
-  , logLevel: appConfig.ctlLogLevel
-  , walletSpec: Just $ UseKeys (PrivatePaymentKeyFile appConfig.walletSk) Nothing
-  , customLogger: Nothing
-  , suppressLogs: true
-  , hooks: emptyHooks
-  , timeParams: defaultTimeParams
-  , synchronizationParams: disabledSynchronizationParams
-  }
+  where
+  contractParams :: ContractParams
+  contractParams =
+    { backendParams: appConfig.queryBackend
+    , networkId: networkToNetworkId appConfig.network
+    , logLevel: appConfig.ctlLogLevel
+    , walletSpec:
+        Just $ UseKeys (PrivatePaymentKeyFile appConfig.auctionConfig.cardanoSk) Nothing
+          Nothing
+    , customLogger: Nothing
+    , suppressLogs: true
+    , hooks: emptyHooks
+    , timeParams: defaultTimeParams
+    , synchronizationParams: disabledSynchronizationParams
+    }

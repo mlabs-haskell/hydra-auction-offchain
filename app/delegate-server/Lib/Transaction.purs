@@ -9,42 +9,27 @@ module DelegateServer.Lib.Transaction
 
 import Prelude
 
-import Contract.Hashing (auxiliaryDataHash)
+import Cardano.Types (Language(PlutusV2), Transaction, Vkeywitness)
+import Cardano.Types.AuxiliaryData (hashAuxiliaryData)
+import Cardano.Types.Transaction (_body, _isValid, _witnessSet)
+import Cardano.Types.TransactionBody (_auxiliaryDataHash)
+import Cardano.Types.TransactionWitnessSet (_plutusData, _redeemers, _vkeys)
 import Contract.Monad (Contract)
 import Contract.ProtocolParameters (getProtocolParameters)
-import Contract.Transaction
-  ( BalancedSignedTransaction
-  , Language(PlutusV2)
-  , Transaction
-  , Vkeywitness
-  , _auxiliaryDataHash
-  , _body
-  , _isValid
-  , _plutusData
-  , _vkeys
-  , _witnessSet
-  , signTransaction
-  )
-import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
+import Contract.Transaction (signTransaction)
 import Ctl.Internal.Transaction (setScriptDataHash)
-import Data.Lens (view, (%~), (.~), (^.))
-import Data.Lens.Common (simple)
-import Data.Lens.Iso.Newtype (_Newtype)
+import Data.Lens (view, (%~), (.~), (<>~), (^.))
 import Data.Map (filterKeys) as Map
-import Data.Maybe (Maybe(Nothing), fromMaybe)
-import Data.Newtype (modify, unwrap, wrap)
-import Data.Traversable (traverse)
-import Effect.Class (class MonadEffect, liftEffect)
+import Data.Newtype (modify, unwrap)
+import Effect.Class (liftEffect)
 
-setAuxDataHash :: forall m. MonadEffect m => Transaction -> m Transaction
-setAuxDataHash tx = do
-  auxDataHash <- liftEffect $ traverse auxiliaryDataHash (unwrap tx).auxiliaryData
-  pure $ tx # _body <<< _auxiliaryDataHash .~ auxDataHash
+setAuxDataHash :: Transaction -> Transaction
+setAuxDataHash tx =
+  tx # _body <<< _auxiliaryDataHash .~
+    (hashAuxiliaryData <$> (unwrap tx).auxiliaryData)
 
-reSignTransaction :: BalancedSignedTransaction -> Contract BalancedSignedTransaction
-reSignTransaction tx =
-  signTransaction
-    (tx # simple _Newtype <<< _witnessSet <<< _vkeys .~ Nothing)
+reSignTransaction :: Transaction -> Contract Transaction
+reSignTransaction tx = signTransaction (tx # _witnessSet <<< _vkeys .~ mempty)
 
 setTxValid :: Transaction -> Transaction
 setTxValid = _isValid .~ true
@@ -53,24 +38,20 @@ setExUnitsToMax :: Transaction -> Contract Transaction
 setExUnitsToMax tx = do
   pparams <- unwrap <$> getProtocolParameters
   let
-    costModels = modify (Map.filterKeys (eq PlutusV2)) pparams.costModels
+    costModels = Map.filterKeys (eq PlutusV2) pparams.costModels
     ws = evaluatedTx ^. _witnessSet
     evaluatedTx =
-      tx # _witnessSet <<< _redeemers %~ map
-        ( map \redeemer ->
-            redeemer # modify _
-              { exUnits = pparams.maxTxExUnits
-              }
-        )
+      tx # _witnessSet <<< _redeemers %~ map \redeemer ->
+        redeemer # modify _
+          { exUnits = pparams.maxTxExUnits
+          }
   liftEffect $
-    setScriptDataHash costModels (fromMaybe mempty $ ws ^. _redeemers)
-      (wrap <$> fromMaybe mempty (ws ^. _plutusData))
+    setScriptDataHash costModels (ws ^. _redeemers) (ws ^. _plutusData)
       evaluatedTx
 
 txSignatures :: Transaction -> Array Vkeywitness
-txSignatures = fromMaybe mempty <<< view (_witnessSet <<< _vkeys)
+txSignatures = view (_witnessSet <<< _vkeys)
 
 appendTxSignatures :: Array Vkeywitness -> Transaction -> Transaction
 appendTxSignatures signatures =
-  _witnessSet <<< _vkeys %~
-    pure <<< append signatures <<< fromMaybe mempty
+  _witnessSet <<< _vkeys <>~ signatures

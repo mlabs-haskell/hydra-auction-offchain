@@ -11,6 +11,7 @@ module Test.Helpers
   , mkVerificationKeyUnsafe
   , mkdirIfNotExists
   , publicPaymentKeyToFile
+  , unsafeHead
   , untilM
   , waitUntil
   ) where
@@ -18,22 +19,29 @@ module Test.Helpers
 import Prelude
 
 import Aeson (encodeAeson)
-import Contract.Address (Address, PubKeyHash, Bech32String)
+import Cardano.AsCbor (decodeCbor)
+import Cardano.Types
+  ( Address
+  , AssetName
+  , Bech32String
+  , Ed25519KeyHash
+  , PublicKey
+  , ScriptHash
+  , TransactionInput
+  )
+import Cardano.Types.Address (fromBech32) as Address
+import Cardano.Types.AssetName (mkAssetName)
+import Cardano.Types.BigNum (fromInt) as BigNum
+import Cardano.Types.PublicKey (toRawBytes) as PublicKey
+import Contract.CborBytes (hexToCborBytes)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (byteArrayFromAscii, hexToByteArray, rawBytesToHex)
 import Contract.Test (InitialUTxOs)
 import Contract.Time (POSIXTime)
-import Contract.Transaction (PublicKey, TransactionInput)
-import Contract.Value (CurrencySymbol, TokenName, mkCurrencySymbol, mkTokenName)
 import Control.Error.Util (bool)
 import Control.Monad.Rec.Class (class MonadRec, untilJust)
-import Ctl.Internal.Cardano.Types.Transaction (convertPubKey)
-import Ctl.Internal.Plutus.Conversion (toPlutusAddress)
-import Ctl.Internal.Serialization.Address (addressFromBech32)
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes)
-import Ctl.Internal.Serialization.Keys (bytesFromPublicKey)
-import Data.Array (cons, drop, take)
+import Data.Array (cons, drop, head, take)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -42,46 +50,52 @@ import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import HydraAuctionOffchain.Contract.Types (VerificationKey, vkeyFromBytes)
 import HydraAuctionOffchain.Helpers (fromJustWithErr, waitSeconds)
-import JS.BigInt (fromInt, toNumber) as BigInt
+import JS.BigInt (toNumber) as BigInt
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (exists, mkdir, writeTextFile) as FSSync
 import Node.Path (FilePath)
 
 defDistribution :: InitialUTxOs
 defDistribution =
-  [ BigInt.fromInt 2_000_000_000
-  , BigInt.fromInt 2_000_000_000
+  [ BigNum.fromInt 2_000_000_000
+  , BigNum.fromInt 2_000_000_000
   ]
 
 mkAddressUnsafe :: Bech32String -> Address
 mkAddressUnsafe addr = fromJustWithErr "mkAddressUnsafe" $
-  toPlutusAddress =<< addressFromBech32 addr
+  Address.fromBech32 addr
 
 mkVerificationKeyUnsafe :: String -> VerificationKey
 mkVerificationKeyUnsafe vk = fromJustWithErr "mkVerificationKeyUnsafe" $
   vkeyFromBytes =<< hexToByteArray vk
 
-mkPubKeyHashUnsafe :: String -> PubKeyHash
-mkPubKeyHashUnsafe pkh =
-  fromJustWithErr "mkPubKeyHashUnsafe" $
-    (map wrap <<< ed25519KeyHashFromBytes) =<< hexToByteArray pkh
+mkPubKeyHashUnsafe :: String -> Ed25519KeyHash
+mkPubKeyHashUnsafe pkh = fromJustWithErr "mkPubKeyHashUnsafe" $
+  decodeCbor =<< hexToCborBytes pkh
 
-mkCurrencySymbolUnsafe :: String -> CurrencySymbol
+mkCurrencySymbolUnsafe :: String -> ScriptHash
 mkCurrencySymbolUnsafe cs = fromJustWithErr "mkCurrencySymbolUnsafe" $
-  mkCurrencySymbol =<< hexToByteArray cs
+  decodeCbor =<< hexToCborBytes cs
 
-mkTokenNameUnsafe :: String -> TokenName
+mkTokenNameUnsafe :: String -> AssetName
 mkTokenNameUnsafe tn = fromJustWithErr "mkTokenNameUnsafe" $
-  mkTokenName =<< hexToByteArray tn
+  mkAssetName =<< hexToByteArray tn
 
-mkTokenNameAsciiUnsafe :: String -> TokenName
+mkTokenNameAsciiUnsafe :: String -> AssetName
 mkTokenNameAsciiUnsafe tn = fromJustWithErr "mkTokenNameAsciiUnsafe" $
-  mkTokenName =<< byteArrayFromAscii tn
+  mkAssetName =<< byteArrayFromAscii tn
 
 mkOrefUnsafe :: String -> TransactionInput
 mkOrefUnsafe txHash =
-  fromJustWithErr "mkOrefUnsafe" $
-    (wrap <<< { transactionId: _, index: zero } <<< wrap) <$> hexToByteArray txHash
+  fromJustWithErr "mkOrefUnsafe" do
+    transactionId <- decodeCbor =<< hexToCborBytes txHash
+    pure $ wrap
+      { transactionId
+      , index: zero
+      }
+
+unsafeHead :: forall a. Array a -> a
+unsafeHead = fromJustWithErr "unsafeHead" <<< head
 
 -- Delays the fiber until the given POSIXTime has passed (plus 3 seconds).
 waitUntil :: POSIXTime -> Contract Unit
@@ -120,9 +134,7 @@ formatPublicPaymentKey key =
     }
 
 keyToCbor :: PublicKey -> String
-keyToCbor =
-  (magicPrefix <> _) <<< rawBytesToHex <<< bytesFromPublicKey
-    <<< convertPubKey
+keyToCbor = append magicPrefix <<< rawBytesToHex <<< PublicKey.toRawBytes
 
 magicPrefix :: String
 magicPrefix = "5820"

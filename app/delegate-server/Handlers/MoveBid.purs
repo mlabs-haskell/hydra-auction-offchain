@@ -15,9 +15,8 @@ module DelegateServer.Handlers.MoveBid
 
 import Prelude
 
+import Cardano.Types (NetworkId, TransactionHash)
 import Contract.Address (getNetworkId)
-import Contract.Config (NetworkId)
-import Contract.Transaction (TransactionHash)
 import Control.Monad.Except (runExceptT)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
@@ -48,7 +47,7 @@ import DelegateServer.Types.ServerResponse
   )
 import Effect.Class (liftEffect)
 import HTTPure (Response) as HTTPure
-import HydraAuctionOffchain.Codec (transactionHashCodec)
+import HydraAuctionOffchain.Codec (txHashCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import Type.Proxy (Proxy(Proxy))
@@ -113,7 +112,7 @@ moveBidSuccessCodec network =
         , "CommittedStandingBid":
             Right $ CA.object "MoveBidSuccess_CommittedStandingBid" $ CAR.record
               { standingBid: standingBidStateCodec network
-              , txHash: transactionHashCodec
+              , txHash: txHashCodec
               }
         }
     )

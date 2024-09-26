@@ -5,11 +5,12 @@ module HydraAuctionOffchain.Contract.DiscoverBidders
 
 import Contract.Prelude hiding (oneOf)
 
-import Contract.Config (NetworkId)
+import Cardano.Plutus.Types.Address (toCardano) as Plutus.Address
+import Cardano.Types (BigNum, NetworkId, TransactionOutput)
+import Cardano.Types.Value (valueToCoin)
+import Contract.Address (getNetworkId)
 import Contract.Monad (Contract)
-import Contract.Transaction (TransactionOutput)
 import Contract.Utxos (utxosAt)
-import Contract.Value (valueToCoin') as Value
 import Data.Array (mapMaybe) as Array
 import Data.Codec.Argonaut (JsonCodec, boolean, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
@@ -18,7 +19,7 @@ import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (bigIntCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended(AuctionInfoExtended)
   , BidderInfo
@@ -26,11 +27,10 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import JS.BigInt (BigInt)
 
 newtype BidderInfoCandidate = BidderInfoCandidate
   { bidderInfo :: BidderInfo
-  , depositAmount :: BigInt
+  , depositAmount :: BigNum
   , isValid :: Boolean
   }
 
@@ -49,15 +49,20 @@ bidderInfoCandidateCodec network =
   wrapIso BidderInfoCandidate $ CA.object "BidderInfoCandidate" $
     CAR.record
       { bidderInfo: bidderInfoCodec network
-      , depositAmount: bigIntCodec
+      , depositAmount: bigNumCodec
       , isValid: CA.boolean
       }
 
 discoverBidders :: AuctionInfoExtended -> Contract (Array BidderInfoCandidate)
 discoverBidders (AuctionInfoExtended auctionInfo) = do
-  utxos <- utxosAt auctionInfo.bidderDepositAddr
-  let txOuts = Map.toUnfoldable utxos <#> _.output <<< unwrap <<< snd
-  pure $ Array.mapMaybe getBidderInfoCandidate txOuts
+  network <- getNetworkId
+  case Plutus.Address.toCardano network auctionInfo.bidderDepositAddr of
+    Just bidderDepositAddr -> do
+      utxos <- utxosAt bidderDepositAddr
+      let txOuts = snd <$> Map.toUnfoldable utxos
+      pure $ Array.mapMaybe getBidderInfoCandidate txOuts
+    Nothing ->
+      pure mempty -- FIXME: throw error
   where
   getBidderInfoCandidate :: TransactionOutput -> Maybe BidderInfoCandidate
   getBidderInfoCandidate txOut =
@@ -67,5 +72,5 @@ discoverBidders (AuctionInfoExtended auctionInfo) = do
       , isValid: depositAmount >= (unwrap auctionInfo.auctionTerms).minDepositAmount
       }
     where
-    depositAmount :: BigInt
-    depositAmount = Value.valueToCoin' (unwrap txOut).amount
+    depositAmount :: BigNum
+    depositAmount = unwrap $ valueToCoin (unwrap txOut).amount

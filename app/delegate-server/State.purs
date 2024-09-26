@@ -9,6 +9,7 @@ module DelegateServer.State
   , access
   , accessRec
   , exitWithReason
+  , putAppState
   , readAppState
   , setAuctionInfo
   , setCollateralUtxo
@@ -25,18 +26,22 @@ import Contract.Value (CurrencySymbol)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Class (class MonadLogger)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
+import Data.Identity (Identity)
 import Data.Newtype (class Newtype)
 import Data.Set (Set)
 import Data.Symbol (class IsSymbol)
+import Data.Traversable (traverse_)
 import DelegateServer.Config (AppConfig)
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.CommitStatus (CommitStatus)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot)
+import Effect (Effect)
 import Effect.Aff.AVar (AVar)
-import Effect.Aff.AVar (read, tryPut) as AVar
+import Effect.Aff.AVar (read, tryPut, tryTake) as AVar
 import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Class (liftEffect)
 import Effect.Exception (Error)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, Utxo)
 import Prim.Row (class Cons, class Lacks)
@@ -85,12 +90,12 @@ class
   , MonadThrow Error m
   , MonadError Error m
   , MonadLogger m
-  , MonadAccess m "config" AppConfig
+  , MonadAccess m "config" (AppConfig Identity)
   , MonadAccess m "contractEnv" ContractEnvWrapper
   , MonadAccess m "auctionInfo" (AVar AuctionInfoExtended)
   , MonadAccess m "headStatus" (AVar HydraHeadStatus)
   , MonadAccess m "livePeers" (AVar (Set String))
-  , MonadAccess m "exitSem" (AVar AppExitReason)
+  , MonadAccess m "exit" (AVar (AppExitReason -> Effect Unit))
   ) <=
   AppBase m
 
@@ -199,8 +204,11 @@ setCommitStatus = updAppState (Proxy :: _ "commitStatus")
 
 exitWithReason
   :: forall m
-   . MonadAccess m "exitSem" (AVar AppExitReason)
+   . MonadAccess m "exit" (AVar (AppExitReason -> Effect Unit))
   => MonadAff m
   => AppExitReason
   -> m Unit
-exitWithReason = putAppState (Proxy :: _ "exitSem")
+exitWithReason exitReason = do
+  exitAv <- access (Proxy :: _ "exit")
+  exit <- liftAff $ AVar.tryTake exitAv
+  liftEffect $ traverse_ (_ $ exitReason) exit

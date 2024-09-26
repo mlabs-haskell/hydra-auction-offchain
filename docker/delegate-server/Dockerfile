@@ -1,13 +1,4 @@
 # syntax=docker/dockerfile:1
-
-FROM nixos/nix:latest AS hydra
-
-RUN git clone https://github.com/input-output-hk/hydra.git
-WORKDIR /hydra
-RUN git checkout 68d157c79d2c61ef3d491e83806b79b283e8de1c
-RUN nix build .#hydra-node-static \
-  --extra-experimental-features "nix-command flakes" \
-  --accept-flake-config
  
 FROM node:18
 WORKDIR /app
@@ -26,9 +17,8 @@ COPY app/delegate-server app/delegate-server
 COPY protocol-parameters.json .
 RUN npx --no-install spago build
 
-# RUN curl -LO https://github.com/input-output-hk/hydra/releases/download/0.15.0/hydra-x86_64-linux-0.15.0.zip
-# RUN unzip -d /usr/local/bin/ hydra-x86_64-linux-0.15.0.zip
-COPY --from=hydra /hydra/result/bin/hydra-node /usr/local/bin/hydra-node
+RUN curl -LO https://github.com/input-output-hk/hydra/releases/download/0.19.0/hydra-x86_64-linux-0.19.0.zip
+RUN unzip -d /usr/local/bin/ hydra-x86_64-linux-0.19.0.zip
 RUN chmod +x /usr/local/bin/hydra-node
 
 ENTRYPOINT ["npx", "--no-install", "spago", "-q", "run", "--main", "DelegateServer.Main", "--exec-args"]

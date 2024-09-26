@@ -5,25 +5,31 @@ module Test.DelegateServer.Cluster
 
 import Prelude
 
-import Contract.Address (PubKeyHash)
-import Contract.Config (NetworkId(MainnetId), mkCtlBackendParams)
-import Contract.Hashing (publicKeyHash)
+import Cardano.Types
+  ( BigNum
+  , Ed25519KeyHash
+  , Language(PlutusV2)
+  , NetworkId(MainnetId)
+  , TransactionInput
+  )
+import Cardano.Types.Int (fromInt) as Cardano.Int
+import Cardano.Types.PublicKey (hash) as PublicKey
+import Cardano.Wallet.Key (KeyWallet(KeyWallet))
+import Contract.Config (mkCtlBackendParams)
 import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
-import Contract.Test.Plutip (PlutipConfig)
-import Contract.Transaction (Language(PlutusV2), TransactionInput)
+import Contract.Test.Testnet (TestnetConfig)
 import Contract.Wallet (PrivatePaymentKey)
 import Contract.Wallet.Key (publicKeyFromPrivateKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (ask, local)
 import Control.Parallel (parTraverse, parTraverse_)
+import Ctl.Internal.Contract.Hooks (ClusterParameters)
 import Ctl.Internal.Helpers (concatPaths, (<</>>))
-import Ctl.Internal.Plutip.Types (ClusterStartupParameters)
-import Ctl.Internal.Plutip.Utils (tmpdir)
-import Ctl.Internal.Types.Int (fromInt)
-import Ctl.Internal.Wallet.Key (KeyWallet(KeyWallet))
+import Ctl.Internal.Testnet.Utils (tmpdir)
 import Data.Array (concat, deleteAt, replicate)
+import Data.Array (fromFoldable) as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty (fromArray, head, toArray) as NEArray
 import Data.Codec.Argonaut (JsonCodec, array, int, object) as CA
@@ -31,32 +37,40 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (length)
 import Data.Int (decimal, toStringAs)
 import Data.Log.Level (LogLevel(Info, Warn))
-import Data.Map (singleton) as Map
-import Data.Maybe (Maybe(Nothing))
+import Data.Map (singleton, values) as Map
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (modify, unwrap, wrap)
+import Data.Time.Duration (Minutes(Minutes), convertDuration)
+import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
 import DelegateServer.App (AppM, runApp, runContract)
-import DelegateServer.Config (AppConfig, Network(Mainnet))
+import DelegateServer.Config
+  ( DelegateServerConfig
+  , Network(Testnet)
+  , deriveAuctionSlotRuntimeConfig
+  )
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
+import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Main (AppHandle, startDelegateServer)
 import DelegateServer.State (access, readAppState)
-import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import Effect (Effect)
 import Effect.Aff (Aff, bracket)
-import Effect.Aff.AVar (tryRead) as AVar
+import Effect.Aff.AVar (read, tryRead) as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
+import Effect.Ref (Ref)
+import Effect.Ref (read) as Ref
 import Effect.Unsafe (unsafePerformEffect)
-import HydraAuctionOffchain.Codec (bigIntCodecNum)
+import HydraAuctionOffchain.Codec (bigNumCodec)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended
   , BidTerms
@@ -65,7 +79,6 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (fromJustWithErr, randomElem)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile, caEncodeString)
-import JS.BigInt (BigInt)
 import Node.Buffer (toString) as Buffer
 import Node.ChildProcess (defaultExecSyncOptions, execSync)
 import Node.Encoding (Encoding(UTF8)) as Encoding
@@ -77,8 +90,9 @@ import Test.Helpers
   , localhost
   , mkdirIfNotExists
   , publicPaymentKeyToFile
+  , unsafeHead
   )
-import Test.Plutip.Config (plutipConfig)
+import Test.Localnet.Config (localnetConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)
 import Type.Proxy (Proxy(Proxy))
 import URI.Port (toInt, unsafeFromInt) as Port
@@ -89,60 +103,61 @@ type TestAppHandle =
   , moveBidToL2 :: Contract MoveBidResponse
   , queryStandingBidL2 :: Contract (Maybe StandingBidState)
   , placeBidL2 :: BidTerms -> Contract PlaceBidResponse
-  , getAppExitReason :: Contract (Maybe AppExitReason)
   }
 
 withWallets'
   :: forall (distr :: Type) (wallets :: Type)
    . UtxoDistribution distr wallets
-  => distr
+  => Ref ClusterParameters
+  -> distr
   -> ( wallets
-       -> Array PubKeyHash
+       -> Array Ed25519KeyHash
        -> (AuctionInfoExtended -> (TestAppHandle -> Contract Unit) -> Contract Unit)
        -> Contract Unit
      )
   -> ContractTest
-withWallets' distr tests =
+withWallets' localnetClusterParamsRef distr tests =
   ContractTest \h ->
     let
-      numDelegates =
-        unsafePerformEffect $ randomSampleOne $ chooseInt 1 3
+      numDelegates = unsafePerformEffect $ randomSampleOne $ chooseInt 1 3
       distrDelegates =
         concat $ replicate numDelegates [ defDistribution, defDistribution ]
     in
-      h (distr /\ distrDelegates) \mPlutipClusterParams (wallets /\ delegateWallets) -> do
-        contractEnv <- ask
-        plutipClusterParams <-
-          liftContractM "Could not get Plutip cluster params"
-            mPlutipClusterParams
-        delegateWalletsGrouped <-
-          liftContractM "Expected even number of delegate wallets"
-            (chunksOf2 delegateWallets)
-        let
-          delegates =
-            delegateWalletsGrouped <#> \((KeyWallet kw) /\ _) ->
-              publicKeyHash $ publicKeyFromPrivateKey $ unwrap kw.paymentKey
-        tests wallets delegates \auctionInfo action -> do
-          auctionMetadataOref <-
-            liftContractM "Could not get auction metadata oref"
-              (unwrap auctionInfo).metadataOref
-          let
-            clusterConfig =
-              { auctionMetadataOref
-              , plutipClusterParams
-              , plutipConfig
-              }
-            peers =
-              fromJustWithErr "withWallets'" $ NEArray.fromArray $
-                delegateWalletsGrouped <#> \(cardanoKw /\ walletKw) ->
-                  { cardanoSk: (unwrap cardanoKw).paymentKey
-                  , walletSk: (unwrap walletKw).paymentKey
-                  }
-          liftAff $ withDelegateServerCluster
-            contractEnv
-            clusterConfig
-            peers
-            action
+      h (distr /\ distrDelegates) \(wallets /\ delegateWallets) ->
+        do
+          contractEnv <- ask
+          delegateWalletsGrouped <-
+            liftContractM "Expected even number of delegate wallets"
+              (chunksOf2 delegateWallets)
+          delegates <-
+            liftAff $ traverse
+              ( \((KeyWallet kw) /\ _) ->
+                  PublicKey.hash <<< publicKeyFromPrivateKey <<< unwrap <$> kw.paymentKey
+              )
+              delegateWalletsGrouped
+          tests wallets delegates \auctionInfo action -> do
+            auctionMetadataOref <-
+              liftContractM "Could not get auction metadata oref"
+                (unwrap auctionInfo).metadataOref
+            localnetClusterParams <- liftEffect $ Ref.read localnetClusterParamsRef
+            let
+              clusterConfig =
+                { auctionMetadataOref
+                , localnetClusterParams
+                , localnetConfig
+                }
+            peers <-
+              liftAff $ traverse
+                ( \(cardanoKw /\ walletKw) ->
+                    { cardanoSk: _, walletSk: _ } <$> (unwrap cardanoKw).paymentKey
+                      <*> (unwrap walletKw).paymentKey
+                )
+                delegateWalletsGrouped
+            liftAff $ withDelegateServerCluster
+              contractEnv
+              clusterConfig
+              (fromJustWithErr "withWallets'" $ NEArray.fromArray peers)
+              action
 
 withDelegateServerCluster
   :: ContractEnv
@@ -159,44 +174,40 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
     )
     ( \(apps /\ _) ->
         let
-          withRandomAppHandle :: forall a. (AppHandle -> AppM a) -> Contract a
-          withRandomAppHandle f =
+          withRandomApp :: forall a. (HydraNodeApiWebSocket -> AppM a) -> Contract a
+          withRandomApp f =
             liftAff do
               appHandle <- randomElem apps
-              runApp appHandle.appState appHandle.appLogger $ f appHandle
+              appManager <- liftAff $ unwrap <$> AVar.read appHandle.appManager
+              let
+                { appState, appLogger, hydraNodeApiWs } =
+                  unsafeHead $ Array.fromFoldable $ Map.values
+                    appManager.activeAuctions
+              runApp appState appLogger $ f hydraNodeApiWs
 
-          withRandomAppHandle_ :: forall a. AppM a -> Contract a
-          withRandomAppHandle_ =
-            withRandomAppHandle
-              <<< const
+          withRandomApp_ :: forall a. AppM a -> Contract a
+          withRandomApp_ = withRandomApp <<< const
         in
           runContractInEnv contractEnv $ action
             { getActiveAuction:
-                withRandomAppHandle_ do
+                withRandomApp_ $
                   liftAff <<< AVar.tryRead =<< access (Proxy :: _ "auctionInfo")
 
             , getHeadStatus:
-                withRandomAppHandle_ do
-                  readAppState (Proxy :: _ "headStatus")
+                withRandomApp_ $ readAppState (Proxy :: _ "headStatus")
 
             , moveBidToL2:
-                withRandomAppHandle \appHandle ->
-                  moveBidHandlerImpl appHandle.ws
+                withRandomApp moveBidHandlerImpl
 
             , queryStandingBidL2:
-                withRandomAppHandle_ do
-                  map snd <$> queryStandingBidL2
+                withRandomApp_ $ map snd <$> queryStandingBidL2
 
             , placeBidL2:
                 \bidTerms ->
-                  withRandomAppHandle \appHandle -> do
+                  withRandomApp \hydraNodeApiWs -> do
                     env <- wrap <$> runContract (patchContractEnv MainnetId)
                     let body = caEncodeString (bidTermsCodec MainnetId) bidTerms
-                    local (_ { contractEnv = env }) $ placeBidHandlerImpl appHandle.ws body
-
-            , getAppExitReason:
-                withRandomAppHandle_ do
-                  liftAff <<< AVar.tryRead =<< access (Proxy :: _ "exitSem")
+                    local (_ { contractEnv = env }) $ placeBidHandlerImpl hydraNodeApiWs body
             }
     )
 
@@ -207,8 +218,8 @@ type DelegateServerPeer =
 
 type DelegateServerClusterConfig =
   { auctionMetadataOref :: TransactionInput
-  , plutipClusterParams :: ClusterStartupParameters
-  , plutipConfig :: PlutipConfig
+  , localnetClusterParams :: ClusterParameters
+  , localnetConfig :: TestnetConfig
   }
 
 startDelegateServerCluster
@@ -239,13 +250,13 @@ genDelegateServerConfigs
   :: FilePath
   -> DelegateServerClusterConfig
   -> NonEmptyArray DelegateServerPeer
-  -> Aff (Array AppConfig)
+  -> Aff (Array DelegateServerConfig)
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
   hydraScriptsTxHash <- publishHydraScripts
-    clusterConfig.plutipClusterParams.nodeSocketPath
+    clusterConfig.localnetClusterParams.nodeSocketPath
     (ops.mkCardanoSk $ snd $ NEArray.head peers')
-  pure $ worker (NEArray.toArray peers') hydraScriptsTxHash
+  worker (NEArray.toArray peers') hydraScriptsTxHash
   where
   ops =
     { mkServerPort: \idx -> Port.unsafeFromInt (7040 + idx)
@@ -258,49 +269,56 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
     , mkHydraVk: flip concatPaths "hydra.vk"
     , mkCardanoSk: flip concatPaths "cardano.sk"
     , mkCardanoVk: flip concatPaths "cardano.vk"
-    , mkWalletSk: flip concatPaths "wallet.sk"
     }
 
-  worker :: Array (Int /\ FilePath) -> String -> Array AppConfig
+  worker
+    :: Array (Int /\ FilePath)
+    -> String
+    -> Aff (Array DelegateServerConfig)
   worker peers' hydraScriptsTxHash =
-    peers' <#> \(idx /\ workdir) -> wrap
-      { auctionMetadataOref: clusterConfig.auctionMetadataOref
-      , serverPort: ops.mkServerPort idx
-      , wsServerPort: ops.mkWsServerPort idx
-      , hydraNodeId: toStringAs decimal idx
-      , hydraNode: ops.mkHydraNode idx
-      , hydraNodeApi: ops.mkHydraNodeApi idx
-      , hydraPersistDir: ops.mkPersistDir workdir
-      , hydraSk: ops.mkHydraSk workdir
-      , cardanoSk: ops.mkCardanoSk workdir
-      , walletSk: ops.mkWalletSk workdir
-      , peers:
-          fromJustWithErr "genDelegateServerConfigs" $
-            deleteAt idx peers' <#> map \(idx' /\ workdir') ->
-              { hydraNode: ops.mkHydraNode idx'
-              , hydraVk: ops.mkHydraVk workdir'
-              , cardanoVk: ops.mkCardanoVk workdir'
-              , httpServer:
-                  { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
-                  , host: localhost
-                  , secure: false
-                  , path: Nothing
+    for peers' \(idx /\ workdir) -> do
+      auctionConfig <- traverse deriveAuctionSlotRuntimeConfig
+        [ { auctionMetadataOref: Just clusterConfig.auctionMetadataOref
+          , hydraNodeId: toStringAs decimal idx
+          , hydraNode: ops.mkHydraNode idx
+          , hydraNodeApi: ops.mkHydraNodeApi idx
+          , peers:
+              fromJustWithErr "genDelegateServerConfigs" $
+                deleteAt idx peers' <#> map \(idx' /\ workdir') ->
+                  { hydraNode: ops.mkHydraNode idx'
+                  , hydraVk: ops.mkHydraVk workdir'
+                  , cardanoVk: ops.mkCardanoVk workdir'
+                  , httpServer:
+                      { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
+                      , host: localhost
+                      , secure: false
+                      , path: Nothing
+                      }
                   }
+          , cardanoSk: ops.mkCardanoSk workdir
+          }
+        ]
+      pure $ wrap
+        { auctionConfig
+        , serverPort: ops.mkServerPort idx
+        , wsServerPort: ops.mkWsServerPort idx
+        , hydraPersistDir: ops.mkPersistDir workdir
+        , hydraSk: ops.mkHydraSk workdir
+        , nodeSocket: clusterConfig.localnetClusterParams.nodeSocketPath
+        , network: Testnet { magic: localnetConfig.clusterConfig.testnetMagic }
+        , queryBackend:
+            mkCtlBackendParams
+              { ogmiosConfig:
+                  clusterConfig.localnetConfig.ogmiosConfig
+              , kupoConfig:
+                  clusterConfig.localnetConfig.kupoConfig
               }
-      , nodeSocket: clusterConfig.plutipClusterParams.nodeSocketPath
-      , network: Mainnet
-      , queryBackend:
-          mkCtlBackendParams
-            { ogmiosConfig:
-                clusterConfig.plutipConfig.ogmiosConfig
-            , kupoConfig:
-                clusterConfig.plutipConfig.kupoConfig
-            }
-      , hydraScriptsTxHash
-      , hydraContestPeriod: 5
-      , logLevel: Info
-      , ctlLogLevel: Warn
-      }
+        , hydraScriptsTxHash
+        , hydraContestPeriod: 5
+        , slotReservationPeriod: convertDuration $ Minutes 5.0
+        , logLevel: Info
+        , ctlLogLevel: Warn
+        }
 
   createWorkdirsStoreKeys :: Aff (NonEmptyArray (Int /\ FilePath))
   createWorkdirsStoreKeys =
@@ -314,8 +332,6 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
         peer.cardanoSk
       publicPaymentKeyToFile (ops.mkCardanoVk workdir)
         cardanoVk
-      privatePaymentKeyToFile (ops.mkWalletSk workdir)
-        peer.walletSk
       genHydraKeys $ ops.mkHydra workdir
       pure $ idx /\ workdir
 
@@ -330,7 +346,7 @@ publishHydraScripts nodeSocket cardanoSk =
   liftEffect do
     let
       cmd =
-        "hydra-node publish-scripts --mainnet --node-socket "
+        "hydra-node publish-scripts --testnet-magic 2 --node-socket "
           <> nodeSocket
           <> " --cardano-signing-key "
           <> cardanoSk
@@ -347,9 +363,9 @@ patchContractEnv network = do
           { pparams =
               env.ledgerConstants.pparams # modify _
                 { costModels =
-                    wrap $ Map.singleton PlutusV2
-                      (wrap $ fromInt <$> pparams.costModels."PlutusV2")
-                , maxTxExUnits =
+                    Map.singleton PlutusV2
+                      (wrap $ Cardano.Int.fromInt <$> pparams.costModels."PlutusV2")
+                , maxTxExUnits = wrap
                     { mem: pparams.maxTxExecutionUnits.memory
                     , steps: pparams.maxTxExecutionUnits.steps
                     }
@@ -363,7 +379,7 @@ pparamsSlice =
     caDecodeFile pparamsSliceCodec "protocol-parameters.json"
 
 type PParamsSlice =
-  { maxTxExecutionUnits :: { memory :: BigInt, steps :: BigInt }
+  { maxTxExecutionUnits :: { memory :: BigNum, steps :: BigNum }
   , costModels :: { "PlutusV2" :: Array Int }
   }
 
@@ -372,8 +388,8 @@ pparamsSliceCodec =
   CA.object "PParamsSlice" $ CAR.record
     { maxTxExecutionUnits:
         CA.object "PParamsSlice:ExUnits" $ CAR.record
-          { memory: bigIntCodecNum
-          , steps: bigIntCodecNum
+          { memory: bigNumCodec
+          , steps: bigNumCodec
           }
     , costModels:
         CA.object "PParamsSlice:CostModels" $ CAR.record

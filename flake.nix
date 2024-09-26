@@ -7,60 +7,143 @@
   };
 
   inputs = {
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    liqwid-nix.url = "github:mlabs-haskell/liqwid-nix/aciceri/fix-new-ctl";
-    cardano-transaction-lib.url = "github:Plutonomicon/cardano-transaction-lib/63485e328b6008b5bea336269b9d6036d04c7c7b";
-    nixpkgs-ctl.follows = "cardano-transaction-lib/nixpkgs";
-    nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
+    nixpkgs.follows = "ctl/nixpkgs";
+    cardano-node.url = "github:input-output-hk/cardano-node/9.2.0";
+    ctl.url = "github:Plutonomicon/cardano-transaction-lib/566e7153c88fdab7005a3b4b02e6fec41c7d5c94";
+    ctl.inputs.cardano-node.follows = "cardano-node";
+    hydra.url = "github:input-output-hk/hydra/0.19.0";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/delegate-info";
-    hydra.url = "github:input-output-hk/hydra/68d157c79d2c61ef3d491e83806b79b283e8de1c";
   };
 
-  outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; } ({ self, ... }: {
-    imports = [ inputs.liqwid-nix.flakeModule ];
-    systems = [ "x86_64-linux" "aarch64-darwin" "x86_64-darwin" "aarch64-linux" ];
-    perSystem = { system, lib, pkgs, ... }: {
-      offchain.default = {
-        src = builtins.path {
-          path = self.outPath;
-          name = "hydra-auction-offchain-filtered-src";
-          filter = path: ftype: !(lib.hasSuffix ".md" path) && (builtins.baseNameOf path != "flake.nix");
-        };
+  outputs = { self, nixpkgs, ctl, hydra, hydra-auction-onchain, ... }@inputs:
+    let
+      supportedSystems = [ "x86_64-linux" ];
+      perSystem = nixpkgs.lib.genAttrs supportedSystems;
 
-        nodejsPackage = pkgs.nodejs-18_x;
-        packageLock = ./package-lock.json;
-        packageJson = ./package.json;
-
-        ignoredWarningCodes = [
-          "ImplicitImport"
-          "ImplicitQualifiedImport"
-          "ImplicitQualifiedImportReExport"
-          "UserDefinedWarning"
+      nixpkgsFor = system: import nixpkgs {
+        inherit system;
+        overlays = [
+          ctl.overlays.purescript
+          ctl.overlays.runtime
+          ctl.overlays.spago
         ];
-
-        shell = {
-          shellHook = ''
-            mkdir -p scripts
-            cp -rf ${inputs.hydra-auction-onchain}/compiled/*.plutus scripts
-          '';
-          extraCommandLineTools = [
-            inputs.hydra.packages.${system}.hydra-node
-          ];
-        };
-
-        enableFormatCheck = true;
-        plutip = {
-          testMain = "Test.Plutip";
-          buildInputs = [
-            inputs.hydra.packages.${system}.hydra-node
-          ];
-        };
       };
 
-      pre-commit.settings.hooks.nixpkgs-fmt = {
-        enable = true;
-        excludes = [ "spago-packages.nix" ];
-      };
+      psProjectFor = system: pkgs:
+        pkgs.purescriptProject rec {
+          inherit pkgs;
+          projectName = "hydra-auction-offchain";
+          src = builtins.path {
+            path = ./.;
+            name = "${projectName}-src";
+            filter = path: ftype: !(pkgs.lib.hasSuffix ".md" path) && (builtins.baseNameOf path != "flake.nix");
+          };
+          packageJson = ./package.json;
+          packageLock = ./package-lock.json;
+          shell = {
+            withRuntime = true;
+            packageLockOnly = true;
+            shellHook = ''
+              mkdir -p scripts
+              cp -rf ${hydra-auction-onchain}/compiled/*.plutus scripts
+              for script in scripts/*.plutus; do
+                jq '. | {cborHex: .cborHex, description: .description, type: "PlutusScriptV2"}' "$script" \
+                  > "$script.tmp"
+                mv -f "$script.tmp" "$script"
+              done
+            '';
+            packages = with pkgs; [
+              fd
+              hydra.packages.${system}.hydra-node
+              nixpkgs-fmt
+              nodePackages.prettier
+              nodePackages.purs-tidy
+              inputs.cardano-node.packages.${system}."preview/node"
+              inputs.cardano-node.packages.${system}."preprod/node"
+            ];
+          };
+        };
+    in
+    {
+      packages = perSystem (system:
+        let
+          pkgs = nixpkgsFor system;
+          project = psProjectFor system pkgs;
+          hydra-auction-offchain = project.buildPursProject {
+            strictComp = true;
+            censorCodes = [
+              "ImplicitImport"
+              "ImplicitQualifiedImport"
+              "ImplicitQualifiedImportReExport"
+              "UserDefinedWarning"
+            ];
+          };
+
+        in
+        {
+          delegate-server = pkgs.writeShellApplication {
+            name = "delegate-server";
+            text = ''
+              TEMPD=$(mktemp -d)
+              cd "$TEMPD"
+              cp -r ${hydra-auction-offchain}/* .
+              ln -sfn ${project.nodeModules}/lib/node_modules node_modules
+              mkdir -p scripts && cp -r ${hydra-auction-onchain}/compiled/*.plutus scripts
+              node --enable-source-maps -e 'import("./output/DelegateServer.Main/index.js").then(m => m.main())' \
+                -- delegate-server "$@"
+            '';
+          };
+        }
+      );
+
+      devShells = perSystem (system:
+        let
+          pkgs = nixpkgsFor system;
+        in
+        {
+          default = (psProjectFor system pkgs).devShell;
+        }
+      );
+
+      checks = perSystem (system:
+        let
+          pkgs = nixpkgsFor system;
+          project = psProjectFor system pkgs;
+          builtProject = project.buildPursProject {
+            strictComp = true;
+            censorCodes = [
+              "ImplicitImport"
+              "ImplicitQualifiedImport"
+              "ImplicitQualifiedImportReExport"
+              "UserDefinedWarning"
+            ];
+          };
+        in
+        {
+          hydra-auction-offchain-tests = project.runLocalTestnetTest {
+            inherit builtProject;
+            buildInputs = [ hydra.packages.${system}.hydra-node ];
+            name = "hydra-auction-offchain-tests";
+            testMain = "Test.Main";
+          };
+
+          formatting-check = pkgs.runCommand "formatting-check"
+            {
+              nativeBuildInputs = with pkgs; [
+                fd
+                easy-ps.purs-tidy
+                nixpkgs-fmt
+                nodePackages.prettier
+              ];
+            }
+            ''
+              cd ${self}
+              purs-tidy check $(fd -epurs)
+              nixpkgs-fmt --check $(fd -enix --exclude='spago*')
+              prettier -c $(fd -ejs)
+              touch $out
+            '';
+        }
+      );
     };
-  });
 }

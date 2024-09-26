@@ -2,6 +2,7 @@ module DelegateServer.Types.AppExitReason
   ( AppExitReason
       ( AppExitReason_HeadFinalized
       , AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus
+      , AppExitReason_Cleanup
       )
   ) where
 
@@ -14,6 +15,7 @@ import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 data AppExitReason
   = AppExitReason_HeadFinalized
   | AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus HydraHeadStatus
+  | AppExitReason_Cleanup
 
 derive instance Generic AppExitReason _
 derive instance Eq AppExitReason

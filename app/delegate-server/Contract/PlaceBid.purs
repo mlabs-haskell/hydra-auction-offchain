@@ -14,6 +14,10 @@ module DelegateServer.Contract.PlaceBid
 
 import Contract.Prelude
 
+import Cardano.Types (PlutusData, RedeemerDatum, Transaction, TransactionInput, Value)
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.MultiAsset (empty) as MultiAsset
+import Cardano.Types.Value (getMultiAsset, singleton) as Value
 import Contract.Address (getNetworkId)
 import Contract.BalanceTxConstraints (BalanceTxConstraintsBuilder)
 import Contract.BalanceTxConstraints
@@ -24,17 +28,12 @@ import Contract.BalanceTxConstraints
   ) as BalancerConstraints
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract, liftedM)
-import Contract.PlutusData (Datum, OutputDatum(NoOutputDatum), Redeemer, toData)
+import Contract.PlutusData (toData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.ScriptLookups (unspentOutputs, validator) as Lookups
 import Contract.Scripts (validatorHash)
 import Contract.Time (POSIXTimeRange, mkFiniteInterval)
-import Contract.Transaction
-  ( FinalizedTransaction
-  , Transaction
-  , TransactionInput
-  , signTransaction
-  )
+import Contract.Transaction (signTransaction)
 import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints)
 import Contract.TxConstraints
   ( mustNotBeValid
@@ -43,8 +42,6 @@ import Contract.TxConstraints
   , mustValidateIn
   ) as Constraints
 import Contract.Utxos (UtxoMap)
-import Contract.Value (Value)
-import Contract.Value (adaSymbol, singleton, symbols) as Value
 import Contract.Wallet (getWalletAddress)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, mapExceptT, throwError, withExceptT)
@@ -54,15 +51,13 @@ import Data.Array (find) as Array
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Map (fromFoldable, toUnfoldable) as Map
-import Data.Newtype (modify, unwrap)
+import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.App (runContractNullCosts)
-import DelegateServer.Helpers (modifyF)
 import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
-import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (class AppOpen, access, readAppState)
+import DelegateServer.State (class AppOpen, readAppState)
 import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
@@ -84,7 +79,6 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionValidatorsErrorCodec
   )
 import JS.BigInt (fromInt) as BigInt
-import Node.Path (FilePath)
 import Type.Proxy (Proxy(Proxy))
 
 placeBidL2
@@ -100,9 +94,8 @@ placeBidL2 ws bidTerms = do
       <#> toUtxoMapWithoutRefScripts
       <<< _.utxo
       <<< unwrap
-  { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
   mapExceptT runContractNullCosts $
-    placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos cardanoSk
+    placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos
 
 placeBidL2'
   :: forall (r :: Row Type)
@@ -110,22 +103,20 @@ placeBidL2'
   -> BidTerms
   -> (Transaction -> Effect Unit)
   -> UtxoMap
-  -> FilePath
   -> ExceptT PlaceBidL2ContractError Contract Unit
-placeBidL2' auctionInfo bidTerms submitTxL2 utxos cardanoSk = do
+placeBidL2' auctionInfo bidTerms submitTxL2 utxos = do
   balancedTx <- placeBidL2ContractWithErrors auctionInfo bidTerms utxos
-  let validTx = modify setTxValid balancedTx
-  evaluatedTx <- lift $ modifyF setExUnitsToMax validTx
-  signedTx <- lift $ (withWallet cardanoSk <<< signTransaction) =<< signTransaction
-    evaluatedTx
-  liftEffect $ submitTxL2 $ unwrap signedTx
+  let validTx = setTxValid balancedTx
+  evaluatedTx <- lift $ setExUnitsToMax validTx
+  signedTx <- lift $ signTransaction evaluatedTx
+  liftEffect $ submitTxL2 signedTx
 
 placeBidL2ContractWithErrors
   :: forall (r :: Row Type)
    . Record (AuctionInfoRec r)
   -> BidTerms
   -> UtxoMap
-  -> ExceptT PlaceBidL2ContractError Contract FinalizedTransaction
+  -> ExceptT PlaceBidL2ContractError Contract Transaction
 placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
   let
     auctionCs = auctionInfoRec.auctionId
@@ -175,21 +166,21 @@ placeBidL2ContractWithErrors auctionInfoRec bidTerms utxos = do
     standingBidOref :: TransactionInput
     standingBidOref = fst standingBidUtxo
 
-    standingBidRedeemer :: Redeemer
+    standingBidRedeemer :: RedeemerDatum
     standingBidRedeemer = wrap $ toData NewBidRedeemer
 
-    standingBidDatum :: Datum
-    standingBidDatum = wrap $ toData newBidState
+    standingBidDatum :: PlutusData
+    standingBidDatum = toData newBidState
 
     standingBidTokenValue :: Value
-    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName one
+    standingBidTokenValue = Value.singleton auctionCs standingBidTokenName BigNum.one
 
     --
 
     balancerConstraints :: BalanceTxConstraintsBuilder
     balancerConstraints = mconcat
       [ BalancerConstraints.mustUseCoinSelectionStrategy SelectionStrategyMinimal
-      , BalancerConstraints.mustUseUtxosAtAddresses network []
+      , BalancerConstraints.mustUseUtxosAtAddresses mempty
       , BalancerConstraints.mustUseCollateralUtxos $ Map.fromFoldable [ collateralUtxo ]
       , BalancerConstraints.mustUseAdditionalUtxos spendableUtxos
       ]
@@ -231,12 +222,12 @@ findCollateralUtxo utxos = do
   pure $ Map.toUnfoldable utxos # Array.find
     ( \utxo ->
         let
-          txOut = unwrap $ _.output $ unwrap $ snd utxo
+          txOut = unwrap $ snd utxo
         in
           txOut.address == ownAddress
-            && (Value.symbols txOut.amount == [ Value.adaSymbol ])
-            && (txOut.datum == NoOutputDatum)
-            && isNothing txOut.referenceScript
+            && (Value.getMultiAsset txOut.amount == MultiAsset.empty)
+            && isNothing txOut.datum
+            && isNothing txOut.scriptRef
     )
 
 ----------------------------------------------------------------------

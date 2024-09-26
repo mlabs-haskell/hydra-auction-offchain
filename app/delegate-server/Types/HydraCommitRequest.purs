@@ -18,7 +18,6 @@ import Data.Show.Generic (genericShow)
 import DelegateServer.Types.HydraTx (HydraTx, hydraTxCodec, mkHydraTx)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
 import DelegateServer.Types.HydraUtxoMap (fromUtxoMap) as HydraUtxoMap
-import Effect (Effect)
 
 data HydraCommitRequest
   = SimpleCommitRequest HydraUtxoMap
@@ -41,13 +40,12 @@ instance EncodeJson HydraCommitRequest where
 mkSimpleCommitRequest :: UtxoMap -> HydraCommitRequest
 mkSimpleCommitRequest = SimpleCommitRequest <<< HydraUtxoMap.fromUtxoMap
 
-mkFullCommitRequest :: Transaction -> UtxoMap -> Effect HydraCommitRequest
+mkFullCommitRequest :: Transaction -> UtxoMap -> HydraCommitRequest
 mkFullCommitRequest tx utxos =
-  mkHydraTx tx <#> \blueprintTx ->
-    FullCommitRequest
-      { blueprintTx
-      , utxo: HydraUtxoMap.fromUtxoMap utxos
-      }
+  FullCommitRequest
+    { blueprintTx: mkHydraTx tx
+    , utxo: HydraUtxoMap.fromUtxoMap utxos
+    }
 
 type HydraFullCommitRequest =
   { blueprintTx :: HydraTx

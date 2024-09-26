@@ -21,8 +21,8 @@ module HydraAuctionOffchain.Api
 
 import Prelude
 
+import Cardano.Types (NetworkId)
 import Contract.Address (getNetworkId)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract, runContract)
 import Contract.Transaction (TransactionHash)
 import Contract.Transaction (awaitTxConfirmed) as Contract
