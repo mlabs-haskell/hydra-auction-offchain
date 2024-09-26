@@ -32,6 +32,7 @@ import Cardano.Types (BigNum, Ed25519KeyHash, NetworkId)
 import Contract.Numeric.BigNum (fromInt, mul, zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Time (POSIXTime)
+import Data.Array (null) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
@@ -92,12 +93,17 @@ auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
   , minDepositAmount: bigNumCodec
   }
 
-mkAuctionTerms :: AuctionTermsInput -> Plutus.Address -> VerificationKey -> AuctionTerms
-mkAuctionTerms rec sellerAddress sellerVk = wrap
+mkAuctionTerms
+  :: AuctionTermsInput
+  -> Plutus.Address
+  -> VerificationKey
+  -> Array Ed25519KeyHash
+  -> AuctionTerms
+mkAuctionTerms rec sellerAddress sellerVk delegates = wrap
   { auctionLot: rec.auctionLot
   , sellerAddress
   , sellerVk
-  , delegates: rec.delegates
+  , delegates: if Array.null rec.delegates then delegates else rec.delegates
   , biddingStart: rec.biddingStart
   , biddingEnd: rec.biddingEnd
   , purchaseDeadline: rec.purchaseDeadline

@@ -11,11 +11,11 @@ module DelegateServer.AppManager.Types
 import Prelude
 
 import Cardano.Types (Ed25519KeyHash, ScriptHash)
-import Data.Array (fromFoldable) as Array
 import Data.Map (Map)
 import Data.Map (insert, keys, pop) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap)
+import Data.Set (Set)
 import Data.Time.Duration (Seconds, fromDuration)
 import Data.Tuple (Tuple(Tuple), snd)
 import Data.UUID (UUID, genUUID)
@@ -72,11 +72,10 @@ withAppManager appManagerAvar =
 getAvailableSlots
   :: forall ws wsServer
    . AVar (AppManager' ws wsServer)
-  -> Aff (Array AuctionSlot)
+  -> Aff (Set AuctionSlot)
 getAvailableSlots appManagerAvar =
   withAppManager appManagerAvar \appManager ->
-    pure $ Tuple appManager $ Array.fromFoldable $ Map.keys
-      (unwrap appManager).availableSlots
+    pure $ Tuple appManager $ Map.keys (unwrap appManager).availableSlots
 
 reserveSlot
   :: forall ws wsServer

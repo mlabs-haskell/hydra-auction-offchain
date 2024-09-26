@@ -31,6 +31,7 @@
   , "integers"
   , "js-bigints"
   , "js-timers"
+  , "lists"
   , "maybe"
   , "monad-logger"
   , "mote"

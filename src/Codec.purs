@@ -17,6 +17,7 @@ module HydraAuctionOffchain.Codec
   , publicKeyCodec
   , scriptHashCodec
   , serverConfigCodec
+  , setCodec
   , sysStartCodec
   , txCodec
   , txHashCodec
@@ -77,6 +78,8 @@ import Data.Log.Level (LogLevel(Trace, Debug, Info, Warn, Error))
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap, wrap)
 import Data.Profunctor (dimap, wrapIso)
+import Data.Set (Set)
+import Data.Set (fromFoldable, toUnfoldable) as Set
 import Data.Tuple.Nested ((/\))
 import Data.UInt (UInt)
 import Data.UInt (fromInt', fromString, toInt, toString) as UInt
@@ -232,6 +235,9 @@ serverConfigCodec =
     , secure: CA.boolean
     , path: CA.maybe CA.string
     }
+
+setCodec :: forall a. Ord a => CA.JsonCodec a -> CA.JsonCodec (Set a)
+setCodec = dimap Set.toUnfoldable Set.fromFoldable <<< CA.array
 
 sysStartCodec :: CA.JsonCodec SystemStart
 sysStartCodec =

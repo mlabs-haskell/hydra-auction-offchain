@@ -8,6 +8,8 @@ module DelegateServer.Handlers.ReserveSlot
   , ReserveSlotSuccess
   , reserveSlotHandler
   , reserveSlotHandlerImpl
+  , reserveSlotRequestCodec
+  , reserveSlotResponseCodec
   ) where
 
 import Prelude

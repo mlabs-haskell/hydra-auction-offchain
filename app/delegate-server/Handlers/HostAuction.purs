@@ -9,6 +9,8 @@ module DelegateServer.Handlers.HostAuction
   , HostAuctionResponse
   , hostAuctionHandler
   , hostAuctionHandlerImpl
+  , hostAuctionRequestCodec
+  , hostAuctionResponseCodec
   ) where
 
 import Prelude
