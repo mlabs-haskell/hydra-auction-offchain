@@ -9,6 +9,7 @@ module HydraAuctionOffchain.Api
   , discoverBidders
   , discoverSellerSignature
   , enterAuction
+  , getWalletVk
   , mintTokenUsingAlwaysMints
   , moveBidL2
   , placeBid
@@ -37,6 +38,7 @@ import HydraAuctionOffchain.Contract
   , discoverBidders
   , discoverSellerSignature
   , enterAuctionContract
+  , getWalletVk
   , mintTokenUsingAlwaysMints
   , moveBidContract
   , placeBidContract
@@ -120,6 +122,11 @@ contractStub _ = do
 
 ----------------------------------------------------------------------
 -- Helpers
+
+getWalletVk :: Json -> Effect (Promise Json)
+getWalletVk contractConfig = fromAff do
+  contractParams <- mkContractParams $ fromJs unit contractConfig
+  toJs unit <$> runContract contractParams Contract.getWalletVk
 
 awaitTxConfirmed :: Json -> Json -> Effect (Promise Unit)
 awaitTxConfirmed contractConfig txHash = fromAff do

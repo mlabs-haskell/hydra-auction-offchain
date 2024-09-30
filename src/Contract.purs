@@ -6,6 +6,7 @@ module HydraAuctionOffchain.Contract
   , module ExportDiscoverBidders
   , module ExportDiscoverSellerSignature
   , module ExportEnterAuction
+  , module ExportGetWalletVk
   , module ExportMintTokens
   , module ExportMoveBid
   , module ExportPlaceBid
@@ -107,6 +108,12 @@ import HydraAuctionOffchain.Contract.EnterAuction
   , enterAuctionContract
   , mkEnterAuctionContractWithErrors
   ) as ExportEnterAuction
+
+import HydraAuctionOffchain.Contract.GetWalletVk
+  ( GetWalletVkContractError(GetWalletVk_Error_CouldNotGetWalletVk)
+  , getWalletVk
+  , getWalletVkWithErrors
+  ) as ExportGetWalletVk
 
 import HydraAuctionOffchain.Contract.MintTokens
   ( mintTokenUsingAlwaysMints

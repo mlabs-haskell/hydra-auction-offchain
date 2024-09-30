@@ -1,17 +1,24 @@
 module DelegateServer.Lib.Transaction
-  ( reSignTransaction
+  ( appendTxSignatures
+  , reSignTransaction
+  , setAuxDataHash
   , setExUnitsToMax
   , setTxValid
+  , txSignatures
   ) where
 
 import Prelude
 
+import Contract.Hashing (auxiliaryDataHash)
 import Contract.Monad (Contract)
 import Contract.ProtocolParameters (getProtocolParameters)
 import Contract.Transaction
   ( BalancedSignedTransaction
   , Language(PlutusV2)
   , Transaction
+  , Vkeywitness
+  , _auxiliaryDataHash
+  , _body
   , _isValid
   , _plutusData
   , _vkeys
@@ -20,13 +27,19 @@ import Contract.Transaction
   )
 import Ctl.Internal.Cardano.Types.Transaction (_redeemers)
 import Ctl.Internal.Transaction (setScriptDataHash)
-import Data.Lens ((^.), (%~), (.~))
+import Data.Lens (view, (%~), (.~), (^.))
 import Data.Lens.Common (simple)
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (filterKeys) as Map
 import Data.Maybe (Maybe(Nothing), fromMaybe)
 import Data.Newtype (modify, unwrap, wrap)
-import Effect.Class (liftEffect)
+import Data.Traversable (traverse)
+import Effect.Class (class MonadEffect, liftEffect)
+
+setAuxDataHash :: forall m. MonadEffect m => Transaction -> m Transaction
+setAuxDataHash tx = do
+  auxDataHash <- liftEffect $ traverse auxiliaryDataHash (unwrap tx).auxiliaryData
+  pure $ tx # _body <<< _auxiliaryDataHash .~ auxDataHash
 
 reSignTransaction :: BalancedSignedTransaction -> Contract BalancedSignedTransaction
 reSignTransaction tx =
@@ -53,3 +66,11 @@ setExUnitsToMax tx = do
     setScriptDataHash costModels (fromMaybe mempty $ ws ^. _redeemers)
       (wrap <$> fromMaybe mempty (ws ^. _plutusData))
       evaluatedTx
+
+txSignatures :: Transaction -> Array Vkeywitness
+txSignatures = fromMaybe mempty <<< view (_witnessSet <<< _vkeys)
+
+appendTxSignatures :: Array Vkeywitness -> Transaction -> Transaction
+appendTxSignatures signatures =
+  _witnessSet <<< _vkeys %~
+    pure <<< append signatures <<< fromMaybe mempty

@@ -22,6 +22,7 @@ import Control.Monad.Except (ExceptT, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (find, findMap) as Array
 import Data.Codec.Argonaut (JsonCodec, object) as CA
+import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Generic.Rep (class Generic)
 import Data.Map (toUnfoldable) as Map
@@ -36,6 +37,7 @@ import HydraAuctionOffchain.Contract.Types
   , ContractOutput
   , VerificationKey
   , mkContractOutput
+  , vkeyCodec
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
@@ -44,6 +46,7 @@ import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 newtype DiscoverSellerSigContractParams = DiscoverSellerSigContractParams
   { auctionCs :: CurrencySymbol
   , sellerAddress :: Address
+  , bidderVk :: Maybe VerificationKey
   }
 
 derive instance Generic DiscoverSellerSigContractParams _
@@ -63,6 +66,7 @@ discoverSellerSigContractParamsCodec network =
     CAR.record
       { auctionCs: currencySymbolCodec
       , sellerAddress: addressCodec network
+      , bidderVk: CA.maybe vkeyCodec
       }
 
 discoverSellerSignature
@@ -80,9 +84,13 @@ discoverSellerSignatureWithErrors (DiscoverSellerSigContractParams params) = do
     ?? DiscoverSellerSig_Error_CouldNotGetSellerPubKeyHash
 
   -- Get bidder vk:
-  { vkey: bidderVk } <-
-    withExceptT DiscoverSellerSig_Error_CouldNotGetBidderPubKey
-      askWalletVk
+  bidderVk <-
+    case params.bidderVk of
+      Just vk -> pure vk
+      Nothing ->
+        _.vkey <$>
+          withExceptT DiscoverSellerSig_Error_CouldNotGetBidderPubKey
+            askWalletVk
 
   lift $ findSignature sellerPkh params.auctionCs bidderVk
 

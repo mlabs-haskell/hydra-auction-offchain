@@ -185,6 +185,10 @@ export const announceDelegateGroup = async (
 
 // Helpers -----------------------------------------------------------
 
+export const getWalletVk = async (
+  config: ContractConfig
+): Promise<ContractOutput<VerificationKey>> => Purs.getWalletVk(config)();
+
 export const awaitTxConfirmed = async (
   config: ContractConfig,
   txHash: TransactionHash

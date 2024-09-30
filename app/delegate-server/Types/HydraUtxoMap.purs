@@ -3,6 +3,7 @@ module DelegateServer.Types.HydraUtxoMap
   , addressCodec
   , encodePlutusData
   , encodeValue
+  , fromUtxoMap
   , hydraUtxoMapCodec
   , toUtxoMapWithoutRefScripts
   ) where
@@ -61,7 +62,7 @@ import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Either (Either, hush, note)
 import Data.Generic.Rep (class Generic)
-import Data.Map (fromFoldable) as Map
+import Data.Map (fromFoldable, toUnfoldable) as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Show.Generic (genericShow)
@@ -106,6 +107,9 @@ hydraUtxoMapCodec :: CA.JsonCodec HydraUtxoMap
 hydraUtxoMapCodec =
   CA.prismaticCodec "HydraUtxoMap" (hush <<< decodeJson) encodeJson
     CA.json
+
+fromUtxoMap :: UtxoMap -> HydraUtxoMap
+fromUtxoMap = wrap <<< Map.toUnfoldable <<< map (_.output <<< unwrap)
 
 toUtxoMapWithoutRefScripts :: HydraUtxoMap -> UtxoMap
 toUtxoMapWithoutRefScripts =

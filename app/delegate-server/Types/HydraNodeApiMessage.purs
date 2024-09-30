@@ -1,7 +1,8 @@
-module DelegateServer.HydraNodeApi.Types.Message
+module DelegateServer.Types.HydraNodeApiMessage
   ( CommittedMessage
   , GreetingsMessage
   , HeadClosedMessage
+  , HeadInitMessage
   , HeadFinalizedMessage
   , HeadOpenMessage
   , HydraNodeApi_InMessage
@@ -30,13 +31,14 @@ module DelegateServer.HydraNodeApi.Types.Message
   , PeerConnMessage
   , SnapshotConfirmedMessage
   , committedMessageCodec
+  , headInitMessageCodec
   , hydraNodeApiInMessageCodec
   , hydraNodeApiOutMessageCodec
   ) where
 
 import Prelude
 
-import Contract.Transaction (Transaction)
+import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec, int, object, string) as CA
 import Data.Codec.Argonaut.Record (optional, record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
@@ -46,8 +48,9 @@ import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
 import DelegateServer.Types.HydraSnapshot (HydraSnapshot, hydraSnapshotCodec)
+import DelegateServer.Types.HydraTx (HydraTx, hydraTxCodec)
 import DelegateServer.Types.HydraUtxoMap (HydraUtxoMap, hydraUtxoMapCodec)
-import HydraAuctionOffchain.Codec (txCodec)
+import HydraAuctionOffchain.Codec (currencySymbolCodec)
 import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import Type.Proxy (Proxy(Proxy))
 
@@ -58,7 +61,7 @@ data HydraNodeApi_InMessage
   = In_Greetings GreetingsMessage
   | In_PeerConnected PeerConnMessage
   | In_PeerDisconnected PeerConnMessage
-  | In_HeadIsInitializing
+  | In_HeadIsInitializing HeadInitMessage
   | In_Committed CommittedMessage
   | In_HeadIsAborted
   | In_HeadIsOpen HeadOpenMessage
@@ -76,7 +79,7 @@ hydraNodeApiInMessageCodec =
           { "Greetings": Right greetingsMessageCodec
           , "PeerConnected": Right peerConnMessageCodec
           , "PeerDisconnected": Right peerConnMessageCodec
-          , "HeadIsInitializing": Left unit
+          , "HeadIsInitializing": Right headInitMessageCodec
           , "Committed": Right committedMessageCodec
           , "HeadIsAborted": Left unit
           , "HeadIsOpen": Right headOpenMessageCodec
@@ -95,8 +98,8 @@ hydraNodeApiInMessageCodec =
       Variant.inj (Proxy :: Proxy "PeerConnected") rec
     In_PeerDisconnected rec ->
       Variant.inj (Proxy :: Proxy "PeerDisconnected") rec
-    In_HeadIsInitializing ->
-      Variant.inj (Proxy :: Proxy "HeadIsInitializing") unit
+    In_HeadIsInitializing rec ->
+      Variant.inj (Proxy :: Proxy "HeadIsInitializing") rec
     In_Committed rec ->
       Variant.inj (Proxy :: Proxy "Committed") rec
     In_HeadIsAborted ->
@@ -118,7 +121,7 @@ hydraNodeApiInMessageCodec =
     { "Greetings": In_Greetings
     , "PeerConnected": In_PeerConnected
     , "PeerDisconnected": In_PeerDisconnected
-    , "HeadIsInitializing": const In_HeadIsInitializing
+    , "HeadIsInitializing": In_HeadIsInitializing
     , "Committed": In_Committed
     , "HeadIsAborted": const In_HeadIsAborted
     , "HeadIsOpen": In_HeadIsOpen
@@ -149,6 +152,16 @@ greetingsMessageCodec =
   CA.object "GreetingsMessage" $ CAR.record
     { headStatus: headStatusCodec
     , snapshotUtxo: CAR.optional hydraUtxoMapCodec
+    }
+
+type HeadInitMessage =
+  { headId :: CurrencySymbol
+  }
+
+headInitMessageCodec :: CA.JsonCodec HeadInitMessage
+headInitMessageCodec =
+  CA.object "HeadInitMessage" $ CAR.record
+    { headId: currencySymbolCodec
     }
 
 type CommittedMessage =
@@ -250,11 +263,11 @@ hydraNodeApiOutMessageCodec =
     }
 
 type NewTxMessage =
-  { transaction :: Transaction
+  { transaction :: HydraTx
   }
 
 newTxMessageCodec :: CA.JsonCodec NewTxMessage
 newTxMessageCodec =
   CA.object "NewTxMessage" $ CAR.record
-    { transaction: txCodec
+    { transaction: hydraTxCodec
     }

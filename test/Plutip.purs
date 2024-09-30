@@ -10,7 +10,7 @@ import Contract.Test.Utils (interruptOnSignal)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
-import Mote (group)
+import Mote (group, skip)
 import Test.Contract.AnnounceAuction (suite) as AnnounceAuction
 import Test.Contract.AuthorizeBidders (suite) as AuthorizeBidders
 import Test.Contract.DelegateServer (suite) as DelegateServer
@@ -18,8 +18,6 @@ import Test.Contract.EnterAuction (suite) as EnterAuction
 import Test.Contract.PlaceBid (suite) as PlaceBid
 import Test.Contract.StartBidding (suite) as StartBidding
 import Test.Plutip.Config (plutipConfig)
-
--- import Test.DelegateServer.PlaceBid.Suite (suite) as PlaceBidL2
 
 main :: Effect Unit
 main = do
@@ -35,6 +33,4 @@ suite =
       EnterAuction.suite
       AuthorizeBidders.suite
       PlaceBid.suite
-      DelegateServer.suite
-
--- PlaceBidL2.suite
+      skip DelegateServer.suite

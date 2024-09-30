@@ -5,17 +5,20 @@ module HydraAuctionOffchain.Codec
   , bigIntCodecNum
   , byteArrayCodec
   , currencySymbolCodec
+  , ed25519SignatureCodec
   , logLevelCodec
   , orefCodec
   , portCodec
   , posixTimeCodec
   , pubKeyHashCodec
+  , publicKeyCodec
   , serverConfigCodec
   , sysStartCodec
   , tokenNameCodec
   , transactionHashCodec
   , txCodec
   , valueCodec
+  , vkeyWitnessCodec
   ) where
 
 import Prelude
@@ -31,9 +34,13 @@ import Contract.Config (NetworkId, ServerConfig)
 import Contract.Prim.ByteArray (ByteArray, byteArrayToHex, hexToByteArray)
 import Contract.Time (POSIXTime(POSIXTime), SystemStart)
 import Contract.Transaction
-  ( Transaction
+  ( Ed25519Signature
+  , PublicKey
+  , Transaction
   , TransactionHash(TransactionHash)
   , TransactionInput(TransactionInput)
+  , Vkey(Vkey)
+  , Vkeywitness(Vkeywitness)
   )
 import Contract.Value
   ( CurrencySymbol
@@ -45,9 +52,17 @@ import Contract.Value
   , mkTokenName
   )
 import Contract.Value (flattenValue, singleton) as Value
+import Ctl.Internal.Cardano.Types.Transaction
+  ( convertEd25519Signature
+  , convertPubKey
+  , mkFromCslEd25519Signature
+  , mkFromCslPubKey
+  )
+import Ctl.Internal.Deserialization.FromBytes (fromBytes)
 import Ctl.Internal.Deserialization.Transaction (deserializeTransaction)
 import Ctl.Internal.Serialization (convertTransaction, toBytes)
 import Ctl.Internal.Serialization.Hash (ed25519KeyHashFromBytes, ed25519KeyHashToBytes)
+import Ctl.Internal.Serialization.Keys (bytesFromPublicKey)
 import Data.Codec.Argonaut
   ( JsonCodec
   , array
@@ -58,7 +73,7 @@ import Data.Codec.Argonaut
   , prismaticCodec
   , string
   ) as CA
-import Data.Codec.Argonaut.Compat (maybe) as CA
+import Data.Codec.Argonaut.Compat (maybe, tuple) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (hush)
 import Data.Foldable (foldMap)
@@ -198,3 +213,22 @@ valueEntryCodec = CA.object "ValueEntry" $ CAR.record
   , tn: tokenNameCodec
   , quantity: bigIntCodec
   }
+
+vkeyWitnessCodec :: CA.JsonCodec Vkeywitness
+vkeyWitnessCodec =
+  wrapIso Vkeywitness $
+    CA.tuple (wrapIso Vkey publicKeyCodec) ed25519SignatureCodec
+
+publicKeyCodec :: CA.JsonCodec PublicKey
+publicKeyCodec =
+  CA.prismaticCodec "PublicKey"
+    (map mkFromCslPubKey <<< fromBytes <<< wrap)
+    (unwrap <<< bytesFromPublicKey <<< convertPubKey)
+    byteArrayCodec
+
+ed25519SignatureCodec :: CA.JsonCodec Ed25519Signature
+ed25519SignatureCodec =
+  CA.prismaticCodec "Ed25519Signature"
+    (map mkFromCslEd25519Signature <<< fromBytes <<< wrap)
+    (unwrap <<< toBytes <<< convertEd25519Signature)
+    byteArrayCodec
