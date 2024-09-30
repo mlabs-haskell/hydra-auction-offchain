@@ -196,7 +196,7 @@ moveBidTest { autoInit } =
 
 mkBidTerms :: AuctionInfoExtended -> BigInt -> Contract BidTerms
 mkBidTerms auctionInfo bidAmount = do
-  sellerSignature <- discoverSellerSignature auctionInfo
+  sellerSignature <- discoverSellerSignature auctionInfo Nothing
   pkh <- liftedM "Could not get bidder pkh" ownPaymentPubKeyHash
   let payload = bidderSignatureMessage (unwrap auctionInfo).auctionId (unwrap pkh) bidAmount
   { signature, vkey, address } <- liftedE $ runExceptT $ signMessage payload

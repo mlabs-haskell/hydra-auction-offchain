@@ -38,6 +38,7 @@ isHeadClosed status =
 
 derive instance Generic HydraHeadStatus _
 derive instance Eq HydraHeadStatus
+derive instance Ord HydraHeadStatus
 
 instance Show HydraHeadStatus where
   show = genericShow

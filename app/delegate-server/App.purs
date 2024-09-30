@@ -30,6 +30,7 @@ import Contract.Value (CurrencySymbol)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Logger.Trans (class MonadLogger, LoggerT(LoggerT), runLoggerT)
 import Control.Monad.Reader (class MonadAsk, class MonadReader, ReaderT, ask, asks, runReaderT)
+import Control.Monad.Rec.Class (class MonadRec)
 import Control.Monad.Trans.Class (class MonadTrans, lift)
 import Data.Log.Formatter.Pretty (prettyFormatter)
 import Data.Log.Message (Message)
@@ -93,6 +94,7 @@ derive newtype instance MonadReader AppState AppM
 derive newtype instance MonadThrow Error AppM
 derive newtype instance MonadError Error AppM
 derive newtype instance MonadLogger AppM
+derive newtype instance MonadRec AppM
 
 type AppLogger = Message -> ReaderT AppState Aff Unit
 
