@@ -107,7 +107,7 @@ wsServerGeneric wsServerPort network appMap = do
     wss.onConnect \{ connPath, sendMessages } -> do
       let auctionCsRaw = fromMaybe connPath $ String.stripPrefix (Pattern "/") connPath
       case decodeCbor =<< hexToCborBytes auctionCsRaw of
-        Nothing -> do
+        Nothing ->
           pure $ CloseWebSocketConn auctionCsDecodingFailure
         Just auctionCs ->
           appMap.lookupApp auctionCs >>= case _ of

@@ -6,6 +6,7 @@ module Test.Contract.PlaceBid
 import Contract.Prelude
 
 import Cardano.Plutus.Types.Address (toCardano) as Plutus.Address
+import Cardano.Types (PublicKey)
 import Contract.Address (getNetworkId)
 import Contract.Monad (Contract, liftContractM, liftedE)
 import Contract.Prim.ByteArray (ByteArray)
@@ -77,7 +78,7 @@ initAuction seller bidder = do
 
   pure auctionInfo
 
-discoverSellerSignature :: AuctionInfoExtended -> Maybe VerificationKey -> Contract ByteArray
+discoverSellerSignature :: AuctionInfoExtended -> Maybe PublicKey -> Contract ByteArray
 discoverSellerSignature (AuctionInfoExtended auctionInfo) bidderVk = do
   network <- getNetworkId
   sellerAddress <-

@@ -9,7 +9,7 @@
   inputs = {
     nixpkgs.follows = "ctl/nixpkgs";
     cardano-node.url = "github:input-output-hk/cardano-node/9.2.0";
-    ctl.url = "github:Plutonomicon/cardano-transaction-lib/566e7153c88fdab7005a3b4b02e6fec41c7d5c94";
+    ctl.url = "github:Plutonomicon/cardano-transaction-lib/4bae6a202f3c77952d6067f94d8ae63cb74f3c0f";
     ctl.inputs.cardano-node.follows = "cardano-node";
     hydra.url = "github:input-output-hk/hydra/0.19.0";
     hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/delegate-info";
@@ -26,6 +26,9 @@
           ctl.overlays.purescript
           ctl.overlays.runtime
           ctl.overlays.spago
+          (_: _: {
+            arion = (import ctl.inputs.nixpkgs-arion { inherit system; }).arion;
+          })
         ];
       };
 
@@ -65,6 +68,18 @@
         };
     in
     {
+      apps = perSystem (system:
+        let
+          pkgs = nixpkgsFor system;
+          runtimeConfig = final: with final; {
+            network.name = "preprod";
+          };
+        in
+        {
+          ctl-runtime = pkgs.launchCtlRuntime runtimeConfig;
+        }
+      );
+
       packages = perSystem (system:
         let
           pkgs = nixpkgsFor system;

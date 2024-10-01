@@ -8,7 +8,8 @@ import Prelude
 
 import Cardano.Plutus.Types.Address (Address) as Plutus
 import Cardano.Plutus.Types.Address (pubKeyHashAddress) as Plutus.Address
-import Cardano.Types (NetworkId)
+import Cardano.Types (NetworkId, PublicKey)
+import Cardano.Types.PublicKey (fromRawBytes, hash) as PublicKey
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Data.Codec.Argonaut (JsonCodec, object) as CA
@@ -19,21 +20,20 @@ import Data.Maybe (Maybe(Nothing), fromJust)
 import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (plutusAddressCodec)
+import HydraAuctionOffchain.Codec (plutusAddressCodec, publicKeyCodec)
 import HydraAuctionOffchain.Contract.Types.VerificationKey
   ( VerificationKey
   , vkeyBytes
   , vkeyCodec
   )
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import Partial.Unsafe (unsafePartial)
 import Test.QuickCheck (class Arbitrary, arbitrary)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidderInfo = BidderInfo
   { bidderAddress :: Plutus.Address
-  , bidderVk :: VerificationKey
+  , bidderVk :: PublicKey
   }
 
 derive instance Generic BidderInfo _
@@ -45,7 +45,7 @@ instance Show BidderInfo where
 
 type BidderInfoSchema =
   ("bidderAddress" :~: Plutus.Address)
-    :$: ("bidderVk" :~: VerificationKey)
+    :$: ("bidderVk" :~: PublicKey)
     :$: Nil
 
 bidderInfoSchema :: Proxy BidderInfoSchema
@@ -67,13 +67,18 @@ bidderInfoCodec :: NetworkId -> CA.JsonCodec BidderInfo
 bidderInfoCodec network =
   wrapIso BidderInfo $ CA.object "BidderInfo" $ CAR.record
     { bidderAddress: plutusAddressCodec network
-    , bidderVk: vkeyCodec
+    , bidderVk: publicKeyCodec
     }
 
 instance Arbitrary BidderInfo where
   arbitrary = do
-    bidderVk <- arbitrary
+    bidderVk <-
+      arbitrary <#>
+        unsafePartial fromJust
+          <<< PublicKey.fromRawBytes
+          <<< wrap
+          <<< vkeyBytes
     let
-      bidderPkh = unsafePartial fromJust $ hashVk $ vkeyBytes bidderVk
+      bidderPkh = PublicKey.hash bidderVk
       bidderAddress = Plutus.Address.pubKeyHashAddress (wrap $ wrap bidderPkh) Nothing
     pure $ wrap { bidderAddress, bidderVk }

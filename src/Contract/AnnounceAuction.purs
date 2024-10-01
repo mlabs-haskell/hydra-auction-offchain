@@ -77,7 +77,7 @@ import Ctl.Internal.BalanceTx.CoinSelection
   )
 import Ctl.Internal.CoinSelection.UtxoIndex (buildUtxoIndex)
 import Ctl.Internal.Types.Val (fromValue) as Val
-import Data.Array (cons, head) as Array
+import Data.Array (cons, head, uncons) as Array
 import Data.Bifunctor (lmap)
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
@@ -86,7 +86,7 @@ import Data.Either (hush)
 import Data.List (fromFoldable) as List
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
-import Data.Set (empty, findMin, intersection) as Set
+import Data.Set (findMin, intersection) as Set
 import Data.UUID (UUID)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.AppManager.Types (AuctionSlot)
@@ -95,6 +95,7 @@ import DelegateServer.Handlers.ReserveSlot (ReserveSlotError)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   )
+import Effect.Aff.Class (liftAff)
 import HydraAuctionOffchain.Codec (orefCodec, txHashCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies
   ( auctionEscrowTokenName
@@ -484,8 +485,10 @@ getDelegateGroupSlot :: Array String -> Aff (Either ServiceError (Maybe AuctionS
 getDelegateGroupSlot httpServers =
   runExceptT do
     sets <- parTraverse (ExceptT <<< getAvailableSlotsRequest) httpServers
-    let availableSlots = foldl Set.intersection Set.empty sets
-    pure $ Set.findMin availableSlots
+    pure $ maybe
+      Nothing
+      (\{ head, tail } -> Set.findMin $ foldl Set.intersection head tail)
+      (Array.uncons sets)
 
 ----------------------------------------------------------------------
 -- Errors

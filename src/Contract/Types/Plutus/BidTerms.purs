@@ -10,15 +10,19 @@ module HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
+import Cardano.AsCbor (decodeCbor)
 import Cardano.Plutus.Types.PubKeyHash (PubKeyHash(PubKeyHash)) as Plutus
 import Cardano.Types
   ( BigNum
   , Credential(PubKeyHashCredential)
   , Ed25519KeyHash
   , NetworkId
+  , PublicKey
+  , RawBytes(RawBytes)
   , ScriptHash
   )
 import Cardano.Types.Address (mkPaymentAddress)
+import Cardano.Types.PublicKey (verify) as PublicKey
 import Contract.Numeric.BigNum (sub, zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray, byteLength, hexToByteArrayUnsafe)
@@ -42,7 +46,6 @@ import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidder
 import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
-import HydraAuctionOffchain.Lib.Crypto (verifySignature)
 import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import HydraAuctionOffchain.Lib.ToData (serializeData)
 import Type.Proxy (Proxy(Proxy))
@@ -108,25 +111,25 @@ validateBidTerms network auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerm
 
   verifyBidderSignature :: Effect Boolean
   verifyBidderSignature =
-    case toPubKeyHash bidderInfo.bidderAddress of
-      Just (Plutus.PubKeyHash bidderPkh) -> do
+    case toPubKeyHash bidderInfo.bidderAddress, decodeCbor (wrap bidTerms.bidderSignature) of
+      Just (Plutus.PubKeyHash bidderPkh), Just bidderSignature -> do
         let
           addr = mkPaymentAddress network (wrap $ PubKeyHashCredential bidderPkh) Nothing
           payload = bidderSignatureMessage auctionCs bidderPkh bidTerms.price
-        sigStruct <- mkSigStructure addr payload
-        verifySignature (vkeyBytes bidderInfo.bidderVk) sigStruct bidTerms.bidderSignature
-      Nothing -> pure false
+        sigStruct <- RawBytes <$> mkSigStructure addr payload
+        pure $ PublicKey.verify bidderInfo.bidderVk sigStruct bidderSignature
+      _, _ -> pure false
 
   verifySellerSignature :: Effect Boolean
   verifySellerSignature =
-    case toPubKeyHash auctionTerms.sellerAddress of
-      Just (Plutus.PubKeyHash sellerPkh) -> do
+    case toPubKeyHash auctionTerms.sellerAddress, decodeCbor (wrap bidTerms.sellerSignature) of
+      Just (Plutus.PubKeyHash sellerPkh), Just sellerSignature -> do
         let
           addr = mkPaymentAddress network (wrap $ PubKeyHashCredential sellerPkh) Nothing
-          payload = sellerSignatureMessage auctionCs $ vkeyBytes bidderInfo.bidderVk
-        sigStruct <- mkSigStructure addr payload
-        verifySignature (vkeyBytes auctionTerms.sellerVk) sigStruct bidTerms.sellerSignature
-      Nothing -> pure false
+          payload = sellerSignatureMessage auctionCs bidderInfo.bidderVk
+        sigStruct <- RawBytes <$> mkSigStructure addr payload
+        pure $ PublicKey.verify auctionTerms.sellerVk sigStruct sellerSignature
+      _, _ -> pure false
 
 -- Maximum (reasonable) size of the bidder signature message where
 -- bidPrice is set to the total supply of ADA (45 billion). 
@@ -142,7 +145,7 @@ bidderSignatureMessage auctionCs bidderPkh bidPrice =
   padMessage bidderSignatureMessageSize $ unwrap
     (serializeData auctionCs <> serializeData bidderPkh <> serializeData bidPrice)
 
-sellerSignatureMessage :: ScriptHash -> ByteArray -> ByteArray
+sellerSignatureMessage :: ScriptHash -> PublicKey -> ByteArray
 sellerSignatureMessage auctionCs bidderVk =
   unwrap $ serializeData auctionCs <> serializeData bidderVk
 

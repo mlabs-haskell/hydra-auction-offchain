@@ -181,7 +181,7 @@ import HydraAuctionOffchain.Contract.QueryStandingBidState
 import HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError
       ( StartBidding_Error_InvalidAuctionTerms
-      , StartBidding_Error_CouldNotGetOwnAddress
+      , StartBidding_Error_CouldNotGetOwnPkh
       , StartBidding_Error_ContractNotInitiatedBySeller
       , StartBidding_Error_CurrentTimeBeforeBiddingStart
       , StartBidding_Error_CurrentTimeAfterBiddingEnd

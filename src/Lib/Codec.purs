@@ -13,7 +13,7 @@ module HydraAuctionOffchain.Lib.Codec
 
 import Prelude
 
-import Cardano.Types (AssetName, BigNum)
+import Cardano.Types (AssetName, BigNum, PublicKey)
 import Contract.Prim.ByteArray (ByteArray)
 import Contract.Transaction (TransactionHash)
 import Control.Alt ((<|>))
@@ -57,6 +57,7 @@ import HydraAuctionOffchain.Codec
   , bigIntCodec
   , bigNumCodec
   , byteArrayCodec
+  , publicKeyCodec
   , txHashCodec
   )
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
@@ -209,3 +210,6 @@ instance HasJson TransactionHash anyParams where
 
 instance HasJson AssetName anyParams where
   jsonCodec _ = const assetNameCodec
+
+instance HasJson PublicKey anyParams where
+  jsonCodec _ = const publicKeyCodec

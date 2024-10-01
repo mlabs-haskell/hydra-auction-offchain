@@ -1,7 +1,7 @@
 module HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError
       ( StartBidding_Error_InvalidAuctionTerms
-      , StartBidding_Error_CouldNotGetOwnAddress
+      , StartBidding_Error_CouldNotGetOwnPkh
       , StartBidding_Error_ContractNotInitiatedBySeller
       , StartBidding_Error_CurrentTimeBeforeBiddingStart
       , StartBidding_Error_CurrentTimeAfterBiddingEnd
@@ -19,8 +19,16 @@ import Contract.Prelude
 
 import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
 import Cardano.Plutus.Types.Value (toCardano) as Plutus.Value
-import Cardano.Types (NetworkId, PaymentPubKeyHash, PlutusData, RedeemerDatum)
+import Cardano.Types
+  ( Credential(PubKeyHashCredential)
+  , NetworkId
+  , PaymentPubKeyHash
+  , PlutusData
+  , RedeemerDatum
+  )
+import Cardano.Types.Address (mkPaymentAddress)
 import Cardano.Types.BigNum (one) as BigNum
+import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
 import Contract.PlutusData (toData)
@@ -38,10 +46,11 @@ import Contract.TxConstraints
   ) as Constraints
 import Contract.Value (TokenName, Value)
 import Contract.Value (singleton) as Value
-import Contract.Wallet (getWalletAddress)
+import Contract.Wallet (ownPaymentPubKeyHashes)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
+import Data.Array (head) as Array
 import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Map (singleton) as Map
@@ -122,7 +131,10 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
     ?? StartBidding_Error_AuctionLotValueConversionFailure
 
   -- Check that the contract is initiated by the seller:
-  ownAddress <- getWalletAddress !? StartBidding_Error_CouldNotGetOwnAddress
+  network <- lift getNetworkId
+  ownPkh <- (map unwrap <<< Array.head <$> ownPaymentPubKeyHashes)
+    !? StartBidding_Error_CouldNotGetOwnPkh
+  let ownAddress = mkPaymentAddress network (wrap $ PubKeyHashCredential ownPkh) Nothing
   when (Plutus.Address.fromCardano ownAddress /= Just auctionTermsRec.sellerAddress) $
     throwError StartBidding_Error_ContractNotInitiatedBySeller
 
@@ -225,7 +237,7 @@ mkStartBiddingContractWithErrors (StartBiddingContractParams params) = do
 
 data StartBiddingContractError
   = StartBidding_Error_InvalidAuctionTerms (Array AuctionTermsValidationError)
-  | StartBidding_Error_CouldNotGetOwnAddress
+  | StartBidding_Error_CouldNotGetOwnPkh
   | StartBidding_Error_ContractNotInitiatedBySeller
   | StartBidding_Error_CurrentTimeBeforeBiddingStart
   | StartBidding_Error_CurrentTimeAfterBiddingEnd
@@ -246,7 +258,7 @@ instance ToContractError StartBiddingContractError where
     StartBidding_Error_InvalidAuctionTerms errors ->
       "Invalid auction terms, errors: " <> show errors <> "."
 
-    StartBidding_Error_CouldNotGetOwnAddress ->
+    StartBidding_Error_CouldNotGetOwnPkh ->
       "Could not get own address."
 
     StartBidding_Error_ContractNotInitiatedBySeller ->

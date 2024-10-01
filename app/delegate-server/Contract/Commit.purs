@@ -10,6 +10,7 @@ module DelegateServer.Contract.Commit
       , CommitBid_Error_CouldNotIndexRedeemers
       , CommitBid_Error_CouldNotGetOwnPubKeyHash
       , CommitBid_Error_CommitRequestFailed
+      , CommitBid_Error_SignCommitTxRequestFailed
       , CommitBid_Error_CommitMultiSignFailed
       , CommitBid_Error_SubmitTxFailed
       )
@@ -20,7 +21,7 @@ module DelegateServer.Contract.Commit
 
 import Contract.Prelude
 
-import Cardano.Types (Transaction, TransactionHash, TransactionInput)
+import Cardano.Types (ScriptHash, Transaction, TransactionHash, TransactionInput)
 import Contract.Chain (currentTime)
 import Contract.Log (logDebug', logWarn')
 import Contract.Monad (Contract)
@@ -41,6 +42,7 @@ import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
+import Ctl.Internal.ServerConfig (mkHttpUrl)
 import Data.Argonaut (Json, encodeJson)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
@@ -51,7 +53,7 @@ import DelegateServer.Handlers.SignCommitTx (signCommitTxErrorCodec)
 import DelegateServer.HydraNodeApi.Http (commit)
 import DelegateServer.Lib.ServerConfig (mkLocalhostHttpServerConfig)
 import DelegateServer.Lib.Transaction (appendTxSignatures, reSignTransaction, setAuxDataHash)
-import DelegateServer.PeerDelegate.Http (signCommitTx)
+import DelegateServer.PeerDelegate.Http (signCommitTxRequest)
 import DelegateServer.State (class AppBase, class AppInit, access, readAppState)
 import DelegateServer.Types.HydraCommitRequest (mkFullCommitRequest, mkSimpleCommitRequest)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer)
@@ -120,6 +122,7 @@ data CommitStandingBidError
   | CommitBid_Error_CouldNotIndexRedeemers
   | CommitBid_Error_CouldNotGetOwnPubKeyHash
   | CommitBid_Error_CommitRequestFailed
+  | CommitBid_Error_SignCommitTxRequestFailed
   | CommitBid_Error_CommitMultiSignFailed
   | CommitBid_Error_SubmitTxFailed
 
@@ -151,7 +154,7 @@ commitStandingBid = do
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       buildCommitTx commitRequest
   { auctionConfig: { peers } } <- unwrap <$> access (Proxy :: _ "config")
-  commitTxMultiSigned <- multiSignCommitTx peers commitTx
+  commitTxMultiSigned <- multiSignCommitTx peers commitTx auctionInfo.auctionId
   txHash <- runContract (submit commitTxMultiSigned) !* CommitBid_Error_SubmitTxFailed
   pure $ standingBid /\ txHash
 
@@ -161,14 +164,18 @@ multiSignCommitTx
    . AppBase m
   => Array HydraHeadPeer
   -> Transaction
+  -> ScriptHash
   -> ExceptT CommitStandingBidError m Transaction
-multiSignCommitTx peers commitTx = do
+multiSignCommitTx peers commitTx auctionCs = do
   responses <- do
     pkh <- runContract ownPaymentPubKeyHash !? CommitBid_Error_CouldNotGetOwnPubKeyHash
     let reqPayload = { commitTx, commitLeader: unwrap pkh }
-    withExceptT (const CommitBid_Error_CommitRequestFailed) $
-      -- TODO: use parTraverse
-      traverse (ExceptT <<< liftAff <<< flip signCommitTx reqPayload <<< _.httpServer)
+    withExceptT (const CommitBid_Error_SignCommitTxRequestFailed) $
+      traverse
+        ( \{ httpServer } ->
+            ExceptT $ liftAff $
+              signCommitTxRequest (mkHttpUrl httpServer) auctionCs reqPayload
+        )
         peers
   signatures <-
     traverse

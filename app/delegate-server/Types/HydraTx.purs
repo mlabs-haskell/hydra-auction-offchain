@@ -32,5 +32,5 @@ mkHydraTx :: Transaction -> HydraTx
 mkHydraTx tx =
   { cborHex: unwrap $ encodeCbor tx
   , description: ""
-  , "type": "Tx BabbageEra"
+  , "type": "Tx ConwayEra"
   }

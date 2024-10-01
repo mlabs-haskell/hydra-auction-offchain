@@ -4,7 +4,8 @@ module DelegateServer.Server
 
 import Prelude
 
-import Data.Either (Either(Left, Right))
+import Cardano.AsCbor (decodeCbor)
+import Contract.CborBytes (hexToCborBytes)
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap)
@@ -12,7 +13,7 @@ import Data.Time.Duration (Seconds)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runApp)
 import DelegateServer.AppManager (AppManager)
-import DelegateServer.Handler.GetAvailableSlots (getAvailableSlotsHandler)
+import DelegateServer.Handlers.GetAvailableSlots (getAvailableSlotsHandler)
 import DelegateServer.Handlers.HostAuction (hostAuctionHandler)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
@@ -39,8 +40,6 @@ import HTTPure
   ) as HTTPure
 import HTTPure (Method(Get, Options, Post), (!!), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
-import HydraAuctionOffchain.Codec (scriptHashCodec)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
 import URI.Port (Port)
 import URI.Port (toInt) as Port
 
@@ -104,10 +103,10 @@ appLookupMiddleware
   -> Aff HTTPure.Response
 appLookupMiddleware router' appManagerAvar request@{ headers }
   | Just auctionCsRaw <- headers !! "Auction-Cs" =
-      case caDecodeString scriptHashCodec auctionCsRaw of
-        Left _ ->
+      case decodeCbor =<< hexToCborBytes auctionCsRaw of
+        Nothing ->
           HTTPure.badRequest "Could not decode Auction-Cs request header"
-        Right auctionCs -> do
+        Just auctionCs -> do
           { activeAuctions } <- unwrap <$> AVar.read appManagerAvar
           case Map.lookup auctionCs activeAuctions of
             Nothing ->

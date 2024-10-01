@@ -4,6 +4,7 @@ module Test.Contract.DelegateServer
 
 import Contract.Prelude
 
+import Cardano.AsCbor (encodeCbor)
 import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
 import Cardano.Types (BigNum)
 import Cardano.Types.BigNum (fromInt) as BigNum
@@ -213,7 +214,7 @@ mkBidTerms auctionInfo bidAmount = do
   pure $ BidTerms
     { bidder: BidderInfo { bidderAddress, bidderVk: vkey }
     , price: bidAmount
-    , bidderSignature: signature
+    , bidderSignature: unwrap $ encodeCbor signature
     , sellerSignature
     }
 

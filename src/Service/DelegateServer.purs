@@ -1,45 +1,44 @@
 module HydraAuctionOffchain.Service.DelegateServer
   ( getAvailableSlotsRequest
   , hostAuctionRequest
+  , moveBidRequest
+  , placeBidRequest
   , reserveSlotRequest
   ) where
 
 import Prelude
 
-import Affjax (Error, URL, Response, defaultRequest) as Affjax
-import Affjax.RequestBody (RequestBody(Json)) as Affjax
-import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
-import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
-import Ctl.Internal.Affjax (request) as Affjax
+import Cardano.Types (NetworkId, ScriptHash)
 import Ctl.Internal.Helpers ((<</>>))
-import Data.Argonaut (Json)
-import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (JsonCodec, encode) as CA
-import Data.Either (Either(Left, Right))
-import Data.HTTP.Method (Method(GET, POST))
+import Data.Array (singleton) as Array
+import Data.Codec.Argonaut (encode) as CA
+import Data.Either (Either)
 import Data.Maybe (Maybe(Just, Nothing))
-import Data.Newtype (wrap)
 import Data.Set (Set)
 import DelegateServer.AppManager.Types (AuctionSlot)
-import DelegateServer.Handler.GetAvailableSlots (availableSlotsCodec)
+import DelegateServer.Handlers.GetAvailableSlots (availableSlotsCodec)
 import DelegateServer.Handlers.HostAuction
-  ( HostAuctionError
-  , HostAuctionRequest
+  ( HostAuctionRequest
+  , HostAuctionResponse
   , hostAuctionRequestCodec
   , hostAuctionResponseCodec
   )
+import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidResponseCodec)
+import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidResponseCodec)
 import DelegateServer.Handlers.ReserveSlot
-  ( ReserveSlotError
-  , ReserveSlotSuccess
-  , ReserveSlotRequest
+  ( ReserveSlotRequest
+  , ReserveSlotResponse
   , reserveSlotRequestCodec
   , reserveSlotResponseCodec
   )
-import DelegateServer.Types.ServerResponse (ServerResponse)
 import Effect.Aff (Aff)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
-import HydraAuctionOffchain.Service.Common
-  ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
+import HydraAuctionOffchain.Contract.Types (BidTerms, bidTermsCodec)
+import HydraAuctionOffchain.Service.Common (ServiceError)
+import HydraAuctionOffchain.Service.DelegateServer.Http
+  ( getRequest
+  , handleResponse
+  , mkAuctionCsHeader
+  , postRequest
   )
 
 getAvailableSlotsRequest :: String -> Aff (Either ServiceError (Set AuctionSlot))
@@ -50,54 +49,50 @@ getAvailableSlotsRequest httpServer =
 reserveSlotRequest
   :: String
   -> ReserveSlotRequest
-  -> Aff (Either ServiceError (ServerResponse ReserveSlotSuccess ReserveSlotError))
+  -> Aff (Either ServiceError ReserveSlotResponse)
 reserveSlotRequest httpServer reqBody =
   handleResponse reserveSlotResponseCodec <$>
     postRequest
-      (httpServer <</>> "reserveSlot")
-      (CA.encode reserveSlotRequestCodec reqBody)
+      { url: httpServer <</>> "reserveSlot"
+      , content: Just $ CA.encode reserveSlotRequestCodec reqBody
+      , headers: mempty
+      }
 
 hostAuctionRequest
   :: String
   -> HostAuctionRequest
-  -> Aff (Either ServiceError (ServerResponse Unit HostAuctionError))
+  -> Aff (Either ServiceError HostAuctionResponse)
 hostAuctionRequest httpServer reqBody =
   handleResponse hostAuctionResponseCodec <$>
     postRequest
-      (httpServer <</>> "hostAuction")
-      (CA.encode hostAuctionRequestCodec reqBody)
+      { url: httpServer <</>> "hostAuction"
+      , content: Just $ CA.encode hostAuctionRequestCodec reqBody
+      , headers: mempty
+      }
 
-getRequest :: Affjax.URL -> Aff (Either Affjax.Error (Affjax.Response String))
-getRequest = affjaxRequest GET Nothing
+moveBidRequest
+  :: String
+  -> NetworkId
+  -> ScriptHash
+  -> Aff (Either ServiceError MoveBidResponse)
+moveBidRequest httpServer network auctionCs =
+  handleResponse (moveBidResponseCodec network) <$>
+    postRequest
+      { url: httpServer <</>> "moveBid"
+      , content: Nothing
+      , headers: Array.singleton $ mkAuctionCsHeader auctionCs
+      }
 
-postRequest :: Affjax.URL -> Json -> Aff (Either Affjax.Error (Affjax.Response String))
-postRequest url content = affjaxRequest POST (Just content) url
-
-affjaxRequest
-  :: Method
-  -> Maybe Json
-  -> Affjax.URL
-  -> Aff (Either Affjax.Error (Affjax.Response String))
-affjaxRequest method content url =
-  Affjax.request $ Affjax.defaultRequest
-    { method = Left method
-    , url = url
-    , responseFormat = Affjax.ResponseFormat.string
-    , content = Affjax.Json <$> content
-    }
-
-handleResponse
-  :: forall (a :: Type)
-   . CA.JsonCodec a
-  -> Either Affjax.Error (Affjax.Response String)
-  -> Either ServiceError a
-handleResponse respCodec = case _ of
-  Left affjaxErr ->
-    Left $ ServiceHttpError $ wrap affjaxErr
-  Right { status, body } ->
-    case status of
-      Affjax.StatusCode statusCode | statusCode >= 200 && statusCode <= 299 ->
-        lmap (ServiceDecodeJsonError body) $
-          caDecodeString respCodec body
-      _ ->
-        Left $ ServiceHttpResponseError status body
+placeBidRequest
+  :: String
+  -> NetworkId
+  -> BidTerms
+  -> ScriptHash
+  -> Aff (Either ServiceError PlaceBidResponse)
+placeBidRequest httpServer network bidTerms auctionCs =
+  handleResponse placeBidResponseCodec <$>
+    postRequest
+      { url: httpServer <</>> "placeBid"
+      , content: Just $ CA.encode (bidTermsCodec network) bidTerms
+      , headers: Array.singleton $ mkAuctionCsHeader auctionCs
+      }

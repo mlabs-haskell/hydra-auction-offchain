@@ -16,10 +16,7 @@ module HydraAuctionOffchain.Contract.SendBid
 
 import Contract.Prelude
 
-import Affjax (Error, Response, defaultRequest) as Affjax
-import Affjax.RequestBody (RequestBody(Json)) as Affjax
-import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
-import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
+import Cardano.AsCbor (encodeCbor)
 import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
 import Cardano.Types (BigNum, NetworkId, ScriptHash)
 import Contract.Address (getNetworkId)
@@ -30,14 +27,11 @@ import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT(ExceptT), throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Ctl.Internal.Affjax (request) as Affjax
-import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (JsonCodec, encode, object) as CA
+import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidResponseCodec)
+import DelegateServer.Handlers.PlaceBid (PlaceBidResponse)
 import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -49,7 +43,6 @@ import HydraAuctionOffchain.Contract.Types
   , DelegateInfo
   , DelegateInfoValidationError
   , auctionTermsCodec
-  , bidTermsCodec
   , bidderSignatureMessage
   , delegateInfoCodec
   , mkContractOutput
@@ -58,10 +51,8 @@ import HydraAuctionOffchain.Contract.Types
   , validateDelegateInfo
   )
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
-import HydraAuctionOffchain.Service.Common
-  ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
-  )
+import HydraAuctionOffchain.Service.Common (ServiceError)
+import HydraAuctionOffchain.Service.DelegateServer (placeBidRequest)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype SendBidContractParams = SendBidContractParams
@@ -138,43 +129,14 @@ mkSendBidContractWithErrors (SendBidContractParams params) = do
     bidTerms = BidTerms
       { bidder: BidderInfo { bidderAddress: bidderAddressPlutus, bidderVk }
       , price: params.bidAmount
-      , bidderSignature
+      , bidderSignature: unwrap $ encodeCbor bidderSignature
       , sellerSignature: params.sellerSignature
       }
 
-  delegateHttpServer <- randomHttpServer delegateInfo
+  httpServer <- randomHttpServer delegateInfo
   network <- lift getNetworkId
-  let
-    sendBidToDelegate' = ExceptT $ liftAff $ sendBidToDelegate network delegateHttpServer
-      bidTerms
-  withExceptT SendBid_Error_PlaceBidRequestServiceError
-    sendBidToDelegate'
-
-sendBidToDelegate
-  :: NetworkId -> String -> BidTerms -> Aff (Either ServiceError PlaceBidResponse)
-sendBidToDelegate network httpServer bidTerms = do
-  handleResponse <$> Affjax.request
-    ( Affjax.defaultRequest
-        { method = Left POST
-        , url = httpServer <> "/placeBid"
-        , content = Just $ Affjax.Json $ CA.encode (bidTermsCodec network) bidTerms
-        , responseFormat = Affjax.ResponseFormat.string
-        }
-    )
-
-handleResponse
-  :: Either Affjax.Error (Affjax.Response String)
-  -> Either ServiceError PlaceBidResponse
-handleResponse = case _ of
-  Left affjaxError ->
-    Left $ ServiceHttpError $ wrap affjaxError
-  Right { status, body } ->
-    case status of
-      Affjax.StatusCode statusCode | statusCode == 201 || statusCode == 400 ->
-        lmap (ServiceDecodeJsonError body) $
-          caDecodeString placeBidResponseCodec body
-      _ ->
-        Left $ ServiceHttpResponseError status body
+  withExceptT SendBid_Error_PlaceBidRequestServiceError $ ExceptT $ liftAff $
+    placeBidRequest httpServer network bidTerms auctionCs
 
 ----------------------------------------------------------------------
 -- Errors

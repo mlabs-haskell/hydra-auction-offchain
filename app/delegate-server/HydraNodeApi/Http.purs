@@ -18,6 +18,7 @@ import Data.Either (Either(Left, Right))
 import Data.HTTP.Method (Method(POST))
 import Data.Maybe (Maybe(Just))
 import Data.Newtype (wrap)
+import Debug (traceM)
 import DelegateServer.Types.HydraDraftCommitTx (DraftCommitTx, draftCommitTxCodec)
 import Effect.Aff (Aff)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
@@ -28,8 +29,10 @@ import HydraAuctionOffchain.Service.Common
 commit :: ServerConfig -> Json -> Aff (Either ServiceError DraftCommitTx)
 commit serverConfig commitRequest = do
   let endpoint = mkHttpUrl serverConfig <> "/commit"
-  handleResponse draftCommitTxCodec <$>
+  resp <- handleResponse draftCommitTxCodec <$>
     postRequest endpoint (Just commitRequest)
+  traceM $ "commit response: " <> show resp
+  pure resp
 
 postRequest :: Affjax.URL -> Maybe Json -> Aff (Either Affjax.Error (Affjax.Response String))
 postRequest endpoint mPayload =

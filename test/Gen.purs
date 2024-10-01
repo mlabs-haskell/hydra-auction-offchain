@@ -10,10 +10,12 @@ import Prelude
 import Cardano.Plutus.Types.Address (Address) as Plutus
 import Cardano.Plutus.Types.Address (pubKeyHashAddress)
 import Cardano.Types.BigNum (fromInt) as BigNum
+import Cardano.Types.PublicKey (fromRawBytes) as PublicKey
 import Control.Monad.Gen.Common (genMaybe)
-import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(Nothing), fromJust)
 import Data.Newtype (wrap)
-import HydraAuctionOffchain.Contract.Types (BidTerms, BidderInfo, StandingBidState)
+import HydraAuctionOffchain.Contract.Types (BidTerms, BidderInfo, StandingBidState, vkeyBytes)
+import Partial.Unsafe (unsafePartial)
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (Gen, chooseInt)
 
@@ -36,7 +38,12 @@ genBidTerms = do
 genBidderInfo :: Gen BidderInfo
 genBidderInfo = do
   bidderAddress <- genPubKeyHashAddress
-  bidderVk <- arbitrary
+  bidderVk <-
+    arbitrary <#>
+      unsafePartial fromJust
+        <<< PublicKey.fromRawBytes
+        <<< wrap
+        <<< vkeyBytes
   pure $ wrap
     { bidderAddress
     , bidderVk

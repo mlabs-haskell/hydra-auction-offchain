@@ -5,6 +5,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionAuth
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
+import Cardano.Types (PublicKey)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray)
@@ -20,7 +21,7 @@ import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionAuth = AuctionAuth
   { auctionCs :: CurrencySymbol
-  , signatures :: Array (Tuple VerificationKey ByteArray)
+  , signatures :: Array (Tuple PublicKey ByteArray)
   }
 
 derive instance Generic AuctionAuth _
@@ -32,7 +33,7 @@ instance Show AuctionAuth where
 
 type AuctionAuthSchema =
   ("auctionCs" :~: CurrencySymbol)
-    :$: ("signatures" :~: Array (Tuple VerificationKey ByteArray))
+    :$: ("signatures" :~: Array (Tuple PublicKey ByteArray))
     :$: Nil
 
 auctionAuthSchema :: Proxy AuctionAuthSchema

@@ -20,6 +20,7 @@ module HydraAuctionOffchain.Contract.PlaceBid
 
 import Contract.Prelude
 
+import Cardano.AsCbor (encodeCbor)
 import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
 import Cardano.Types
   ( BigNum
@@ -176,7 +177,7 @@ mkPlaceBidContractWithErrors (PlaceBidContractParams params) = do
     newBidState = wrap $ Just $ BidTerms
       { bidder: BidderInfo { bidderAddress: bidderAddressPlutus, bidderVk }
       , price: params.bidAmount
-      , bidderSignature
+      , bidderSignature: unwrap $ encodeCbor bidderSignature
       , sellerSignature: params.sellerSignature
       }
   network <- lift getNetworkId

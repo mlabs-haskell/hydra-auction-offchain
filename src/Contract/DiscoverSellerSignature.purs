@@ -10,7 +10,7 @@ module HydraAuctionOffchain.Contract.DiscoverSellerSignature
 
 import Contract.Prelude
 
-import Cardano.Types (Address, Ed25519KeyHash, ScriptHash)
+import Cardano.Types (Address, Ed25519KeyHash, PublicKey, ScriptHash)
 import Contract.Address (getNetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
@@ -28,7 +28,7 @@ import Data.Map (toUnfoldable) as Map
 import Data.Newtype (class Newtype)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import HydraAuctionOffchain.Codec (addressCodec, scriptHashCodec)
+import HydraAuctionOffchain.Codec (addressCodec, publicKeyCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -46,7 +46,7 @@ import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 newtype DiscoverSellerSigContractParams = DiscoverSellerSigContractParams
   { auctionCs :: ScriptHash
   , sellerAddress :: Address
-  , bidderVk :: Maybe VerificationKey
+  , bidderVk :: Maybe PublicKey
   }
 
 derive instance Generic DiscoverSellerSigContractParams _
@@ -65,7 +65,7 @@ discoverSellerSigContractParamsCodec =
     CAR.record
       { auctionCs: scriptHashCodec
       , sellerAddress: addressCodec
-      , bidderVk: CA.maybe vkeyCodec
+      , bidderVk: CA.maybe publicKeyCodec
       }
 
 discoverSellerSignature
@@ -93,7 +93,7 @@ discoverSellerSignatureWithErrors (DiscoverSellerSigContractParams params) = do
 
   lift $ findSignature sellerPkh params.auctionCs bidderVk
 
-findSignature :: Ed25519KeyHash -> ScriptHash -> VerificationKey -> Contract (Maybe ByteArray)
+findSignature :: Ed25519KeyHash -> ScriptHash -> PublicKey -> Contract (Maybe ByteArray)
 findSignature sellerPkh auctionCs bidderVk = do
   network <- getNetworkId
   let sellerOracle = mkPersonalOracle network $ wrap sellerPkh

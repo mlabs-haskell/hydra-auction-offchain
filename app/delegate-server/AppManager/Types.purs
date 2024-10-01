@@ -88,7 +88,14 @@ reserveSlot appManagerAvar slotReservationPeriod slot =
     case Map.pop slot appManager.availableSlots of
       Nothing -> pure $ Tuple (AppManager appManager) Nothing
       Just (Tuple appConfig availableSlots) -> do
+        liftEffect $ log $ "Added reservation for slot " <> show slot
         void $ forkReservationMonitor appManagerAvar slotReservationPeriod slot
+        liftEffect $ log $
+          "Reservation for slot "
+            <> show slot
+            <> " will be valid for the next "
+            <> show (unwrap slotReservationPeriod)
+            <> " seconds"
         reservationCode <- liftEffect genUUID
         pure $ Tuple
           ( AppManager $ appManager

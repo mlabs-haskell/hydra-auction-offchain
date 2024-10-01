@@ -13,8 +13,10 @@ import Prelude
 
 import Ansi.Codes (Color(Red))
 import Ansi.Output (foreground, withGraphics)
+import Cardano.AsCbor (encodeCbor)
 import Cardano.Types (ScriptHash, TransactionInput)
 import Contract.Address (getNetworkId)
+import Contract.CborBytes (cborBytesToHex)
 import Contract.Log (logInfo', logTrace', logWarn')
 import Control.Alt (alt)
 import Control.Error.Util (bool)
@@ -223,8 +225,10 @@ hostAuction
                   (removeAuction auctionId appManager')
       putAppState (Proxy :: _ "exit") cleanupHandler -- attach cleanup handler to each app instance
       pure hydraNodeApiWs
+    liftEffect $ log $ "Hosting auction with id: " <> cborBytesToHex (encodeCbor auctionId)
     pure $ AppManager $ appManager
       { availableSlots = Map.delete slot appManager.availableSlots
+      , reservedSlots = Map.delete slot appManager.reservedSlots
       , activeAuctions =
           Map.insert auctionId
             { appState

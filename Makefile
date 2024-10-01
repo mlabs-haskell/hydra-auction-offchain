@@ -63,3 +63,6 @@ delegate-cluster:
 
 delegate-cluster-cleanup:
 	docker compose -f ${delegate-cluster-docker-compose} rm --force --stop --volumes
+
+ctl-runtime:
+	nix run .#ctl-runtime

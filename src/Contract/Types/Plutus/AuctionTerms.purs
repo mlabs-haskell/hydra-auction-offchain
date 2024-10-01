@@ -28,7 +28,8 @@ import Prelude
 import Cardano.Plutus.Types.Address (Address) as Plutus
 import Cardano.Plutus.Types.Value (Value) as Plutus
 import Cardano.Plutus.Types.Value (gt, valueToCoin) as Plutus.Value
-import Cardano.Types (BigNum, Ed25519KeyHash, NetworkId)
+import Cardano.Types (BigNum, Ed25519KeyHash, NetworkId, PublicKey)
+import Cardano.Types.PublicKey (hash) as PublicKey
 import Contract.Numeric.BigNum (fromInt, mul, zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Time (POSIXTime)
@@ -37,7 +38,7 @@ import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Foldable (fold, length)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Nothing), isJust, maybe)
+import Data.Maybe (Maybe(Just, Nothing), isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
@@ -48,6 +49,7 @@ import HydraAuctionOffchain.Codec
   , plutusAddressCodec
   , plutusValueCodec
   , posixTimeCodec
+  , publicKeyCodec
   )
 import HydraAuctionOffchain.Contract.Types.VerificationKey
   ( VerificationKey
@@ -55,7 +57,6 @@ import HydraAuctionOffchain.Contract.Types.VerificationKey
   , vkeyCodec
   )
 import HydraAuctionOffchain.Helpers (errV)
-import HydraAuctionOffchain.Lib.Crypto (hashVk)
 import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import Type.Proxy (Proxy(Proxy))
 
@@ -96,7 +97,7 @@ auctionTermsInputCodec = CA.object "AuctionTerms" $ CAR.record
 mkAuctionTerms
   :: AuctionTermsInput
   -> Plutus.Address
-  -> VerificationKey
+  -> PublicKey
   -> Array Ed25519KeyHash
   -> AuctionTerms
 mkAuctionTerms rec sellerAddress sellerVk delegates = wrap
@@ -120,7 +121,7 @@ mkAuctionTerms rec sellerAddress sellerVk delegates = wrap
 
 type AuctionTermsRec = AuctionTermsInputRec
   ( sellerAddress :: Plutus.Address
-  , sellerVk :: VerificationKey
+  , sellerVk :: PublicKey
   )
 
 newtype AuctionTerms = AuctionTerms (Record AuctionTermsRec)
@@ -135,7 +136,7 @@ instance Show AuctionTerms where
 type AuctionTermsSchema =
   ("auctionLot" :~: Plutus.Value)
     :$: ("sellerAddress" :~: Plutus.Address)
-    :$: ("sellerVk" :~: VerificationKey)
+    :$: ("sellerVk" :~: PublicKey)
     :$: ("delegates" :~: Array Ed25519KeyHash)
     :$: ("biddingStart" :~: POSIXTime)
     :$: ("biddingEnd" :~: POSIXTime)
@@ -164,7 +165,7 @@ auctionTermsCodec network =
   wrapIso AuctionTerms $ CA.object "AuctionTerms" $ CAR.record
     { auctionLot: plutusValueCodec
     , sellerAddress: plutusAddressCodec network
-    , sellerVk: vkeyCodec
+    , sellerVk: publicKeyCodec
     , delegates: CA.array ed25519KeyHashCodec
     , biddingStart: posixTimeCodec
     , biddingEnd: posixTimeCodec
@@ -215,7 +216,7 @@ validateAuctionTerms auctionTerms@(AuctionTerms rec) = fold
       `errV` NonPositiveAuctionLotValueError
   , (isJust sellerPkh)
       `errV` SellerAddressLacksPubKeyCredentialError
-  , (sellerPkh == hashVk (vkeyBytes rec.sellerVk))
+  , (sellerPkh == Just (PublicKey.hash rec.sellerVk))
       `errV` SellerVkPkhMismatchError
   , (rec.biddingStart < rec.biddingEnd)
       `errV` BiddingStartNotBeforeBiddingEndError

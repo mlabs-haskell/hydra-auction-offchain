@@ -11,7 +11,8 @@ module HydraAuctionOffchain.Contract.AuthorizeBidders
 
 import Contract.Prelude
 
-import Cardano.Types (PlutusData, ScriptHash, Value)
+import Cardano.AsCbor (encodeCbor)
+import Cardano.Types (PlutusData, PublicKey, ScriptHash, Value)
 import Cardano.Types.BigNum (one) as BigNum
 import Cardano.Types.Int (one) as Cardano.Int
 import Contract.Address (getNetworkId)
@@ -28,7 +29,7 @@ import Data.Array (nub, null) as Array
 import Data.Codec.Argonaut (JsonCodec, array, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Profunctor (wrapIso)
-import HydraAuctionOffchain.Codec (scriptHashCodec)
+import HydraAuctionOffchain.Codec (publicKeyCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.PersonalOracle (PersonalOracle, mkPersonalOracle)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
@@ -49,7 +50,7 @@ import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
 
 newtype AuthBiddersContractParams = AuthBiddersContractParams
   { auctionCs :: ScriptHash
-  , biddersToAuthorize :: Array VerificationKey
+  , biddersToAuthorize :: Array PublicKey
   }
 
 derive instance Generic AuthBiddersContractParams _
@@ -67,7 +68,7 @@ authBiddersContractParamsCodec =
   wrapIso AuthBiddersContractParams $ CA.object "AuthBiddersContractParams" $
     CAR.record
       { auctionCs: scriptHashCodec
-      , biddersToAuthorize: CA.array vkeyCodec
+      , biddersToAuthorize: CA.array publicKeyCodec
       }
 
 authorizeBiddersContract
@@ -96,10 +97,10 @@ mkAuthorizeBiddersContractWithErrors (AuthBiddersContractParams params) = do
   -- Generate signatures: 
   signatures <-
     for biddersToAuthorize $ \bidderVk -> do
-      let payload = sellerSignatureMessage auctionCs $ vkeyBytes bidderVk
+      let payload = sellerSignatureMessage auctionCs bidderVk
       { signature } <- withExceptT (AuthBidders_Error_CouldNotSignSellerMessage bidderVk) $
         signMessage payload
-      pure $ bidderVk /\ signature
+      pure $ bidderVk /\ unwrap (encodeCbor signature)
 
   let
     sellerOracle :: PersonalOracle
@@ -132,7 +133,7 @@ mkAuthorizeBiddersContractWithErrors (AuthBiddersContractParams params) = do
 data AuthBiddersContractError
   = AuthBidders_Error_NoBiddersToAuthorize
   | AuthBidders_Error_CouldNotGetOwnPubKeyHash
-  | AuthBidders_Error_CouldNotSignSellerMessage VerificationKey SignMessageError
+  | AuthBidders_Error_CouldNotSignSellerMessage PublicKey SignMessageError
 
 derive instance Generic AuthBiddersContractError _
 derive instance Eq AuthBiddersContractError

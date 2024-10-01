@@ -1,4 +1,4 @@
-module DelegateServer.Handler.GetAvailableSlots
+module DelegateServer.Handlers.GetAvailableSlots
   ( availableSlotsCodec
   , getAvailableSlotsHandler
   ) where
