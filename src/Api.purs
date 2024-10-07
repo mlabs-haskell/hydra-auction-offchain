@@ -15,7 +15,9 @@ module HydraAuctionOffchain.Api
   , placeBid
   , placeBidL2
   , queryAuctions
+  , queryDelegateGroups
   , queryStandingBidState
+  , registerDelegateGroup
   , startBidding
   ) where
 
@@ -43,7 +45,9 @@ import HydraAuctionOffchain.Contract
   , moveBidContract
   , placeBidContract
   , queryAuctions
+  , queryDelegateGroups
   , queryStandingBidState
+  , registerDelegateGroupContract
   , sendBidContract
   , startBiddingContract
   ) as Contract
@@ -66,6 +70,17 @@ contractGeneric contract contractConfig params = fromAff do
   runContract contractParams do
     network <- getNetworkId
     toJs network <$> contract (fromJs network params)
+
+----------------------------------------------------------------------
+-- Delegate groups
+
+registerDelegateGroup :: Json -> Json -> Effect (Promise Json)
+registerDelegateGroup = contractGeneric Contract.registerDelegateGroupContract
+
+queryDelegateGroups :: Json -> Effect (Promise Json)
+queryDelegateGroups contractConfig = fromAff do
+  contractParams <- mkContractParams $ fromJs unit contractConfig
+  toJs unit <$> runContract contractParams Contract.queryDelegateGroups
 
 ----------------------------------------------------------------------
 -- Auctions

@@ -1,29 +1,43 @@
-module HydraAuctionOffchain.Contract.Types.Plutus.DelegateGroupInfo where
+module HydraAuctionOffchain.Contract.Types.Plutus.DelegateGroupInfo
+  ( DelegateGroupInfo(DelegateGroupInfo)
+  , delegateGroupInfoCodec
+  ) where
 
-{-
 import Prelude
 
-import Cardano.Types (RawBytes, ScriptHash, URL)
-import Data.ByteArray (ByteArray)
+import Cardano.FromData (class FromData)
+import Cardano.ToData (class ToData)
+import Cardano.Types (Ed25519KeyHash, PlutusData(Constr), ScriptHash)
+import Cardano.Types.BigNum (zero) as BigNum
+import Data.Codec.Argonaut (JsonCodec, array, object, string) as CA
+import Data.Codec.Argonaut.Record (record) as CAR
+import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
-import Data.Newtype (class Newtype)
+import Data.Maybe (Maybe(Nothing))
+import Data.Newtype (class Newtype, wrap)
+import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
-import Data.Typelevel.Undefined (undefined)
-import Data.UInt (UInt)
-
-type Url = String
-
-newtype DelegateGroupMetadata = DelegateGroupMetadata
-  { url :: Url
-  , dataHash :: RawBytes 
-  }
+import HydraAuctionOffchain.Codec (ed25519KeyHashCodec, scriptHashCodec)
+import HydraAuctionOffchain.Contract.Types.Plutus.DelegateInfo
+  ( DelegateInfo
+  , delegateInfoCodec
+  )
+import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
+  ( type (:$:)
+  , type (:~:)
+  , Nil
+  , fromDataRec
+  , recLength
+  , toDataRec
+  )
+import HydraAuctionOffchain.Lib.Codec (class HasJson)
+import Type.Proxy (Proxy(Proxy))
 
 newtype DelegateGroupInfo = DelegateGroupInfo
-  { groupId :: ScriptHash
-  , groupMetadata :: DelegateGroupMetadata
-  , delegates :: Array Ed25519KeyHash
-  , httpServers :: Array Url
-  , wsServers :: Array Url
+  { delegateGroupId :: ScriptHash
+  , delegateGroupMasterKeys :: Array Ed25519KeyHash
+  , delegateGroupServers :: DelegateInfo
+  , delegateGroupMetadata :: String
   }
 
 derive instance Generic DelegateGroupInfo _
@@ -33,29 +47,34 @@ derive instance Eq DelegateGroupInfo
 instance Show DelegateGroupInfo where
   show = genericShow
 
--- Discover registered delegate groups. 
-queryDelegateGroups :: Contract (Array DelegateGroupInfo) 
-queryDelegateGroups = undefined 
+type DelegateGroupInfoSchema =
+  ("delegateGroupId" :~: ScriptHash)
+    :$: ("delegateGroupMasterKeys" :~: Array Ed25519KeyHash)
+    :$: ("delegateGroupServers" :~: DelegateInfo)
+    :$: ("delegateGroupMetadata" :~: String)
+    :$: Nil
 
-type DelegateGroupSlot = Int
+delegateInfoSchema :: Proxy DelegateGroupInfoSchema
+delegateInfoSchema = Proxy
 
--- Attempt to book a delegate group slot for an upcoming auction.
--- 
--- This query will perform the following steps under the hood:
--- 1. Query a list of available auction slots from each delegate.
--- 2. Identify the common slots by finding their intersection.
--- 3. Randomly select one slot from the common available slots.
--- 4. Attempt to book the selected slot by sending booking requests to each delegate.
-bookSlotForAuction :: DelegateGroupInfo -> Aff (Maybe DelegateGroupSlot)
-bookSlotForAuction = undefined
+instance ToData DelegateGroupInfo where
+  toData (DelegateGroupInfo rec) =
+    Constr BigNum.zero $ toDataRec delegateInfoSchema rec
 
-newtype HostAuctionInfo = HostAuctionInfo
-  { delegateGroup :: DelegateGroupInfo
-  , slot :: DelegateGroupSlot
-  , auctionMetadataOref :: TransactionInput
-  }
+instance FromData DelegateGroupInfo where
+  fromData (Constr n pd)
+    | n == BigNum.zero && recLength (Proxy :: _ DelegateGroupInfo) == length pd =
+        wrap <$> fromDataRec delegateInfoSchema pd
+  fromData _ = Nothing
 
--- Attempt to host announced auction at a specific delegate group slot.
-hostAuction :: HostAuctionInfo -> Aff (ContractOutput Unit)
-hostAuction = undefined
--}
+instance HasJson DelegateGroupInfo anyParams where
+  jsonCodec _ = const delegateGroupInfoCodec
+
+delegateGroupInfoCodec :: CA.JsonCodec DelegateGroupInfo
+delegateGroupInfoCodec =
+  wrapIso DelegateGroupInfo $ CA.object "DelegateGroupInfo" $ CAR.record
+    { delegateGroupId: scriptHashCodec
+    , delegateGroupMasterKeys: CA.array ed25519KeyHashCodec
+    , delegateGroupServers: delegateInfoCodec
+    , delegateGroupMetadata: CA.string
+    }
