@@ -1,3 +1,15 @@
+// RegisterDelegateGroup ---------------------------------------------
+
+export type RegisterDelegateGroupContractParams = {
+  delegateGroupServers: DelegateInfo
+  delegateGroupMetadata: string
+};
+
+export type RegisterDelegateGroupContractOutput = {
+  txHash: TransactionHash;
+  delegateGroupInfo: DelegateGroupInfo;
+};
+
 // AnnounceAuction ---------------------------------------------------
 
 export type AnnounceAuctionContractParams = {
@@ -124,12 +136,21 @@ export type BidTerms = {
   sellerSignature: ByteArray;
 };
 
+export type StandingBidState = BidTerms | null;
+
+// DelegateGroup -----------------------------------------------------
+
+export type DelegateGroupInfo = {
+  delegateGroupId: CurrencySymbol;
+  delegateGroupMasterKeys: Array<PubKeyHash>;
+  delegateGroupServers: DelegateInfo;
+  delegateGroupMetadata: string;
+};
+
 export type DelegateInfo = {
   httpServers: string[];
   wsServers: string[];
 };
-
-export type StandingBidState = BidTerms | null;
 
 // Common ------------------------------------------------------------
 

@@ -22,6 +22,7 @@ module HydraAuctionOffchain.Contract.AnnounceAuction
   , AnnounceAuctionContractResult
   , announceAuctionContract
   , mkAnnounceAuctionContractWithErrors
+  , selectUtxos
   ) where
 
 import Contract.Prelude hiding (foldM)
