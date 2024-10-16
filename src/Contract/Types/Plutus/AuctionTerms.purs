@@ -51,11 +51,6 @@ import HydraAuctionOffchain.Codec
   , posixTimeCodec
   , publicKeyCodec
   )
-import HydraAuctionOffchain.Contract.Types.VerificationKey
-  ( VerificationKey
-  , vkeyBytes
-  , vkeyCodec
-  )
 import HydraAuctionOffchain.Helpers (errV)
 import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
 import Type.Proxy (Proxy(Proxy))

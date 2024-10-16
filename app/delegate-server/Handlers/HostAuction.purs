@@ -27,7 +27,6 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(Tuple))
-import Data.UUID (UUID)
 import DelegateServer.AppManager (AppManager')
 import DelegateServer.AppManager
   ( HostAuctionError

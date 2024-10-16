@@ -28,8 +28,6 @@ import Cardano.Types
   , TransactionHash
   , TransactionInput
   )
-import Cardano.Types.Transaction (_witnessSet)
-import Cardano.Types.TransactionWitnessSet (_redeemers)
 import Contract.Chain (currentTime)
 import Contract.Log (logDebug', logWarn')
 import Contract.Monad (Contract)
@@ -54,7 +52,7 @@ import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExcep
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.ServerConfig (mkHttpUrl)
 import Ctl.Internal.Transaction (setScriptDataHash)
-import Data.Argonaut (Json, encodeJson)
+import Data.Argonaut (encodeJson)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Map (filterKeys, fromFoldable) as Map
@@ -79,9 +77,7 @@ import HydraAuctionOffchain.Contract.Types
   , Utxo
   )
 import HydraAuctionOffchain.Contract.Validators (mkStandingBidValidator)
-import HydraAuctionOffchain.Helpers ((!*))
 import HydraAuctionOffchain.Lib.Json (printJson)
-import HydraAuctionOffchain.Service.Common (ServiceError)
 import HydraSdk.NodeApi (commitRequest)
 import HydraSdk.Types
   ( HttpError

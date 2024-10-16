@@ -18,31 +18,24 @@ import Cardano.Types (ScriptHash, TransactionInput)
 import Contract.Address (getNetworkId)
 import Contract.CborBytes (cborBytesToHex)
 import Contract.Log (logInfo', logTrace', logWarn')
-import Control.Alt (alt)
 import Control.Error.Util (bool)
-import Control.Monad.Except (ExceptT(ExceptT), except, runExceptT, throwError)
+import Control.Monad.Except (ExceptT(ExceptT), runExceptT, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Safely (foldM)
 import Ctl.Internal.Helpers ((<</>>))
 import Data.Array ((..))
 import Data.Array (length, zip) as Array
 import Data.Bifunctor (lmap)
-import Data.Either (Either(Left, Right), either, note)
-import Data.Foldable (foldMap)
+import Data.Either (Either(Left, Right), either)
 import Data.Generic.Rep (class Generic)
 import Data.Identity (Identity(Identity))
-import Data.Int (decimal, toStringAs) as Int
-import Data.Map (delete, empty, fromFoldable, insert, lookup, pop, toUnfoldable) as Map
+import Data.Map (empty, fromFoldable, toUnfoldable) as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Show.Generic (genericShow)
-import Data.String (Pattern(Pattern))
-import Data.String (contains) as String
 import Data.Traversable (sequence)
 import Data.Tuple (Tuple(Tuple))
-import Data.Tuple.Nested (type (/\), (/\))
-import Data.UInt (toString) as UInt
-import Data.UUID (UUID)
+import Data.Tuple.Nested ((/\))
 import DelegateServer.App
   ( AppLogger
   , AppM
@@ -60,7 +53,6 @@ import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (QueryAuctionError, queryAuction)
 import DelegateServer.Helpers (printOref)
 import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
-import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Lib.Timer (scheduleAt)
 import DelegateServer.State
   ( class AppBase
@@ -111,11 +103,8 @@ import HydraSdk.Types
       , HeadStatus_Unknown
       )
   , isHeadClosed
-  , printHostPort
   )
-import Node.ChildProcess (ChildProcess, defaultSpawnOptions, spawn, stderr, stdout)
-import Node.Encoding (Encoding(UTF8)) as Encoding
-import Node.Stream (onDataString)
+import Node.ChildProcess (ChildProcess)
 import Type.Proxy (Proxy(Proxy))
 
 type AppManager' = AppManager

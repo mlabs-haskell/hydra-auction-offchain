@@ -47,14 +47,13 @@ suite = do
             }
         }
   group "delegate-server" do
-    -- WsServer.suite
+    WsServer.suite
     testTestnetContracts config do
       DelegateServer.suite clusterParamsRef
-{-
-group "contracts" do
-  AnnounceAuction.suite
-  StartBidding.suite
-  EnterAuction.suite
-  AuthorizeBidders.suite
-  PlaceBid.suite
--}
+
+      group "contracts" do
+        AnnounceAuction.suite
+        StartBidding.suite
+        EnterAuction.suite
+        AuthorizeBidders.suite
+        PlaceBid.suite

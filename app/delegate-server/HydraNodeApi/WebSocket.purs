@@ -5,7 +5,6 @@ module DelegateServer.HydraNodeApi.WebSocket
 import Prelude
 
 import Contract.Log (logInfo', logWarn')
-import Contract.Transaction (Transaction)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Logger.Class (class MonadLogger)
 import Control.Monad.Reader (asks)
@@ -16,7 +15,6 @@ import Data.Newtype (unwrap, wrap)
 import Data.Set (delete, insert, member, size) as Set
 import Data.Traversable (traverse_)
 import Data.Tuple (snd)
-import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, getAppEffRunner)
 import DelegateServer.Config (AppConfig'(AppConfig))
 import DelegateServer.Contract.Commit (commitCollateral, commitStandingBid)
@@ -43,7 +41,6 @@ import DelegateServer.WsServer
   ( DelegateWebSocketServer
   , DelegateWebSocketServerMessage(HydraHeadStatus, StandingBid)
   )
-import Effect (Effect)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
 import HydraSdk.NodeApi
@@ -71,7 +68,6 @@ import HydraSdk.Types
       , In_ReadyToFanout
       , In_HeadIsFinalized
       )
-  , HydraNodeApi_OutMessage(Out_Init, Out_Abort, Out_NewTx, Out_Close, Out_Contest, Out_Fanout)
   , HydraHeadStatus
       ( HeadStatus_Initializing
       , HeadStatus_Open

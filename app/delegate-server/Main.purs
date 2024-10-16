@@ -11,7 +11,6 @@ import Ansi.Output (foreground, withGraphics)
 import Data.Either (Either(Left, Right))
 import Data.Map (values) as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.Traversable (traverse_)
 import DelegateServer.AppManager (AppManager', initAppManager)

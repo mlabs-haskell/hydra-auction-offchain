@@ -42,7 +42,6 @@
   , "node-fs"
   , "node-path"
   , "node-process"
-  , "node-streams"
   , "now"
   , "optparse"
   , "ordered-collections"

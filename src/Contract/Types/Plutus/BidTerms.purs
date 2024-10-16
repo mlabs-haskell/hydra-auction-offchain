@@ -43,7 +43,6 @@ import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   , totalAuctionFees
   )
 import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidderInfoCodec)
-import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
 import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)

@@ -26,20 +26,19 @@ import Cardano.Types
   , PublicKey
   , RawBytes
   )
-import Cardano.Types.Address (getPaymentCredential, mkPaymentAddress)
-import Cardano.Types.Credential (asPubKeyHash)
-import Cardano.Types.PublicKey (fromRawBytes, hash, toRawBytes, verify) as PublicKey
+import Cardano.Types.Address (mkPaymentAddress)
+import Cardano.Types.PublicKey (fromRawBytes, hash, verify) as PublicKey
 import Contract.Address (getNetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray, CborBytes, byteArrayFromAscii)
-import Contract.Wallet (getWalletAddress, ownPaymentPubKeyHashes, signData)
+import Contract.Wallet (ownPaymentPubKeyHashes, signData)
 import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.State.Trans (lift)
 import Ctl.Internal.FfiHelpers (MaybeFfiHelper, maybeFfiHelper)
 import Data.Array (head) as Array
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(Just, Nothing), fromJust)
+import Data.Maybe (Maybe(Nothing), fromJust)
 import Data.Newtype (unwrap, wrap)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)

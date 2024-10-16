@@ -24,13 +24,11 @@ import Data.Either (Either(Right))
 import Data.Generic.Rep (class Generic)
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe, maybe)
-import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.String (Pattern(Pattern))
 import Data.String (stripPrefix) as String
 import Data.Tuple (snd)
-import Data.Tuple.Nested (type (/\), (/\))
 import Data.Variant (inj, match) as Variant
 import DelegateServer.App (AppLogger, AppState, runApp)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)

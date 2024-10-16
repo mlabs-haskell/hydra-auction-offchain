@@ -96,7 +96,7 @@ import Test.Localnet.Config (localnetConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)
 import Type.Proxy (Proxy(Proxy))
 import URI.Host (print) as Host
-import URI.Port (fromInt, toInt, unsafeFromInt) as Port
+import URI.Port (toInt, unsafeFromInt) as Port
 
 type TestAppHandle =
   { getActiveAuction :: Contract (Maybe AuctionInfoExtended)

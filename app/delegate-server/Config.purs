@@ -11,7 +11,7 @@ module DelegateServer.Config
 
 import Prelude
 
-import Cardano.Types (Ed25519KeyHash, NetworkId(TestnetId, MainnetId), TransactionHash)
+import Cardano.Types (Ed25519KeyHash, TransactionHash)
 import Cardano.Types.PrivateKey (toPublicKey) as PrivateKey
 import Cardano.Types.PublicKey (hash) as PublicKey
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
@@ -20,18 +20,14 @@ import Contract.Wallet.KeyFile (privatePaymentKeyFromFile)
 import Data.Codec.Argonaut (JsonCodec, array, int, number, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
-import Data.Either (Either(Left, Right), either)
+import Data.Either (either)
 import Data.Foldable (fold)
-import Data.Generic.Rep (class Generic)
 import Data.Log.Level (LogLevel)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap, wrap)
-import Data.Profunctor (dimap, wrapIso)
-import Data.Show.Generic (genericShow)
+import Data.Profunctor (wrapIso)
 import Data.Time.Duration (Seconds(Seconds))
 import Data.Traversable (traverse)
-import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
 import DelegateServer.Types.QueryBackendParamsSimple
@@ -43,14 +39,12 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import HydraAuctionOffchain.Codec (logLevelCodec, portCodec, txHashCodec)
-import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile)
 import HydraSdk.Types (HostPort, Network, hostPortCodec, networkCodec)
 import Node.Path (FilePath)
 import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
 import Record (merge) as Record
-import Type.Proxy (Proxy(Proxy))
 import URI.Port (Port)
 
 -- TODO: check that specified ports are free and non-overlapping

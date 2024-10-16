@@ -88,7 +88,6 @@ import Data.List (fromFoldable) as List
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
 import Data.Set (findMin, intersection) as Set
-import Data.UUID (UUID)
 import Data.Validation.Semigroup (validation)
 import DelegateServer.Handlers.HostAuction (HostAuctionError)
 import DelegateServer.Handlers.ReserveSlot (ReserveSlotError)
