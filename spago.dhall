@@ -27,6 +27,7 @@
   , "gen"
   , "http-methods"
   , "httpure"
+  , "hydra-sdk"
   , "identity"
   , "integers"
   , "js-bigints"

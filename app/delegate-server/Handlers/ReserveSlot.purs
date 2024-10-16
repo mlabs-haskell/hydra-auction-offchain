@@ -23,11 +23,10 @@ import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
 import Data.Generic.Rep (class Generic)
+import Data.Newtype (unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Time.Duration (Seconds)
-import Data.UUID (UUID)
-import DelegateServer.AppManager.Types (AppManager', AuctionSlot)
-import DelegateServer.AppManager.Types (reserveSlot) as AppManager
+import DelegateServer.Config (AppConfig)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse
   , respCreatedOrBadRequest
@@ -36,14 +35,18 @@ import DelegateServer.Types.ServerResponse
 import DelegateServer.Types.ServerResponse (fromEither) as ServerResponse
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar)
+import Effect.Class (liftEffect)
+import Effect.Console (log)
 import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Codec (ed25519KeyHashCodec, uuidCodec)
 import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.Extra.AppManager (AppManager, AppManagerSlot, ReservationCode)
+import HydraSdk.Extra.AppManager (reserveSlot) as AppManager
 
 reserveSlotHandler
-  :: forall ws wsServer
-   . AVar (AppManager' ws wsServer)
+  :: forall f appId appState appConfigActive
+   . AVar (AppManager appId appState (AppConfig f) appConfigActive)
   -> Seconds
   -> String
   -> Aff HTTPure.Response
@@ -53,8 +56,8 @@ reserveSlotHandler appManagerAvar slotReservationPeriod bodyStr =
       <<< ServerResponse.fromEither
 
 reserveSlotHandlerImpl
-  :: forall ws wsServer
-   . AVar (AppManager' ws wsServer)
+  :: forall f appId appState appConfigActive
+   . AVar (AppManager appId appState (AppConfig f) appConfigActive)
   -> Seconds
   -> String
   -> Aff (Either ReserveSlotError ReserveSlotSuccess)
@@ -62,13 +65,18 @@ reserveSlotHandlerImpl appManagerAvar slotReservationPeriod bodyStr =
   runExceptT do
     reqBody <- except $ lmap CouldNotDecodeReserveSlotReqBody $
       caDecodeString reserveSlotRequestCodec bodyStr
-    AppManager.reserveSlot appManagerAvar slotReservationPeriod reqBody.slot !?
+    let logger = liftEffect <<< log
+    res <- AppManager.reserveSlot appManagerAvar slotReservationPeriod reqBody.slot logger !?
       RequestedSlotNotAvailable
+    pure
+      { reservationCode: res.reservationCode
+      , delegatePkh: (unwrap res.config).auctionConfig.delegatePkh
+      }
 
 -- ReserveSlotRequest ------------------------------------------------
 
 type ReserveSlotRequest =
-  { slot :: AuctionSlot
+  { slot :: AppManagerSlot
   }
 
 reserveSlotRequestCodec :: CA.JsonCodec ReserveSlotRequest
@@ -87,7 +95,7 @@ reserveSlotResponseCodec = serverResponseCodec reserveSlotSuccessCodec reserveSl
 -- ReserveSlotSuccess ------------------------------------------------
 
 type ReserveSlotSuccess =
-  { reservationCode :: UUID
+  { reservationCode :: ReservationCode
   , delegatePkh :: Ed25519KeyHash
   }
 

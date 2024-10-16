@@ -33,13 +33,8 @@ import DelegateServer.Contract.Commit
   , commitStandingBid
   , commitStandingBidErrorCodec
   )
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (class AppInit, readAppState, setCommitStatus)
 import DelegateServer.Types.CommitStatus (CommitStatus(ShouldCommitStandingBid))
-import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus(HeadStatus_Idle, HeadStatus_Initializing)
-  , headStatusCodec
-  )
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   , respCreatedOrBadRequest
@@ -50,6 +45,11 @@ import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Codec (txHashCodec)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
+import HydraSdk.Types
+  ( HydraHeadStatus(HeadStatus_Idle, HeadStatus_Initializing)
+  , headStatusCodec
+  )
 import Type.Proxy (Proxy(Proxy))
 
 type MoveBidResponse = ServerResponse MoveBidSuccess MoveBidError
@@ -60,13 +60,13 @@ moveBidResponseCodec network =
     (moveBidSuccessCodec network)
     moveBidErrorCodec
 
-moveBidHandler :: forall m. AppInit m => HydraNodeApiWebSocket -> m HTTPure.Response
+moveBidHandler :: forall m. AppInit m => HydraNodeApiWebSocket m -> m HTTPure.Response
 moveBidHandler ws = do
   resp <- moveBidHandlerImpl ws
   network <- runContract getNetworkId
   respCreatedOrBadRequest (moveBidResponseCodec network) resp
 
-moveBidHandlerImpl :: forall m. AppInit m => HydraNodeApiWebSocket -> m MoveBidResponse
+moveBidHandlerImpl :: forall m. AppInit m => HydraNodeApiWebSocket m -> m MoveBidResponse
 moveBidHandlerImpl ws = do
   setCommitStatus ShouldCommitStandingBid
   headStatus <- readAppState (Proxy :: _ "headStatus")

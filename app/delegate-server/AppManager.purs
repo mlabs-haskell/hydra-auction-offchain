@@ -1,5 +1,5 @@
 module DelegateServer.AppManager
-  ( AppManager
+  ( AppManager'
   , HostAuctionError
       ( AuctionSlotNotAvailable
       , IncorrectReservationCode
@@ -39,30 +39,27 @@ import Data.Show.Generic (genericShow)
 import Data.String (Pattern(Pattern))
 import Data.String (contains) as String
 import Data.Traversable (sequence)
-import Data.Tuple.Nested ((/\))
+import Data.Tuple (Tuple(Tuple))
+import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (toString) as UInt
 import Data.UUID (UUID)
 import DelegateServer.App
-  ( AppM
+  ( AppLogger
+  , AppM
+  , AppState
   , appLoggerDefault
   , getAppEffRunner
   , initApp
   , runApp
   , runContract
   )
-import DelegateServer.AppManager.Types (AppManager'(AppManager), AuctionSlot)
 import DelegateServer.Cleanup (appInstanceCleanupHandler)
-import DelegateServer.Config
-  ( AppConfig
-  , AppConfig'(AppConfig)
-  , Network(Testnet, Mainnet)
-  , DelegateServerConfig
-  )
+import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), DelegateServerConfig)
 import DelegateServer.Const (appConst)
 import DelegateServer.Contract.Collateral (getCollateralUtxo)
 import DelegateServer.Contract.QueryAuction (QueryAuctionError, queryAuction)
 import DelegateServer.Helpers (printOref)
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket, mkHydraNodeApiWebSocket)
+import DelegateServer.HydraNodeApi.WebSocket (mkHydraNodeApiWebSocket)
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Lib.Timer (scheduleAt)
 import DelegateServer.State
@@ -77,15 +74,6 @@ import DelegateServer.State
   )
 import DelegateServer.Types.AppExitReason
   ( AppExitReason(AppExitReason_BiddingTimeExpired_UnexpectedHeadStatus)
-  )
-import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus
-      ( HeadStatus_Unknown
-      , HeadStatus_Idle
-      , HeadStatus_Initializing
-      , HeadStatus_Open
-      )
-  , isHeadClosed
   )
 import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect.AVar (tryPut, tryTake) as AVarSync
@@ -103,28 +91,55 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (waitSeconds)
 import HydraAuctionOffchain.Lib.Json (printJsonUsingCodec)
-import HydraAuctionOffchain.Types.HostPort (printHostPort)
+import HydraSdk.Extra.AppManager
+  ( AppManager
+  , AppManagerSlot
+  , ReservationCode
+  , hostApp
+  , removeApp
+  , withAppManager
+  )
+import HydraSdk.Extra.AppManager (HostAppError(SlotNotAvailable, IncorrectReservationCode)) as HydraSdk
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
+import HydraSdk.Process (HydraHeadPeer) as HydraSdk
+import HydraSdk.Process (HydraNodeStartupParams, spawnHydraNode)
+import HydraSdk.Types
+  ( HydraHeadStatus
+      ( HeadStatus_Idle
+      , HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Unknown
+      )
+  , isHeadClosed
+  , printHostPort
+  )
 import Node.ChildProcess (ChildProcess, defaultSpawnOptions, spawn, stderr, stdout)
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.Stream (onDataString)
 import Type.Proxy (Proxy(Proxy))
 
-type AppManager = AppManager' HydraNodeApiWebSocket DelegateWebSocketServer
+type AppManager' = AppManager
+  ScriptHash
+  { appState :: AppState
+  , appLogger :: AppLogger
+  , hydraNodeApiWs :: HydraNodeApiWebSocket AppM
+  }
+  (AppConfig Maybe)
+  (AppConfig Identity)
 
 initAppManager
   :: DelegateServerConfig
-  -> AVar AppManager
+  -> AVar AppManager'
   -> DelegateWebSocketServer
   -> Aff Unit
 initAppManager (AppConfig appConfig) appManagerAvar wsServer = do
   let
-    appManager = AppManager
-      { activeAuctions: Map.empty
+    appManager =
+      { activeApps: Map.empty
       , reservedSlots: Map.empty
       , availableSlots:
           Map.fromFoldable $ Array.zip (zero .. Array.length slotConfigs)
             slotConfigs
-      , wsServer
       }
   appManager' <-
     foldM
@@ -134,10 +149,11 @@ initAppManager (AppConfig appConfig) appManagerAvar wsServer = do
             Just oref -> do
               hostAuctionRes <- hostAuction
                 { slot
-                , auctionMetadataOref: oref
+                , reservationCode: Nothing
                 , appManager: appManagerAcc
                 , appManagerAvar
-                , reservationCode: Nothing
+                , auctionMetadataOref: oref
+                , wsServer
                 }
               either
                 ( \appManagerErr -> do
@@ -151,7 +167,7 @@ initAppManager (AppConfig appConfig) appManagerAvar wsServer = do
                 hostAuctionRes
       )
       appManager
-      (Map.toUnfoldable (unwrap appManager).availableSlots)
+      (Map.toUnfoldable appManager.availableSlots)
   AVar.tryPut appManager' appManagerAvar >>=
     bool
       (throwError $ error "initAppManager: appManager AVar is not empty")
@@ -163,11 +179,12 @@ initAppManager (AppConfig appConfig) appManagerAvar wsServer = do
       appConfig.auctionConfig
 
 type HostAuctionParams =
-  { slot :: AuctionSlot
+  { slot :: AppManagerSlot
+  , reservationCode :: Maybe ReservationCode
+  , appManager :: AppManager'
+  , appManagerAvar :: AVar AppManager'
   , auctionMetadataOref :: TransactionInput
-  , appManager :: AppManager
-  , appManagerAvar :: AVar AppManager
-  , reservationCode :: Maybe UUID
+  , wsServer :: DelegateWebSocketServer
   }
 
 data HostAuctionError
@@ -180,109 +197,75 @@ derive instance Generic HostAuctionError _
 instance Show HostAuctionError where
   show = genericShow
 
-hostAuction :: HostAuctionParams -> Aff (Either HostAuctionError AppManager)
-hostAuction
-  params@{ slot, auctionMetadataOref, appManager: AppManager appManager, appManagerAvar } =
-  runExceptT do
-    AppConfig appConfigAvailable <- except $ findAvailableSlot params
-    let
-      appConfig =
-        wrap $ appConfigAvailable
-          { auctionConfig = appConfigAvailable.auctionConfig
-              { auctionMetadataOref = Identity auctionMetadataOref
+toHostAuctionError :: HydraSdk.HostAppError -> HostAuctionError
+toHostAuctionError = case _ of
+  HydraSdk.SlotNotAvailable -> AuctionSlotNotAvailable
+  HydraSdk.IncorrectReservationCode -> IncorrectReservationCode
+
+hostAuction :: HostAuctionParams -> Aff (Either HostAuctionError AppManager')
+hostAuction params =
+  map (join <<< map (lmap toHostAuctionError)) $ runExceptT $ hostApp
+    { slot: params.slot
+    , reservationCode: params.reservationCode
+    , appManager: params.appManager
+    , startApp: \(AppConfig appConfigAvailable) -> do
+        let
+          appConfig =
+            wrap $ appConfigAvailable
+              { auctionConfig = appConfigAvailable.auctionConfig
+                  { auctionMetadataOref = Identity params.auctionMetadataOref
+                  }
               }
+        appState <- lift $ initApp appConfig
+        let appLogger = appLoggerDefault
+        auctionId <- ExceptT $ lmap MissingOrInvalidAuctionInfo <$>
+          runApp appState appLogger setAuction
+        hydraNodeApiWs <- lift $ runApp appState appLogger do
+          prepareCollateralUtxo
+          hydraNodeProcess <- startHydraNode
+          hydraNodeApiWs <- initHydraApiWsConn params.wsServer
+          timers <-
+            sequence
+              [ initHeadAtBiddingStart hydraNodeApiWs
+              , closeHeadAtBiddingEnd hydraNodeApiWs
+              ]
+          contractEnv <- unwrap <$> access (Proxy :: _ "contractEnv")
+          cleanupSem <- liftAff $ AVar.new unit
+          let
+            cleanupHandler exitReason =
+              AVarSync.tryTake cleanupSem >>=
+                maybe (pure unit) \_ -> do
+                  log $ withGraphics (foreground Red) $ show exitReason
+                  appInstanceCleanupHandler hydraNodeProcess hydraNodeApiWs contractEnv timers
+                  launchAff_ $ withAppManager params.appManagerAvar \appManager -> do
+                    mAppManager' <- removeApp auctionId appManager
+                      { deactivateConfig: \(AppConfig activeConfig) ->
+                          pure $ wrap $ activeConfig
+                            { auctionConfig = activeConfig.auctionConfig
+                                { auctionMetadataOref = Nothing
+                                }
+                            }
+                      }
+                    maybe
+                      ( do
+                          liftEffect $ log $
+                            "Could not find active auction in AppManager, auction id: "
+                              <> show auctionId
+                          pure $ appManager /\ unit
+                      )
+                      (pure <<< flip Tuple unit)
+                      mAppManager'
+          putAppState (Proxy :: _ "exit") cleanupHandler -- attach cleanup handler to each app instance
+          pure hydraNodeApiWs
+        liftEffect $ log $ "Hosting auction with id: " <> cborBytesToHex (encodeCbor auctionId)
+        pure
+          { id: auctionId
+          , state: { appState, appLogger, hydraNodeApiWs }
+          , config: appConfig
           }
-    appState <- lift $ initApp appConfig
-    let appLogger = appLoggerDefault
-    auctionId <- ExceptT $ lmap MissingOrInvalidAuctionInfo <$>
-      runApp appState appLogger setAuction
-    hydraNodeApiWs <- lift $ runApp appState appLogger do
-      prepareCollateralUtxo
-      hydraNodeProcess <- startHydraNode
-      hydraNodeApiWs <- initHydraApiWsConn appManager.wsServer
-      timers <-
-        sequence
-          [ initHeadAtBiddingStart hydraNodeApiWs
-          , closeHeadAtBiddingEnd hydraNodeApiWs
-          ]
-      contractEnv <- unwrap <$> access (Proxy :: _ "contractEnv")
-      cleanupSem <- liftAff $ AVar.new unit
-      let
-        cleanupHandler exitReason =
-          AVarSync.tryTake cleanupSem >>=
-            maybe (pure unit) \_ -> do
-              log $ withGraphics (foreground Red) $ show exitReason
-              appInstanceCleanupHandler hydraNodeProcess hydraNodeApiWs contractEnv timers
-              launchAff_ $ modifyAVar_ appManagerAvar \appManager' ->
-                maybe
-                  ( do
-                      liftEffect $ log $
-                        "Could not find active auction in AppManager, auction id: "
-                          <> show auctionId
-                      pure appManager'
-                  )
-                  pure
-                  (removeAuction auctionId appManager')
-      putAppState (Proxy :: _ "exit") cleanupHandler -- attach cleanup handler to each app instance
-      pure hydraNodeApiWs
-    liftEffect $ log $ "Hosting auction with id: " <> cborBytesToHex (encodeCbor auctionId)
-    pure $ AppManager $ appManager
-      { availableSlots = Map.delete slot appManager.availableSlots
-      , reservedSlots = Map.delete slot appManager.reservedSlots
-      , activeAuctions =
-          Map.insert auctionId
-            { appState
-            , appLogger
-            , hydraNodeApiWs
-            , occupiedSlot: slot
-            }
-            appManager.activeAuctions
-      }
-
-findAvailableSlot
-  :: forall (r :: Row Type)
-   . { slot :: AuctionSlot
-     , appManager :: AppManager
-     , reservationCode :: Maybe UUID
-     | r
-     }
-  -> Either HostAuctionError (AppConfig Maybe)
-findAvailableSlot params@{ appManager: AppManager appManager, slot } =
-  alt
-    ( maybe (Left AuctionSlotNotAvailable)
-        ( \code ->
-            case Map.lookup slot appManager.reservedSlots of
-              Just { appConfig, reservationCode } | reservationCode == code ->
-                Right appConfig
-              Just _ -> Left IncorrectReservationCode
-              Nothing -> Left AuctionSlotNotAvailable
-
-        )
-        params.reservationCode
-    )
-    ( note AuctionSlotNotAvailable $
-        Map.lookup slot appManager.availableSlots
-    )
-
-removeAuction :: ScriptHash -> AppManager -> Maybe AppManager
-removeAuction auctionId (AppManager appManager) = do
-  { appState, occupiedSlot } /\ activeAuctions <- Map.pop auctionId appManager.activeAuctions
-  let
-    appConfig = unwrap appState.config
-    appConfigAvailable =
-      wrap $ appConfig
-        { auctionConfig = appConfig.auctionConfig
-            { auctionMetadataOref = Nothing
-            }
-        }
-  pure $ AppManager $ appManager
-    { activeAuctions = activeAuctions
-    , availableSlots =
-        Map.insert occupiedSlot appConfigAvailable
-          appManager.availableSlots
     }
 
-initHeadAtBiddingStart :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
+initHeadAtBiddingStart :: forall m. HydraNodeApiWebSocket m -> AppM (AVar (Maybe TimeoutId))
 initHeadAtBiddingStart ws = do
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
   runAppEff' <- getAppEffRunner
@@ -304,7 +287,7 @@ initHeadAtBiddingStart ws = do
             pure unit
   liftEffect $ scheduleAt biddingStart action
 
-closeHeadAtBiddingEnd :: HydraNodeApiWebSocket -> AppM (AVar (Maybe TimeoutId))
+closeHeadAtBiddingEnd :: forall m. HydraNodeApiWebSocket m -> AppM (AVar (Maybe TimeoutId))
 closeHeadAtBiddingEnd ws = do
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
   runAppEff' <- getAppEffRunner
@@ -354,7 +337,7 @@ prepareCollateralUtxo = do
   setCollateralUtxo utxo
   logInfo' $ "Prepared collateral utxo: " <> show utxo
 
-initHydraApiWsConn :: DelegateWebSocketServer -> AppM HydraNodeApiWebSocket
+initHydraApiWsConn :: DelegateWebSocketServer -> AppM (HydraNodeApiWebSocket AppM)
 initHydraApiWsConn wsServer = do
   wsAVar <- liftAff AVar.empty
   mkHydraNodeApiWebSocket wsServer (liftAff <<< void <<< flip AVar.tryPut wsAVar)
@@ -362,70 +345,40 @@ initHydraApiWsConn wsServer = do
 
 startHydraNode :: AppM ChildProcess
 startHydraNode = do
-  appConfig <- access (Proxy :: _ "config")
+  AppConfig appConfig@{ auctionConfig } <- access (Proxy :: _ "config")
+  let
+    peers :: Array HydraSdk.HydraHeadPeer
+    peers =
+      auctionConfig.peers <#> \peer ->
+        { hydraNodeAddress: peer.hydraNode
+        , hydraVerificationKey: peer.hydraVk
+        , cardanoVerificationKey: peer.cardanoVk
+        }
+
+    startupParams :: HydraNodeStartupParams
+    startupParams =
+      { nodeId: auctionConfig.hydraNodeId
+      , hydraNodeAddress: auctionConfig.hydraNode
+      , hydraNodeApiAddress: auctionConfig.hydraNodeApi
+      , persistDir: appConfig.hydraPersistDir <</>> auctionConfig.hydraNodeId
+      , hydraSigningKey: appConfig.hydraSk
+      , cardanoSigningKey: auctionConfig.cardanoSk
+      , network: appConfig.network
+      , nodeSocket: appConfig.nodeSocket
+      , pparams: appConst.protocolParams
+      , hydraScriptsTxHash: appConfig.hydraScriptsTxHash
+      , contestPeriodSec: appConfig.hydraContestPeriod
+      , peers
+      }
   apiServerStartedSem <- liftAff AVar.empty
-  hydraNodeProcess <- liftEffect $ spawn "hydra-node" (hydraNodeArgs appConfig)
-    defaultSpawnOptions
-
   runAppEff' <- getAppEffRunner
-  liftEffect $ onDataString (stderr hydraNodeProcess) Encoding.UTF8 \str ->
-    runAppEff' $ logWarn' $ "[hydra-node:stderr] " <> str
-
-  liftEffect $ onDataString (stdout hydraNodeProcess) Encoding.UTF8 \str -> do
-    runAppEff' $ logTrace' $ "[hydra-node:stdout] " <> str
-    when (String.contains (Pattern "APIServerStarted") str) do
-      void $ AVarSync.tryPut unit apiServerStartedSem
-
+  hydraNodeProcess <- spawnHydraNode startupParams
+    { apiServerStartedHandler:
+        Just $ void $ AVarSync.tryPut unit apiServerStartedSem
+    , stdoutHandler:
+        Just $ \str -> runAppEff' $ logTrace' $ "[hydra-node:stdout] " <> str
+    , stderrHandler:
+        Just $ \str -> runAppEff' $ logWarn' $ "[hydra-node:stderr] " <> str
+    }
   liftAff $ AVar.take apiServerStartedSem
   pure hydraNodeProcess
-  where
-  peerArgs :: AppConfig Identity -> Array String
-  peerArgs (AppConfig appConfig) =
-    appConfig.auctionConfig.peers # foldMap \peer ->
-      [ "--peer"
-      , printHostPort peer.hydraNode
-      , "--hydra-verification-key"
-      , peer.hydraVk
-      , "--cardano-verification-key"
-      , peer.cardanoVk
-      ]
-
-  networkArgs :: AppConfig Identity -> Array String
-  networkArgs (AppConfig appConfig) =
-    case appConfig.network of
-      Testnet { magic } ->
-        [ "--testnet-magic"
-        , Int.toStringAs Int.decimal magic
-        ]
-      Mainnet ->
-        [ "--mainnet"
-        ]
-
-  hydraNodeArgs :: AppConfig Identity -> Array String
-  hydraNodeArgs ac@(AppConfig appConfig) =
-    peerArgs ac <> networkArgs ac <>
-      [ "--node-id"
-      , appConfig.auctionConfig.hydraNodeId
-      , "--host"
-      , appConfig.auctionConfig.hydraNode.host
-      , "--port"
-      , UInt.toString appConfig.auctionConfig.hydraNode.port
-      , "--api-host"
-      , appConfig.auctionConfig.hydraNodeApi.host
-      , "--api-port"
-      , UInt.toString appConfig.auctionConfig.hydraNodeApi.port
-      , "--persistence-dir"
-      , appConfig.hydraPersistDir <</>> appConfig.auctionConfig.hydraNodeId
-      , "--hydra-signing-key"
-      , appConfig.hydraSk
-      , "--cardano-signing-key"
-      , appConfig.auctionConfig.cardanoSk
-      , "--node-socket"
-      , appConfig.nodeSocket
-      , "--ledger-protocol-parameters"
-      , appConst.protocolParams
-      , "--hydra-scripts-tx-id"
-      , appConfig.hydraScriptsTxHash
-      , "--contestation-period"
-      , Int.toStringAs Int.decimal appConfig.hydraContestPeriod
-      ]

@@ -66,7 +66,7 @@ contractGeneric
   -> Json
   -> Effect (Promise Json)
 contractGeneric contract contractConfig params = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   runContract contractParams do
     network <- getNetworkId
     toJs network <$> contract (fromJs network params)
@@ -79,7 +79,7 @@ registerDelegateGroup = contractGeneric Contract.registerDelegateGroupContract
 
 queryDelegateGroups :: Json -> Effect (Promise Json)
 queryDelegateGroups contractConfig = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   toJs unit <$> runContract contractParams Contract.queryDelegateGroups
 
 ----------------------------------------------------------------------
@@ -140,16 +140,16 @@ contractStub _ = do
 
 getWalletVk :: Json -> Effect (Promise Json)
 getWalletVk contractConfig = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   toJs unit <$> runContract contractParams Contract.getWalletVk
 
 awaitTxConfirmed :: Json -> Json -> Effect (Promise Unit)
 awaitTxConfirmed contractConfig txHash = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   runContract contractParams $ Contract.awaitTxConfirmed $ fromJs unit txHash
 
 mintTokenUsingAlwaysMints :: Json -> Json -> Json -> Effect (Promise Json)
 mintTokenUsingAlwaysMints contractConfig tokenName quantity = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   toJs unit <$> runContract contractParams
     (Contract.mintTokenUsingAlwaysMints (fromJs unit tokenName) (fromJs unit quantity))

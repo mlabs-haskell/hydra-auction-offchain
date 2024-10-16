@@ -29,7 +29,6 @@ import DelegateServer.Contract.PlaceBid
   , placeBidL2
   , placeBidL2ContractErrorCodec
   )
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (class AppOpen)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
@@ -40,6 +39,7 @@ import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
 import Type.Proxy (Proxy(Proxy))
 
 type PlaceBidResponse = ServerResponse PlaceBidSuccess PlaceBidError
@@ -47,7 +47,8 @@ type PlaceBidResponse = ServerResponse PlaceBidSuccess PlaceBidError
 placeBidResponseCodec :: CA.JsonCodec PlaceBidResponse
 placeBidResponseCodec = serverResponseCodec placeBidSuccessCodec placeBidErrorCodec
 
-placeBidHandler :: forall m. AppOpen m => HydraNodeApiWebSocket -> String -> m HTTPure.Response
+placeBidHandler
+  :: forall m. AppOpen m => HydraNodeApiWebSocket m -> String -> m HTTPure.Response
 placeBidHandler ws bidTerms = do
   resp <- placeBidHandlerImpl ws bidTerms
   respCreatedOrBadRequest placeBidResponseCodec resp
@@ -55,7 +56,7 @@ placeBidHandler ws bidTerms = do
 placeBidHandlerImpl
   :: forall m
    . AppOpen m
-  => HydraNodeApiWebSocket
+  => HydraNodeApiWebSocket m
   -> String
   -> m PlaceBidResponse
 placeBidHandlerImpl ws bodyStr = do

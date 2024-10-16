@@ -5,15 +5,13 @@ module DelegateServer.Config
   , AuctionSlotRuntimeConfig
   , AuctionSlotConfigRec
   , DelegateServerConfig
-  , Network(Testnet, Mainnet)
   , deriveAuctionSlotRuntimeConfig
   , execAppConfigParser
-  , networkToNetworkId
   ) where
 
 import Prelude
 
-import Cardano.Types (Ed25519KeyHash, NetworkId(TestnetId, MainnetId))
+import Cardano.Types (Ed25519KeyHash, NetworkId(TestnetId, MainnetId), TransactionHash)
 import Cardano.Types.PrivateKey (toPublicKey) as PrivateKey
 import Cardano.Types.PublicKey (hash) as PublicKey
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
@@ -44,10 +42,10 @@ import DelegateServer.Types.QueryBackendParamsSimple
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
-import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
+import HydraAuctionOffchain.Codec (logLevelCodec, portCodec, txHashCodec)
 import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile)
-import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec)
+import HydraSdk.Types (HostPort, Network, hostPortCodec, networkCodec)
 import Node.Path (FilePath)
 import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
@@ -127,7 +125,7 @@ newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
   -- ^ Network identifier (mainnet or testnet+magic).
   , queryBackend :: qb
   -- ^ Cardano query backend (Blockfrost or Ogmios+Kupo) for CTL.
-  , hydraScriptsTxHash :: String
+  , hydraScriptsTxHash :: TransactionHash
   -- ^ The transaction which is expected to have published Hydra
   -- scripts as reference scripts in its outputs. See hydra-node
   -- release notes for pre-published versions. You can use the
@@ -163,47 +161,12 @@ appConfigCodec =
     , nodeSocket: CA.string
     , network: networkCodec
     , queryBackend: queryBackendParamsSimpleCodec
-    , hydraScriptsTxHash: CA.string
+    , hydraScriptsTxHash: txHashCodec
     , hydraContestPeriod: CA.int
     , slotReservationPeriod: wrapIso Seconds CA.number
     , logLevel: logLevelCodec
     , ctlLogLevel: logLevelCodec
     }
-
-data Network = Testnet { magic :: Int } | Mainnet
-
-derive instance Generic Network _
-
-instance Show Network where
-  show = genericShow
-
-networkCodec :: CA.JsonCodec Network
-networkCodec =
-  fixTaggedSumCodec $
-    dimap toVariant fromVariant
-      ( CAV.variantMatch
-          { "testnet":
-              Right $ CA.object "Testnet" $ CAR.record
-                { magic: CA.int
-                }
-          , "mainnet": Left unit
-          }
-      )
-  where
-  toVariant = case _ of
-    Testnet rec -> Variant.inj (Proxy :: _ "testnet") rec
-    Mainnet -> Variant.inj (Proxy :: _ "mainnet") unit
-
-  fromVariant = Variant.match
-    { "testnet": Testnet
-    , "mainnet": const Mainnet
-    }
-
-networkToNetworkId :: Network -> NetworkId
-networkToNetworkId =
-  case _ of
-    Testnet _ -> TestnetId
-    Mainnet -> MainnetId
 
 deriveAuctionSlotRuntimeConfig
   :: forall (f :: Type -> Type)
