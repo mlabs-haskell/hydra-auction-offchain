@@ -12,7 +12,6 @@ import Control.Monad.Except (ExceptT, withExceptT)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , ContractOutput
-  , VerificationKey
   , mkContractOutput
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)

@@ -11,11 +11,9 @@ import Ansi.Output (foreground, withGraphics)
 import Data.Either (Either(Left, Right))
 import Data.Map (values) as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(SIGINT, SIGTERM))
 import Data.Traversable (traverse_)
-import DelegateServer.AppManager (AppManager, initAppManager)
-import DelegateServer.AppManager.Types (AuctionSlot)
+import DelegateServer.AppManager (AppManager', initAppManager)
 import DelegateServer.Cleanup (appCleanupHandler)
 import DelegateServer.Config (AppConfig'(AppConfig), DelegateServerConfig, execAppConfigParser)
 import DelegateServer.Server (httpServer)
@@ -30,6 +28,7 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (message)
 import Effect.Exception (message) as Error
+import HydraSdk.Extra.AppManager (AppManagerSlot)
 import Node.Process (onSignal, onUncaughtException)
 
 main :: Effect Unit
@@ -44,7 +43,7 @@ main = launchAff_ do
     onSignal SIGTERM appHandle.cleanupHandler
 
 type AppHandle =
-  { appManager :: AVar AppManager
+  { appManager :: AVar AppManager'
   , cleanupHandler :: Effect Unit
   }
 
@@ -56,6 +55,7 @@ startDelegateServer appConfig@(AppConfig appConfigRec) = do
     { serverPort: appConfigRec.serverPort
     , appManagerAvar
     , slotReservationPeriod: appConfigRec.slotReservationPeriod
+    , wsServer: wsServer'
     }
   initAppManager appConfig appManagerAvar wsServer'
   cleanupSem <- liftAff $ AVar.new unit
@@ -67,16 +67,16 @@ startDelegateServer appConfig@(AppConfig appConfigRec) = do
             <> Error.message err
         Right appManager ->
           traverse_
-            ( \{ appState, occupiedSlot } ->
+            ( \{ state: { appState }, occupiedSlot } ->
                 AVarSync.tryRead appState.exit >>= case _ of
                   Nothing ->
                     log $
                       "cleanupAppInstances: no cleanup handler attached to app instance at slot"
-                        <> show (occupiedSlot :: AuctionSlot)
+                        <> show (occupiedSlot :: AppManagerSlot)
                   Just handler ->
                     handler exitReason
             )
-            (Map.values (unwrap appManager).activeAuctions)
+            (Map.values appManager.activeApps)
     cleanupHandler =
       AVarSync.tryTake cleanupSem >>=
         maybe (pure unit) \_ ->

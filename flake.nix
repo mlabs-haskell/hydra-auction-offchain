@@ -12,7 +12,7 @@
     ctl.url = "github:Plutonomicon/cardano-transaction-lib/4bae6a202f3c77952d6067f94d8ae63cb74f3c0f";
     ctl.inputs.cardano-node.follows = "cardano-node";
     hydra.url = "github:input-output-hk/hydra/0.19.0";
-    hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/af5adae15742710aed2d09829c30c4160b96142b";
+    hydra-auction-onchain.url = "github:mlabs-haskell/hydra-auction-onchain/dshuiski/delegate-groups";
   };
 
   outputs = { self, nixpkgs, ctl, hydra, hydra-auction-onchain, ... }@inputs:

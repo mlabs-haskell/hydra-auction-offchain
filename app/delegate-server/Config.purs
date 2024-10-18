@@ -5,15 +5,13 @@ module DelegateServer.Config
   , AuctionSlotRuntimeConfig
   , AuctionSlotConfigRec
   , DelegateServerConfig
-  , Network(Testnet, Mainnet)
   , deriveAuctionSlotRuntimeConfig
   , execAppConfigParser
-  , networkToNetworkId
   ) where
 
 import Prelude
 
-import Cardano.Types (Ed25519KeyHash, NetworkId(TestnetId, MainnetId))
+import Cardano.Types (Ed25519KeyHash, TransactionHash)
 import Cardano.Types.PrivateKey (toPublicKey) as PrivateKey
 import Cardano.Types.PublicKey (hash) as PublicKey
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
@@ -22,18 +20,14 @@ import Contract.Wallet.KeyFile (privatePaymentKeyFromFile)
 import Data.Codec.Argonaut (JsonCodec, array, int, number, object, prismaticCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
-import Data.Either (Either(Left, Right), either)
+import Data.Either (either)
 import Data.Foldable (fold)
-import Data.Generic.Rep (class Generic)
 import Data.Log.Level (LogLevel)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap, wrap)
-import Data.Profunctor (dimap, wrapIso)
-import Data.Show.Generic (genericShow)
+import Data.Profunctor (wrapIso)
 import Data.Time.Duration (Seconds(Seconds))
 import Data.Traversable (traverse)
-import Data.Variant (inj, match) as Variant
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
 import DelegateServer.Types.QueryBackendParamsSimple
@@ -44,15 +38,13 @@ import DelegateServer.Types.QueryBackendParamsSimple
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
-import HydraAuctionOffchain.Codec (logLevelCodec, portCodec)
-import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
+import HydraAuctionOffchain.Codec (logLevelCodec, portCodec, txHashCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile)
-import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec)
+import HydraSdk.Types (HostPort, Network, hostPortCodec, networkCodec)
 import Node.Path (FilePath)
 import Options.Applicative ((<**>))
 import Options.Applicative as Optparse
 import Record (merge) as Record
-import Type.Proxy (Proxy(Proxy))
 import URI.Port (Port)
 
 -- TODO: check that specified ports are free and non-overlapping
@@ -127,7 +119,7 @@ newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
   -- ^ Network identifier (mainnet or testnet+magic).
   , queryBackend :: qb
   -- ^ Cardano query backend (Blockfrost or Ogmios+Kupo) for CTL.
-  , hydraScriptsTxHash :: String
+  , hydraScriptsTxHash :: TransactionHash
   -- ^ The transaction which is expected to have published Hydra
   -- scripts as reference scripts in its outputs. See hydra-node
   -- release notes for pre-published versions. You can use the
@@ -163,47 +155,12 @@ appConfigCodec =
     , nodeSocket: CA.string
     , network: networkCodec
     , queryBackend: queryBackendParamsSimpleCodec
-    , hydraScriptsTxHash: CA.string
+    , hydraScriptsTxHash: txHashCodec
     , hydraContestPeriod: CA.int
     , slotReservationPeriod: wrapIso Seconds CA.number
     , logLevel: logLevelCodec
     , ctlLogLevel: logLevelCodec
     }
-
-data Network = Testnet { magic :: Int } | Mainnet
-
-derive instance Generic Network _
-
-instance Show Network where
-  show = genericShow
-
-networkCodec :: CA.JsonCodec Network
-networkCodec =
-  fixTaggedSumCodec $
-    dimap toVariant fromVariant
-      ( CAV.variantMatch
-          { "testnet":
-              Right $ CA.object "Testnet" $ CAR.record
-                { magic: CA.int
-                }
-          , "mainnet": Left unit
-          }
-      )
-  where
-  toVariant = case _ of
-    Testnet rec -> Variant.inj (Proxy :: _ "testnet") rec
-    Mainnet -> Variant.inj (Proxy :: _ "mainnet") unit
-
-  fromVariant = Variant.match
-    { "testnet": Testnet
-    , "mainnet": const Mainnet
-    }
-
-networkToNetworkId :: Network -> NetworkId
-networkToNetworkId =
-  case _ of
-    Testnet _ -> TestnetId
-    Mainnet -> MainnetId
 
 deriveAuctionSlotRuntimeConfig
   :: forall (f :: Type -> Type)

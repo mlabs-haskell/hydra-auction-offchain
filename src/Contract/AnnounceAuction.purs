@@ -88,9 +88,7 @@ import Data.List (fromFoldable) as List
 import Data.Map (fromFoldable, isEmpty, keys, toUnfoldable, union) as Map
 import Data.Profunctor (wrapIso)
 import Data.Set (findMin, intersection) as Set
-import Data.UUID (UUID)
 import Data.Validation.Semigroup (validation)
-import DelegateServer.AppManager.Types (AuctionSlot)
 import DelegateServer.Handlers.HostAuction (HostAuctionError)
 import DelegateServer.Handlers.ReserveSlot (ReserveSlotError)
 import DelegateServer.Types.ServerResponse
@@ -143,6 +141,7 @@ import HydraAuctionOffchain.Service.DelegateServer
   , reserveSlotRequest
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
+import HydraSdk.Extra.AppManager (ReservationCode, AppManagerSlot)
 import JS.BigInt (fromInt) as BigInt
 import Partial.Unsafe (unsafePartial)
 import Record (merge) as Record
@@ -432,8 +431,8 @@ queryUtxos = map (map Map.fromFoldable <<< sequence) <<< parTraverse getUtxo'
 
 type DelegateServerSlotInfo =
   { httpServer :: String
-  , slot :: AuctionSlot
-  , reservationCode :: UUID
+  , slot :: AppManagerSlot
+  , reservationCode :: ReservationCode
   , delegatePkh :: Ed25519KeyHash
   }
 
@@ -482,7 +481,7 @@ reserveSlot httpServers = runExceptT do
     mempty
     (List.fromFoldable httpServers)
 
-getDelegateGroupSlot :: Array String -> Aff (Either ServiceError (Maybe AuctionSlot))
+getDelegateGroupSlot :: Array String -> Aff (Either ServiceError (Maybe AppManagerSlot))
 getDelegateGroupSlot httpServers =
   runExceptT do
     sets <- parTraverse (ExceptT <<< getAvailableSlotsRequest) httpServers
@@ -508,7 +507,7 @@ data AnnounceAuctionContractError
   | AnnounceAuction_Error_GetAvailableSlotsRequestFailed ServiceError
   | AnnounceAuction_Error_NoAvailableDelegateGroupSlots
   | AnnounceAuction_Error_ReserveSlotRequestFailed ServiceError
-  | AnnounceAuction_Error_CouldNotReserveDelegateGroupSlot AuctionSlot ReserveSlotError
+  | AnnounceAuction_Error_CouldNotReserveDelegateGroupSlot AppManagerSlot ReserveSlotError
   | AnnounceAuction_Error_HostAuctionRequestFailed ServiceError
   | AnnounceAuction_Error_CouldNotHostAuction HostAuctionError
 

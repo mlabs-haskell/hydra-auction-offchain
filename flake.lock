@@ -12630,17 +12630,17 @@
         "nixpkgs-latest": "nixpkgs-latest_2"
       },
       "locked": {
-        "lastModified": 1727798475,
-        "narHash": "sha256-sCCG9wBZKIR1gGK2KxzVI1BjZtUjiMjp4Kea1LOXEZw=",
+        "lastModified": 1729265327,
+        "narHash": "sha256-Qjfsk4piLMKjGnel0BkzTG1TU2mHqBAh3Mq72IcfMPQ=",
         "owner": "mlabs-haskell",
         "repo": "hydra-auction-onchain",
-        "rev": "af5adae15742710aed2d09829c30c4160b96142b",
+        "rev": "0c3244971f0119926827934cfc0d6dac1d397e5f",
         "type": "github"
       },
       "original": {
         "owner": "mlabs-haskell",
+        "ref": "dshuiski/delegate-groups",
         "repo": "hydra-auction-onchain",
-        "rev": "af5adae15742710aed2d09829c30c4160b96142b",
         "type": "github"
       }
     },

@@ -54,6 +54,8 @@ import JS.BigInt (toNumber) as BigInt
 import Node.Encoding (Encoding(UTF8)) as Encoding
 import Node.FS.Sync (exists, mkdir, writeTextFile) as FSSync
 import Node.Path (FilePath)
+import URI.Host (Host(IPv4Address))
+import URI.Host.IPv4Address (unsafeFromInts) as IPv4Address
 
 defDistribution :: InitialUTxOs
 defDistribution =
@@ -145,5 +147,5 @@ mkdirIfNotExists dir =
     dirExists <- FSSync.exists dir
     unless dirExists $ FSSync.mkdir dir
 
-localhost :: String
-localhost = "127.0.0.1"
+localhost :: Host
+localhost = IPv4Address $ IPv4Address.unsafeFromInts 127 0 0 1

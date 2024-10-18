@@ -27,8 +27,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(Tuple))
-import Data.UUID (UUID)
-import DelegateServer.AppManager (AppManager)
+import DelegateServer.AppManager (AppManager')
 import DelegateServer.AppManager
   ( HostAuctionError
       ( AuctionSlotNotAvailable
@@ -37,7 +36,6 @@ import DelegateServer.AppManager
       )
   , hostAuction
   ) as AppManager
-import DelegateServer.AppManager.Types (AuctionSlot, withAppManager)
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse
@@ -45,6 +43,7 @@ import DelegateServer.Types.ServerResponse
   , serverResponseCodec
   )
 import DelegateServer.Types.ServerResponse (fromEither) as ServerResponse
+import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar)
 import HTTPure (Response) as HTTPure
@@ -52,15 +51,24 @@ import HydraAuctionOffchain.Codec (uuidCodec)
 import HydraAuctionOffchain.Contract.Types (ContractError, contractErrorCodec, toContractError)
 import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
 import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.Extra.AppManager (ReservationCode, AppManagerSlot, withAppManager)
 
-hostAuctionHandler :: AVar AppManager -> String -> Aff HTTPure.Response
-hostAuctionHandler appManagerAvar bodyStr =
-  hostAuctionHandlerImpl appManagerAvar bodyStr >>=
+hostAuctionHandler
+  :: AVar AppManager'
+  -> DelegateWebSocketServer
+  -> String
+  -> Aff HTTPure.Response
+hostAuctionHandler appManagerAvar wsServer bodyStr =
+  hostAuctionHandlerImpl appManagerAvar wsServer bodyStr >>=
     respCreatedOrBadRequest hostAuctionResponseCodec
       <<< ServerResponse.fromEither
 
-hostAuctionHandlerImpl :: AVar AppManager -> String -> Aff (Either HostAuctionError Unit)
-hostAuctionHandlerImpl appManagerAvar bodyStr =
+hostAuctionHandlerImpl
+  :: AVar AppManager'
+  -> DelegateWebSocketServer
+  -> String
+  -> Aff (Either HostAuctionError Unit)
+hostAuctionHandlerImpl appManagerAvar wsServer bodyStr =
   runExceptT do
     reqBody <- except $ lmap CouldNotDecodeHostAuctionReqBody $
       caDecodeString hostAuctionRequestCodec bodyStr
@@ -69,18 +77,19 @@ hostAuctionHandlerImpl appManagerAvar bodyStr =
         either (Tuple appManager <<< Left) (flip Tuple (Right unit)) <$>
           AppManager.hostAuction
             { slot: reqBody.slot
-            , auctionMetadataOref: reqBody.auctionMetadataOref
+            , reservationCode: reqBody.reservationCode
             , appManager
             , appManagerAvar
-            , reservationCode: reqBody.reservationCode
+            , auctionMetadataOref: reqBody.auctionMetadataOref
+            , wsServer
             }
 
 -- HostAuctionRequest ------------------------------------------------
 
 type HostAuctionRequest =
   { auctionMetadataOref :: TransactionInput
-  , slot :: AuctionSlot
-  , reservationCode :: Maybe UUID
+  , slot :: AppManagerSlot
+  , reservationCode :: Maybe ReservationCode
   }
 
 hostAuctionRequestCodec :: CA.JsonCodec HostAuctionRequest

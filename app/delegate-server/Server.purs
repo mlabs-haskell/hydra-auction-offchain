@@ -12,14 +12,14 @@ import Data.Newtype (unwrap)
 import Data.Time.Duration (Seconds)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runApp)
-import DelegateServer.AppManager (AppManager)
+import DelegateServer.AppManager (AppManager')
 import DelegateServer.Handlers.GetAvailableSlots (getAvailableSlotsHandler)
 import DelegateServer.Handlers.HostAuction (hostAuctionHandler)
 import DelegateServer.Handlers.MoveBid (moveBidHandler)
 import DelegateServer.Handlers.PlaceBid (placeBidHandler)
 import DelegateServer.Handlers.ReserveSlot (reserveSlotHandler)
 import DelegateServer.Handlers.SignCommitTx (signCommitTxHandler)
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
+import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar (read) as AVar
@@ -40,13 +40,15 @@ import HTTPure
   ) as HTTPure
 import HTTPure (Method(Get, Options, Post), (!!), (!?), (!@))
 import HTTPure.Status (ok) as HTTPureStatus
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
 import URI.Port (Port)
 import URI.Port (toInt) as Port
 
 type HttpServerParams =
   { serverPort :: Port
-  , appManagerAvar :: AVar AppManager
+  , appManagerAvar :: AVar AppManager'
   , slotReservationPeriod :: Seconds
+  , wsServer :: DelegateWebSocketServer
   }
 
 httpServer :: HttpServerParams -> HTTPure.ServerM
@@ -75,12 +77,12 @@ routerCors params { body, method: Post, path: [ "reserveSlot" ] } = do
 
 routerCors params { body, method: Post, path: [ "hostAuction" ] } = do
   bodyStr <- liftAff $ HTTPure.toString body
-  hostAuctionHandler params.appManagerAvar bodyStr
+  hostAuctionHandler params.appManagerAvar params.wsServer bodyStr
 
 routerCors params request =
   appLookupMiddleware routerCorsApp params.appManagerAvar request
 
-routerCorsApp :: HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response
+routerCorsApp :: HydraNodeApiWebSocket AppM -> HTTPure.Request -> AppM HTTPure.Response
 routerCorsApp ws { method: Post, path: [ "moveBid" ] } =
   moveBidHandler ws
 
@@ -97,8 +99,8 @@ routerCorsApp _ _ = HTTPure.notFound
 -- Middleware --------------------------------------------------------
 
 appLookupMiddleware
-  :: (HydraNodeApiWebSocket -> HTTPure.Request -> AppM HTTPure.Response)
-  -> AVar AppManager
+  :: (HydraNodeApiWebSocket AppM -> HTTPure.Request -> AppM HTTPure.Response)
+  -> AVar AppManager'
   -> HTTPure.Request
   -> Aff HTTPure.Response
 appLookupMiddleware router' appManagerAvar request@{ headers }
@@ -107,13 +109,13 @@ appLookupMiddleware router' appManagerAvar request@{ headers }
         Nothing ->
           HTTPure.badRequest "Could not decode Auction-Cs request header"
         Just auctionCs -> do
-          { activeAuctions } <- unwrap <$> AVar.read appManagerAvar
-          case Map.lookup auctionCs activeAuctions of
+          { activeApps } <- AVar.read appManagerAvar
+          case Map.lookup auctionCs activeApps of
             Nothing ->
               HTTPure.badRequest
                 "Provided Auction-Cs does not correspond to any auction served by this \
                 \delegate server"
-            Just { appState, appLogger, hydraNodeApiWs } ->
+            Just { state: { appState, appLogger, hydraNodeApiWs } } ->
               runApp appState appLogger $ router' hydraNodeApiWs request
   | otherwise =
       HTTPure.badRequest "Missing Auction-Cs request header"

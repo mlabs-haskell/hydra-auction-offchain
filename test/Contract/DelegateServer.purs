@@ -30,15 +30,6 @@ import DelegateServer.Handlers.PlaceBid
   ( PlaceBidError(PlaceBidError_ContractError)
   , PlaceBidSuccess(PlaceBidSuccess_SubmittedTransaction)
   )
-import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus
-      ( HeadStatus_Idle
-      , HeadStatus_Initializing
-      , HeadStatus_Open
-      , HeadStatus_Closed
-      , HeadStatus_Final
-      )
-  )
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   )
@@ -56,6 +47,15 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, randomElem, waitSeconds)
 import HydraAuctionOffchain.Wallet (signMessage)
+import HydraSdk.Types
+  ( HydraHeadStatus
+      ( HeadStatus_Idle
+      , HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Closed
+      , HeadStatus_Final
+      )
+  )
 import Mote (group, skip, test)
 import Partial.Unsafe (unsafePartial)
 import Test.Contract.AnnounceAuction (AuctionTermsMutator, announceAuctionFix)

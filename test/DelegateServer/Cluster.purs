@@ -5,16 +5,19 @@ module Test.DelegateServer.Cluster
 
 import Prelude
 
+import Cardano.AsCbor (decodeCbor)
 import Cardano.Types
   ( BigNum
   , Ed25519KeyHash
   , Language(PlutusV2)
   , NetworkId(MainnetId)
+  , TransactionHash
   , TransactionInput
   )
 import Cardano.Types.Int (fromInt) as Cardano.Int
 import Cardano.Types.PublicKey (hash) as PublicKey
 import Cardano.Wallet.Key (KeyWallet(KeyWallet))
+import Contract.CborBytes (hexToCborBytes)
 import Contract.Config (mkCtlBackendParams)
 import Contract.Monad (Contract, ContractEnv, liftContractM, liftedE, runContractInEnv)
 import Contract.Test (class UtxoDistribution, ContractTest(ContractTest))
@@ -22,6 +25,7 @@ import Contract.Test.Testnet (TestnetConfig)
 import Contract.Wallet (PrivatePaymentKey)
 import Contract.Wallet.Key (publicKeyFromPrivateKey)
 import Contract.Wallet.KeyFile (privatePaymentKeyToFile)
+import Control.Monad.Error.Class (liftMaybe)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (ask, local)
 import Control.Parallel (parTraverse, parTraverse_)
@@ -48,18 +52,12 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (genUUID, toString) as UUID
 import DelegateServer.App (AppM, runApp, runContract)
-import DelegateServer.Config
-  ( DelegateServerConfig
-  , Network(Testnet)
-  , deriveAuctionSlotRuntimeConfig
-  )
+import DelegateServer.Config (DelegateServerConfig, deriveAuctionSlotRuntimeConfig)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Handlers.MoveBid (MoveBidResponse, moveBidHandlerImpl)
 import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidHandlerImpl)
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Main (AppHandle, startDelegateServer)
 import DelegateServer.State (access, readAppState)
-import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
 import Effect (Effect)
 import Effect.Aff (Aff, bracket)
 import Effect.Aff.AVar (read, tryRead) as AVar
@@ -79,6 +77,8 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (fromJustWithErr, randomElem)
 import HydraAuctionOffchain.Lib.Json (caDecodeFile, caEncodeString)
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
+import HydraSdk.Types (HydraHeadStatus, Network(Testnet))
 import Node.Buffer (toString) as Buffer
 import Node.ChildProcess (defaultExecSyncOptions, execSync)
 import Node.Encoding (Encoding(UTF8)) as Encoding
@@ -95,6 +95,7 @@ import Test.Helpers
 import Test.Localnet.Config (localnetConfig)
 import Test.QuickCheck.Gen (chooseInt, randomSampleOne)
 import Type.Proxy (Proxy(Proxy))
+import URI.Host (print) as Host
 import URI.Port (toInt, unsafeFromInt) as Port
 
 type TestAppHandle =
@@ -174,15 +175,15 @@ withDelegateServerCluster contractEnv clusterConfig peers action =
     )
     ( \(apps /\ _) ->
         let
-          withRandomApp :: forall a. (HydraNodeApiWebSocket -> AppM a) -> Contract a
+          withRandomApp :: forall a. (HydraNodeApiWebSocket AppM -> AppM a) -> Contract a
           withRandomApp f =
             liftAff do
               appHandle <- randomElem apps
-              appManager <- liftAff $ unwrap <$> AVar.read appHandle.appManager
+              appManager <- liftAff $ AVar.read appHandle.appManager
               let
-                { appState, appLogger, hydraNodeApiWs } =
+                { state: { appState, appLogger, hydraNodeApiWs } } =
                   unsafeHead $ Array.fromFoldable $ Map.values
-                    appManager.activeAuctions
+                    appManager.activeApps
               runApp appState appLogger $ f hydraNodeApiWs
 
           withRandomApp_ :: forall a. AppM a -> Contract a
@@ -253,7 +254,7 @@ genDelegateServerConfigs
   -> Aff (Array DelegateServerConfig)
 genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   peers' <- createWorkdirsStoreKeys
-  hydraScriptsTxHash <- publishHydraScripts
+  hydraScriptsTxHash <- liftEffect $ publishHydraScripts
     clusterConfig.localnetClusterParams.nodeSocketPath
     (ops.mkCardanoSk $ snd $ NEArray.head peers')
   worker (NEArray.toArray peers') hydraScriptsTxHash
@@ -261,8 +262,8 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
   ops =
     { mkServerPort: \idx -> Port.unsafeFromInt (7040 + idx)
     , mkWsServerPort: \idx -> Port.unsafeFromInt (7050 + idx)
-    , mkHydraNode: \idx -> { host: localhost, port: UInt.fromInt (7060 + idx) }
-    , mkHydraNodeApi: \idx -> { host: localhost, port: UInt.fromInt (7070 + idx) }
+    , mkHydraNode: \idx -> { host: localhost, port: Port.unsafeFromInt (7060 + idx) }
+    , mkHydraNodeApi: \idx -> { host: localhost, port: Port.unsafeFromInt (7070 + idx) }
     , mkPersistDir: flip concatPaths "persist-dir"
     , mkHydra: flip concatPaths "hydra"
     , mkHydraSk: flip concatPaths "hydra.sk"
@@ -273,7 +274,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
 
   worker
     :: Array (Int /\ FilePath)
-    -> String
+    -> TransactionHash
     -> Aff (Array DelegateServerConfig)
   worker peers' hydraScriptsTxHash =
     for peers' \(idx /\ workdir) -> do
@@ -290,7 +291,7 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
                   , cardanoVk: ops.mkCardanoVk workdir'
                   , httpServer:
                       { port: UInt.fromInt $ Port.toInt $ ops.mkServerPort idx'
-                      , host: localhost
+                      , host: Host.print localhost
                       , secure: false
                       , path: Nothing
                       }
@@ -341,17 +342,18 @@ genHydraKeys fp =
     void $ execSync ("hydra-node gen-hydra-key --output-file " <> fp)
       defaultExecSyncOptions
 
-publishHydraScripts :: forall m. MonadEffect m => FilePath -> FilePath -> m String
-publishHydraScripts nodeSocket cardanoSk =
-  liftEffect do
-    let
-      cmd =
-        "hydra-node publish-scripts --testnet-magic 2 --node-socket "
-          <> nodeSocket
-          <> " --cardano-signing-key "
-          <> cardanoSk
-    Buffer.toString Encoding.UTF8
-      =<< execSync cmd defaultExecSyncOptions
+publishHydraScripts :: FilePath -> FilePath -> Effect TransactionHash
+publishHydraScripts nodeSocket cardanoSk = do
+  txHash <- Buffer.toString Encoding.UTF8 =<< execSync cmd defaultExecSyncOptions
+  liftMaybe (error $ "publishHydraScripts: Could not decode tx hash") $
+    decodeCbor =<< hexToCborBytes txHash
+  where
+  cmd :: String
+  cmd =
+    "hydra-node publish-scripts --testnet-magic 2 --node-socket "
+      <> nodeSocket
+      <> " --cardano-signing-key "
+      <> cardanoSk
 
 patchContractEnv :: forall (a :: Type). NetworkId -> Contract ContractEnv
 patchContractEnv network = do
