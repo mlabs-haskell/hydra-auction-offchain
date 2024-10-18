@@ -7,7 +7,6 @@ module DelegateServer.Contract.Commit
       ( CommitBid_Error_CurrentTimeBeforeBiddingStart
       , CommitBid_Error_CurrentTimeAfterBiddingEnd
       , CommitBid_Error_CouldNotFindStandingBidUtxo
-      , CommitBid_Error_CouldNotIndexRedeemers
       , CommitBid_Error_CouldNotGetOwnPubKeyHash
       , CommitBid_Error_CommitRequestFailed
       , CommitBid_Error_SignCommitTxRequestFailed
@@ -29,7 +28,7 @@ import Cardano.Types
   , TransactionInput
   )
 import Contract.Chain (currentTime)
-import Contract.Log (logDebug', logWarn')
+import Contract.Log (logDebug', logError')
 import Contract.Monad (Contract)
 import Contract.PlutusData (Redeemer, toData)
 import Contract.ProtocolParameters (getProtocolParameters)
@@ -131,10 +130,9 @@ commitCollateral = do
   commitTx <-
     withExceptT CommitCollateral_Error_CommitRequestFailed $
       buildCommitTx commitRequest
-  -- txHash <- runContract (submit commitTx) !* CommitCollateral_Error_SubmitTxFailed
   lift (try (runContract (submit commitTx))) >>= case _ of
     Left err -> do
-      logWarn' $ "submit failure: " <> show err
+      logError' $ "commitCollateral: submit failure: " <> show err
       throwError CommitCollateral_Error_SubmitTxFailed
     Right txHash ->
       pure txHash
@@ -146,7 +144,6 @@ data CommitStandingBidError
   = CommitBid_Error_CurrentTimeBeforeBiddingStart
   | CommitBid_Error_CurrentTimeAfterBiddingEnd
   | CommitBid_Error_CouldNotFindStandingBidUtxo
-  | CommitBid_Error_CouldNotIndexRedeemers
   | CommitBid_Error_CouldNotGetOwnPubKeyHash
   | CommitBid_Error_CommitRequestFailed
   | CommitBid_Error_SignCommitTxRequestFailed
@@ -182,10 +179,9 @@ commitStandingBid = do
       buildCommitTx commitRequest
   { auctionConfig: { peers } } <- unwrap <$> access (Proxy :: _ "config")
   commitTxMultiSigned <- multiSignCommitTx peers commitTx auctionInfo.auctionId
-  -- txHash <- runContract (submit commitTxMultiSigned) !* CommitBid_Error_SubmitTxFailed
   lift (try (runContract (submit commitTxMultiSigned))) >>= case _ of
     Left err -> do
-      logWarn' $ "submit failure: " <> show err
+      logError' $ "commitStandingBid: submit failure: " <> show err
       throwError CommitBid_Error_SubmitTxFailed
     Right txHash ->
       pure $ standingBid /\ txHash
@@ -204,9 +200,10 @@ multiSignCommitTx peers commitTx auctionCs = do
     let reqPayload = { commitTx, commitLeader: unwrap pkh }
     withExceptT (const CommitBid_Error_SignCommitTxRequestFailed) $
       traverse
-        ( \{ httpServer } ->
-            ExceptT $ liftAff $
-              signCommitTxRequest (mkHttpUrl httpServer) auctionCs reqPayload
+        ( \{ httpServer } -> ExceptT do
+            res <- liftAff $ signCommitTxRequest (mkHttpUrl httpServer) auctionCs reqPayload
+            logDebug' $ "SignCommitTx result: " <> show res
+            pure res
         )
         peers
   signatures <-
@@ -216,7 +213,7 @@ multiSignCommitTx peers commitTx auctionCs = do
             pure signatures
           ServerResponseError signCommitTxErr -> do
             let err = printJson $ CA.encode signCommitTxErrorCodec signCommitTxErr
-            logWarn' $ "SignCommitTx request failed, error: " <> err
+            logError' $ "SignCommitTx request failed, error: " <> err
             throwError CommitBid_Error_CommitMultiSignFailed
       )
       responses
@@ -295,11 +292,6 @@ moveToHydraUnbalancedTx auctionInfo collateralUtxo = do
       ]
 
   blueprintTx /\ _usedUtxos <- lift $ mkUnbalancedTx lookups constraints
-  {-
-  indexedRedeemers <-
-    hush (indexRedeemers (mkRedeemersContext transaction) redeemers)
-      ?? CommitBid_Error_CouldNotIndexRedeemers
-  -}
   pure
     { blueprintTx
     , standingBid
