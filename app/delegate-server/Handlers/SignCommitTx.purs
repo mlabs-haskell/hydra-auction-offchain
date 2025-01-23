@@ -49,10 +49,10 @@ import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Parallel (parTraverse)
 import Data.Array (all, difference, find, fromFoldable, length, partition) as Array
-import Data.Codec.Argonaut (JsonCodec, array, object, string) as CA
+import Data.Codec.Argonaut (JsonCodec, array, object, printJsonDecodeError, string) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
+import Data.Codec.Argonaut.Sum (sum) as CAS
 import Data.Either (Either(Left, Right))
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
@@ -81,8 +81,7 @@ import HydraAuctionOffchain.Contract.QueryUtxo (isStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoRec)
 import HydraAuctionOffchain.Helpers (errV, fromJustWithErr)
 import HydraAuctionOffchain.Lib.Cardano.Address (toPubKeyHash)
-import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.Lib (caDecodeString)
 import Partial.Unsafe (unsafePartial)
 import Type.Proxy (Proxy(Proxy))
 
@@ -114,7 +113,8 @@ signCommitTxHandlerImpl :: forall m. AppInit m => String -> m SignCommitTxRespon
 signCommitTxHandlerImpl bodyStr = do
   case caDecodeString signCommitTxRequestPayloadCodec bodyStr of
     Left decodeErr ->
-      pure $ ServerResponseError $ CommitTxDecodingFailed decodeErr
+      pure $ ServerResponseError $ CommitTxDecodingFailed $
+        CA.printJsonDecodeError decodeErr
     Right { commitTx, commitLeader } -> do
       auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
       hydraHeadCs <- readAppState (Proxy :: _ "headCs")
@@ -186,15 +186,13 @@ instance Show SignCommitTxError where
 
 signCommitTxErrorCodec :: CA.JsonCodec SignCommitTxError
 signCommitTxErrorCodec =
-  sumGenericCodec "SignCommitTxError"
-    ( CAV.variantMatch
-        { "CommitTxDecodingFailed": Right CA.string
-        , "CommitTxCouldNotResolveInputs": Left unit
-        , "CommitTxCouldNotResolveCollateralInputs": Left unit
-        , "CommitTxValidationFailed": Right $ CA.array commitTxValidationErrorCodec
-        , "CommitTxSigningFailed": Right CA.string
-        }
-    )
+  CAS.sum "SignCommitTxError"
+    { "CommitTxDecodingFailed": CA.string
+    , "CommitTxCouldNotResolveInputs": unit
+    , "CommitTxCouldNotResolveCollateralInputs": unit
+    , "CommitTxValidationFailed": CA.array commitTxValidationErrorCodec
+    , "CommitTxSigningFailed": CA.string
+    }
 
 ----------------------------------------------------------------------
 -- CommitTx validation

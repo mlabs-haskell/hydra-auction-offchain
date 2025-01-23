@@ -17,7 +17,15 @@ import Cardano.Types.PublicKey (hash) as PublicKey
 import Contract.Config (QueryBackendParams, defaultConfirmTxDelay)
 import Contract.Transaction (TransactionInput)
 import Contract.Wallet.KeyFile (privatePaymentKeyFromFile)
-import Data.Codec.Argonaut (JsonCodec, array, int, number, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut
+  ( JsonCodec
+  , array
+  , int
+  , object
+  , printJsonDecodeError
+  , prismaticCodec
+  , string
+  ) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import Data.Either (either)
@@ -26,7 +34,6 @@ import Data.Log.Level (LogLevel)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap, wrap)
 import Data.Profunctor (wrapIso)
-import Data.Time.Duration (Seconds(Seconds))
 import Data.Traversable (traverse)
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer, hydraHeadPeerCodec)
@@ -130,7 +137,7 @@ newtype AppConfig' (ac :: Type) (qb :: Type) = AppConfig
   -- value is not in sync with other participants hydra-node will
   -- ignore the initial tx. Additionally, this value needs to make
   -- sense compared to the current network we are running.
-  , slotReservationPeriod :: Seconds
+  , slotReservationPeriod :: Int
   , logLevel :: LogLevel
   , ctlLogLevel :: LogLevel
   }
@@ -157,7 +164,7 @@ appConfigCodec =
     , queryBackend: queryBackendParamsSimpleCodec
     , hydraScriptsTxHash: txHashCodec
     , hydraContestPeriod: CA.int
-    , slotReservationPeriod: wrapIso Seconds CA.number
+    , slotReservationPeriod: CA.int
     , logLevel: logLevelCodec
     , ctlLogLevel: logLevelCodec
     }
@@ -176,7 +183,10 @@ deriveAuctionSlotRuntimeConfig slotConfig = do
 execAppConfigParser :: Aff DelegateServerConfig
 execAppConfigParser = do
   fp <- liftEffect $ Optparse.execParser parserInfo
-  appConfig <- liftEffect $ either throw pure =<< caDecodeFile appConfigCodec fp
+  appConfig <-
+    liftEffect $
+      either (throw <<< CA.printJsonDecodeError) pure
+        =<< caDecodeFile appConfigCodec fp
   auctionConfig <- traverse deriveAuctionSlotRuntimeConfig (unwrap appConfig).auctionConfig
   pure $ over wrap
     ( \rec -> rec

@@ -38,7 +38,7 @@ let additions =
           , "untagged-union"
           ]
         , repo = "https://github.com/mlabs-haskell/purescript-aeson.git"
-        , version = "v2.0.1"
+        , version = "e7bfc24a941e1d73de88de3f4a034e1da33cc8ae"
         }
       , bignumber =
         { dependencies =
@@ -214,7 +214,7 @@ let additions =
           ]
         , repo =
             "https://github.com/mlabs-haskell/purescript-cardano-serialization-lib"
-        , version = "v2.0.0"
+        , version = "v3.0.0"
         }
       , cardano-plutus-data-schema =
         { dependencies = [ "prelude" ]
@@ -372,7 +372,7 @@ let additions =
           , "unsafe-coerce"
           ]
         , repo = "https://github.com/mlabs-haskell/purescript-cardano-types"
-        , version = "v3.0.0"
+        , version = "v4.0.0"
         }
       , cardano-message-signing =
         { dependencies =
@@ -584,7 +584,7 @@ let additions =
           , "web-storage"
           ]
         , repo = "https://github.com/Plutonomicon/cardano-transaction-lib.git"
-        , version = "4bae6a202f3c77952d6067f94d8ae63cb74f3c0f"
+        , version = "5da2df9c8b3958d417332d7ad6aea4cf5f1b13eb"
         }
       , errors =
         { dependencies =
@@ -601,18 +601,57 @@ let additions =
         , repo = "https://github.com/passy/purescript-errors.git"
         , version = "670485beb1e026f77d52ca58ce10c145d96c11ba"
         }
+      , codec-aeson =
+        { dependencies =
+          [ "aeson"
+          , "argonaut-codecs"
+          , "argonaut-core"
+          , "arrays"
+          , "bifunctors"
+          , "codec"
+          , "console"
+          , "control"
+          , "effect"
+          , "either"
+          , "exceptions"
+          , "foldable-traversable"
+          , "foreign-object"
+          , "gen"
+          , "integers"
+          , "lists"
+          , "maybe"
+          , "newtype"
+          , "ordered-collections"
+          , "partial"
+          , "prelude"
+          , "profunctor"
+          , "quickcheck"
+          , "record"
+          , "safe-coerce"
+          , "strings"
+          , "transformers"
+          , "tuples"
+          , "type-equality"
+          , "typelevel-prelude"
+          , "unsafe-coerce"
+          , "variant"
+          ]
+        , repo = "https://github.com/errfrom/purescript-codec-aeson.git"
+        , version = "59996776e733a1e0f1daf085f153b2cca8527907"
+        }
       , hydra-sdk =
         { dependencies =
-          [ "aff"
+          [ "aeson"
+          , "aff"
           , "affjax"
+          , "affjax-node"
           , "argonaut"
           , "arrays"
           , "avar"
           , "bifunctors"
           , "bytearrays"
-          , "cardano-transaction-lib"
           , "cardano-types"
-          , "codec-argonaut"
+          , "codec-aeson"
           , "control"
           , "datetime"
           , "effect"
@@ -621,24 +660,33 @@ let additions =
           , "exceptions"
           , "foldable-traversable"
           , "foreign-object"
+          , "formatters"
           , "http-methods"
           , "integers"
-          , "js-bigints"
+          , "js-date"
           , "maybe"
           , "monad-logger"
+          , "mote"
+          , "mote-testplan"
           , "newtype"
           , "node-buffer"
           , "node-child-process"
+          , "node-fs"
           , "node-path"
+          , "node-process"
           , "node-streams"
           , "optparse"
           , "ordered-collections"
           , "parsing"
+          , "partial"
           , "plutus-types"
+          , "posix-types"
           , "prelude"
           , "profunctor"
           , "quickcheck"
+          , "record"
           , "safely"
+          , "spec"
           , "strings"
           , "tailrec"
           , "transformers"
@@ -646,11 +694,10 @@ let additions =
           , "uint"
           , "uri"
           , "uuid"
-          , "variant"
           ]
         , repo = "https://github.com/mlabs-haskell/purescript-hydra-sdk"
-        , version = "5a6655db749d06880fab5eb9168a56082a7ce5d1"
+        , version = "875ed7a58398523fbb65f98d708b90163c63f72b"
         }
       }
 
-in  (upstream // additions)
+in (upstream // additions)

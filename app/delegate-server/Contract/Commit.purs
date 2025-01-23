@@ -20,8 +20,11 @@ module DelegateServer.Contract.Commit
 
 import Contract.Prelude
 
+import Aeson (encodeAeson)
+import Cardano.AsCbor (decodeCbor)
 import Cardano.Types
-  ( Language(PlutusV2)
+  ( CborBytes
+  , Language(PlutusV2)
   , ScriptHash
   , Transaction
   , TransactionHash
@@ -46,12 +49,11 @@ import Contract.TxConstraints
 import Contract.UnbalancedTx (mkUnbalancedTx)
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Error.Util ((!?))
-import Control.Monad.Error.Class (try)
+import Control.Monad.Error.Class (liftMaybe, try)
 import Control.Monad.Except (ExceptT(ExceptT), mapExceptT, throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
 import Ctl.Internal.ServerConfig (mkHttpUrl)
 import Ctl.Internal.Transaction (setScriptDataHash)
-import Data.Argonaut (encodeJson)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Map (filterKeys, fromFoldable) as Map
@@ -67,6 +69,7 @@ import DelegateServer.Types.HydraHeadPeer (HydraHeadPeer)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   )
+import Effect.Exception (error)
 import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoRec
@@ -92,11 +95,14 @@ buildCommitTx :: forall m. AppBase m => HydraCommitRequest -> ExceptT HttpError 
 buildCommitTx req = do
   { auctionConfig: { hydraNodeApi } } <- unwrap <$> access (Proxy :: _ "config")
   let serverConfig = mkLocalhostHttpServerConfig $ UInt.fromInt $ Port.toInt hydraNodeApi.port
-  draftCommitTx <- ExceptT $ liftAff $ commitRequest serverConfig req
+  draftCommitTx <- ExceptT $ liftAff $ commitRequest (mkHttpUrl serverConfig) req
   runContractLift $ fixCommitTx draftCommitTx.cborHex
 
-fixCommitTx :: Transaction -> Contract Transaction
-fixCommitTx commitTx = do
+fixCommitTx :: CborBytes -> Contract Transaction
+fixCommitTx txBytes = do
+  commitTx <-
+    liftMaybe (error "fixCommitTx: could not decode draft tx") $
+      decodeCbor txBytes
   pparams <- unwrap <$> getProtocolParameters
   let
     costModels = Map.filterKeys (eq PlutusV2) pparams.costModels
@@ -126,7 +132,7 @@ commitCollateral = do
   let
     utxos = Map.fromFoldable [ collateralUtxo ]
     commitRequest = mkSimpleCommitRequest utxos
-  logDebug' $ "Collateral commit request: " <> printJson (encodeJson commitRequest)
+  logDebug' $ "Collateral commit request: " <> printJson (encodeAeson commitRequest)
   commitTx <-
     withExceptT CommitCollateral_Error_CommitRequestFailed $
       buildCommitTx commitRequest
@@ -173,7 +179,7 @@ commitStandingBid = do
       moveToHydraUnbalancedTx auctionInfo collateralUtxo
   let utxos = Map.fromFoldable [ standingBidUtxo, collateralUtxo ]
   let commitRequest = mkFullCommitRequest blueprintTx utxos
-  logDebug' $ "Standing bid commit request: " <> printJson (encodeJson commitRequest)
+  logDebug' $ "Standing bid commit request: " <> printJson (encodeAeson commitRequest)
   commitTx <-
     withExceptT (const CommitBid_Error_CommitRequestFailed) $
       buildCommitTx commitRequest

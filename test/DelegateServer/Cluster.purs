@@ -29,7 +29,6 @@ import Control.Monad.Error.Class (liftMaybe)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (ask, local)
 import Control.Parallel (parTraverse, parTraverse_)
-import Ctl.Internal.Contract.Hooks (ClusterParameters)
 import Ctl.Internal.Helpers (concatPaths, (<</>>))
 import Ctl.Internal.Testnet.Utils (tmpdir)
 import Data.Array (concat, deleteAt, replicate)
@@ -44,7 +43,6 @@ import Data.Log.Level (LogLevel(Info, Warn))
 import Data.Map (singleton, values) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (modify, unwrap, wrap)
-import Data.Time.Duration (Minutes(Minutes), convertDuration)
 import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (snd)
@@ -109,7 +107,7 @@ type TestAppHandle =
 withWallets'
   :: forall (distr :: Type) (wallets :: Type)
    . UtxoDistribution distr wallets
-  => Ref ClusterParameters
+  => Ref { nodeSocketPath :: String }
   -> distr
   -> ( wallets
        -> Array Ed25519KeyHash
@@ -219,7 +217,7 @@ type DelegateServerPeer =
 
 type DelegateServerClusterConfig =
   { auctionMetadataOref :: TransactionInput
-  , localnetClusterParams :: ClusterParameters
+  , localnetClusterParams :: { nodeSocketPath :: String }
   , localnetConfig :: TestnetConfig
   }
 
@@ -315,8 +313,8 @@ genDelegateServerConfigs clusterWorkdir clusterConfig peers = do
                   clusterConfig.localnetConfig.kupoConfig
               }
         , hydraScriptsTxHash
-        , hydraContestPeriod: 5
-        , slotReservationPeriod: convertDuration $ Minutes 5.0
+        , hydraContestPeriod: 5 -- 5 sec
+        , slotReservationPeriod: 300 -- 5 min
         , logLevel: Info
         , ctlLogLevel: Warn
         }

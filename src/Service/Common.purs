@@ -13,12 +13,13 @@ import Prelude
 import Affjax (Error, printError) as Affjax
 import Affjax.StatusCode (StatusCode) as Affjax
 import Data.Argonaut (Json, stringify)
+import Data.Codec.Argonaut (JsonDecodeError) as CA
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 
 data ServiceError
-  = ServiceDecodeJsonError String String
+  = ServiceDecodeJsonError String CA.JsonDecodeError
   | ServiceHttpError AffjaxError
   | ServiceHttpResponseError Affjax.StatusCode String
 

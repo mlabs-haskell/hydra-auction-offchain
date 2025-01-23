@@ -5,8 +5,6 @@ module DelegateServer.Types.QueryBackendParamsSimple
   , toQueryBackendParams
   ) where
 
-import Prelude
-
 import Contract.Config
   ( CtlBackendParams
   , QueryBackendParams
@@ -14,22 +12,20 @@ import Contract.Config
   , mkBlockfrostBackendParams
   , mkCtlBackendParams
   )
-import Data.Codec.Argonaut (JsonCodec, object, string) as CA
+import Data.Codec.Argonaut (JsonCodec, JPropCodec, string) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
-import Data.Either (Either(Right))
+import Data.Codec.Argonaut.Sum (sumFlat) as CAS
+import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
-import Data.Profunctor (dimap)
 import Data.Time.Duration (Seconds)
-import Data.Variant (inj, match) as Variant
 import HydraAuctionOffchain.Codec (serverConfigCodec)
-import HydraAuctionOffchain.Lib.Codec (fixTaggedSumCodec)
-import Type.Proxy (Proxy(Proxy))
 
 data QueryBackendParamsSimple
   = CtlBackendParams CtlBackendParams
   | BlockfrostBackendParams BlockfrostBackendParamsSimple
+
+derive instance Generic QueryBackendParamsSimple _
 
 toQueryBackendParams :: QueryBackendParamsSimple -> Maybe Seconds -> QueryBackendParams
 toQueryBackendParams backendParams confirmTxDelay =
@@ -44,23 +40,9 @@ toQueryBackendParams backendParams confirmTxDelay =
 
 queryBackendParamsSimpleCodec :: CA.JsonCodec QueryBackendParamsSimple
 queryBackendParamsSimpleCodec =
-  fixTaggedSumCodec $
-    dimap toVariant fromVariant
-      ( CAV.variantMatch
-          { "blockfrost": Right blockfrostBackendParamsSimpleCodec
-          , "ctl": Right ctlBackendParamsCodec
-          }
-      )
-  where
-  toVariant = case _ of
-    CtlBackendParams rec ->
-      Variant.inj (Proxy :: _ "ctl") rec
-    BlockfrostBackendParams rec ->
-      Variant.inj (Proxy :: _ "blockfrost") rec
-
-  fromVariant = Variant.match
-    { "ctl": CtlBackendParams
-    , "blockfrost": BlockfrostBackendParams
+  CAS.sumFlat "QueryBackendParamsSimple"
+    { "BlockfrostBackendParams": blockfrostBackendParamsSimpleCodec
+    , "CtlBackendParams": ctlBackendParamsCodec
     }
 
 type BlockfrostBackendParamsSimple =
@@ -68,17 +50,16 @@ type BlockfrostBackendParamsSimple =
   , apiKey :: Maybe String
   }
 
-blockfrostBackendParamsSimpleCodec :: CA.JsonCodec BlockfrostBackendParamsSimple
+blockfrostBackendParamsSimpleCodec :: CA.JPropCodec BlockfrostBackendParamsSimple
 blockfrostBackendParamsSimpleCodec =
-  CA.object "BlockfrostBackendParamsSimple" $ CAR.record
+  CAR.record
     { config: serverConfigCodec
     , apiKey: CA.maybe CA.string
     }
 
-ctlBackendParamsCodec :: CA.JsonCodec CtlBackendParams
+ctlBackendParamsCodec :: CA.JPropCodec CtlBackendParams
 ctlBackendParamsCodec =
-  CA.object "CtlBackendParams" $ CAR.record
+  CAR.record
     { ogmiosConfig: serverConfigCodec
     , kupoConfig: serverConfigCodec
     }
-

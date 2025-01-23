@@ -8,6 +8,7 @@ import Cardano.Types (NetworkId(MainnetId), ScriptHash)
 import Control.Monad.Logger.Trans (LoggerT, runLoggerT)
 import Data.Array (cons, elemIndex, singleton) as Array
 import Data.Codec.Argonaut (null) as CA
+import Data.Either (Either(Right))
 import Data.Maybe (Maybe(Just, Nothing))
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Lib.WebSocketServer (WebSocketCloseReason)
@@ -47,7 +48,7 @@ suite =
         connWsServerTrackMessages (csToHex auctionCsFixture0) \messages -> do
           waitSeconds one
           AVar.tryRead messages `shouldReturn`
-            Just (Array.singleton $ HydraHeadStatus headStatus)
+            Just (Array.singleton $ Right $ HydraHeadStatus headStatus)
 
     test "sends hydra head status and standing bid on connection" do
       headStatus <- liftEffect $ randomSampleOne arbitrary
@@ -56,7 +57,7 @@ suite =
         connWsServerTrackMessages (csToHex auctionCsFixture0) \messages -> do
           waitSeconds one
           AVar.tryRead messages `shouldReturn`
-            Just [ StandingBid standingBid, HydraHeadStatus headStatus ]
+            Just [ Right $ StandingBid standingBid, Right $ HydraHeadStatus headStatus ]
 
     test "closes connection on auction currency symbol decoding failure" do
       headStatus <- liftEffect $ randomSampleOne arbitrary
@@ -102,7 +103,7 @@ appMapMock auctionsToServe headStatus standingBid = do
 
 connWsServerTrackMessages
   :: String
-  -> (AVar (Array DelegateWebSocketServerMessage) -> Aff Unit)
+  -> (AVar (Array (Either String DelegateWebSocketServerMessage)) -> Aff Unit)
   -> Aff Unit
 connWsServerTrackMessages auctionCs cont = do
   messages <- AVar.new mempty

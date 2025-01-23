@@ -9,7 +9,6 @@ import Contract.CborBytes (hexToCborBytes)
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (unwrap)
-import Data.Time.Duration (Seconds)
 import Data.Tuple.Nested ((/\))
 import DelegateServer.App (AppM, runApp)
 import DelegateServer.AppManager (AppManager')
@@ -47,7 +46,7 @@ import URI.Port (toInt) as Port
 type HttpServerParams =
   { serverPort :: Port
   , appManagerAvar :: AVar AppManager'
-  , slotReservationPeriod :: Seconds
+  , slotReservationPeriod :: Int
   , wsServer :: DelegateWebSocketServer
   }
 

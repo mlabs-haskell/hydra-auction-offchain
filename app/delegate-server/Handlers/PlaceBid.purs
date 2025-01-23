@@ -16,7 +16,7 @@ import Prelude
 
 import Contract.Address (getNetworkId)
 import Control.Monad.Except (runExceptT)
-import Data.Codec.Argonaut (JsonCodec, string) as CA
+import Data.Codec.Argonaut (JsonCodec, printJsonDecodeError, string) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
 import Data.Generic.Rep (class Generic)
@@ -38,7 +38,7 @@ import DelegateServer.Types.ServerResponse
 import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.Lib (caDecodeString)
 import HydraSdk.NodeApi (HydraNodeApiWebSocket)
 import Type.Proxy (Proxy(Proxy))
 
@@ -63,8 +63,8 @@ placeBidHandlerImpl ws bodyStr = do
   network <- runContract getNetworkId
   case caDecodeString (bidTermsCodec network) bodyStr of
     Left decodeErr ->
-      pure $ ServerResponseError $
-        PlaceBidError_CouldNotDecodeBidTerms decodeErr
+      pure $ ServerResponseError $ PlaceBidError_CouldNotDecodeBidTerms $
+        CA.printJsonDecodeError decodeErr
     Right bidTerms -> do
       runExceptT (placeBidL2 ws bidTerms) <#> case _ of
         Left contractErr ->

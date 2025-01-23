@@ -5,11 +5,11 @@
   "hydraSk": "keys/hydra.sk",
   "nodeSocket": "node-ipc/node.socket",
   "network": {
-    "tag": "testnet",
+    "tag": "Testnet",
     "magic": 1
   },
   "queryBackend": {
-    "tag": "blockfrost",
+    "tag": "BlockfrostBackendParams",
     "config": {
         "port": 443,
         "host": "cardano-preprod.blockfrost.io",
@@ -21,12 +21,12 @@
   "hydraScriptsTxHash": "03f8deb122fbbd98af8eb58ef56feda37728ec957d39586b78198a0cf624412a",
   "hydraContestPeriod": 60,
   "slotReservationPeriod": 300,
-  "logLevel": "debug",
-  "ctlLogLevel": "warn",
+  "logLevel": "trace",
+  "ctlLogLevel": "debug",
   "auctionConfig": [
     {
       "auctionMetadataOref": null,
-      "hydraNodeId": "aebc0f2f-c817-4fa9-a0b1-a39c99a39495",
+      "hydraNodeId": "f41e87e9-958a-4a80-8bb1-2f62d272a673",
       "hydraNode": "0.0.0.0:7000",
       "hydraNodeApi": "127.0.0.1:7001",
       "cardanoSk": "keys/cardano.sk",

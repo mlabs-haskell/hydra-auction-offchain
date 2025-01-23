@@ -7,7 +7,7 @@ module DelegateServer.Types.ServerResponse
 
 import Prelude
 
-import Data.Argonaut (stringify)
+import Aeson (stringifyAeson)
 import Data.Codec.Argonaut (JsonCodec, encode) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Right), either)
@@ -78,4 +78,4 @@ respCreatedOrBadRequest respCodec resp =
       HTTPure.badRequest respBody
   where
   respBody :: String
-  respBody = stringify $ CA.encode respCodec resp
+  respBody = stringifyAeson $ CA.encode respCodec resp
