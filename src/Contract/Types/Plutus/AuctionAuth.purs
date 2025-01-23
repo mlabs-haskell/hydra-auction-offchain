@@ -16,7 +16,6 @@ import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (class Newtype, wrap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple)
-import HydraAuctionOffchain.Contract.Types.VerificationKey (VerificationKey)
 import Type.Proxy (Proxy(Proxy))
 
 newtype AuctionAuth = AuctionAuth

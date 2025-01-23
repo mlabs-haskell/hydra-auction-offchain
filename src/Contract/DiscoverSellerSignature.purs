@@ -34,9 +34,7 @@ import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionAuth(AuctionAuth)
   , ContractOutput
-  , VerificationKey
   , mkContractOutput
-  , vkeyCodec
   )
 import HydraAuctionOffchain.Helpers (getInlineDatum)
 import HydraAuctionOffchain.Lib.Cardano.Address (toPubKeyHash)

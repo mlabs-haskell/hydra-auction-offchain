@@ -2,7 +2,6 @@ module HydraAuctionOffchain.Codec
   ( addressCodec
   , assetNameCodec
   , bigIntCodec
-  , bigIntCodecNum
   , bigNumCodec
   , byteArrayCodec
   , ed25519KeyHashCodec
@@ -64,7 +63,6 @@ import Data.Codec.Argonaut
   , array
   , boolean
   , int
-  , number
   , object
   , prismaticCodec
   , string
@@ -87,7 +85,7 @@ import Data.UUID (UUID, parseUUID)
 import Data.UUID (toString) as UUID
 import HydraAuctionOffchain.Helpers (fromJustWithErr)
 import JS.BigInt (BigInt)
-import JS.BigInt (fromNumber, fromString, toNumber, toString) as BigInt
+import JS.BigInt (fromString, toString) as BigInt
 import URI.Port (Port)
 import URI.Port (fromInt, toInt) as Port
 
@@ -110,11 +108,6 @@ bigIntCodec :: CA.JsonCodec BigInt
 bigIntCodec =
   CA.prismaticCodec "BigInt" BigInt.fromString BigInt.toString
     CA.string
-
-bigIntCodecNum :: CA.JsonCodec BigInt
-bigIntCodecNum =
-  CA.prismaticCodec "BigInt" BigInt.fromNumber BigInt.toNumber
-    CA.number
 
 bigNumCodec :: CA.JsonCodec BigNum
 bigNumCodec =

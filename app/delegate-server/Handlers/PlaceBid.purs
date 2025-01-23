@@ -16,7 +16,7 @@ import Prelude
 
 import Contract.Address (getNetworkId)
 import Control.Monad.Except (runExceptT)
-import Data.Codec.Argonaut (JsonCodec, string) as CA
+import Data.Codec.Argonaut (JsonCodec, printJsonDecodeError, string) as CA
 import Data.Codec.Argonaut.Variant (variantMatch) as CAV
 import Data.Either (Either(Left, Right))
 import Data.Generic.Rep (class Generic)
@@ -29,7 +29,6 @@ import DelegateServer.Contract.PlaceBid
   , placeBidL2
   , placeBidL2ContractErrorCodec
   )
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.State (class AppOpen)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
@@ -39,7 +38,8 @@ import DelegateServer.Types.ServerResponse
 import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Contract.Types (bidTermsCodec)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.Lib (caDecodeString)
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
 import Type.Proxy (Proxy(Proxy))
 
 type PlaceBidResponse = ServerResponse PlaceBidSuccess PlaceBidError
@@ -47,7 +47,8 @@ type PlaceBidResponse = ServerResponse PlaceBidSuccess PlaceBidError
 placeBidResponseCodec :: CA.JsonCodec PlaceBidResponse
 placeBidResponseCodec = serverResponseCodec placeBidSuccessCodec placeBidErrorCodec
 
-placeBidHandler :: forall m. AppOpen m => HydraNodeApiWebSocket -> String -> m HTTPure.Response
+placeBidHandler
+  :: forall m. AppOpen m => HydraNodeApiWebSocket m -> String -> m HTTPure.Response
 placeBidHandler ws bidTerms = do
   resp <- placeBidHandlerImpl ws bidTerms
   respCreatedOrBadRequest placeBidResponseCodec resp
@@ -55,15 +56,15 @@ placeBidHandler ws bidTerms = do
 placeBidHandlerImpl
   :: forall m
    . AppOpen m
-  => HydraNodeApiWebSocket
+  => HydraNodeApiWebSocket m
   -> String
   -> m PlaceBidResponse
 placeBidHandlerImpl ws bodyStr = do
   network <- runContract getNetworkId
   case caDecodeString (bidTermsCodec network) bodyStr of
     Left decodeErr ->
-      pure $ ServerResponseError $
-        PlaceBidError_CouldNotDecodeBidTerms decodeErr
+      pure $ ServerResponseError $ PlaceBidError_CouldNotDecodeBidTerms $
+        CA.printJsonDecodeError decodeErr
     Right bidTerms -> do
       runExceptT (placeBidL2 ws bidTerms) <#> case _ of
         Left contractErr ->

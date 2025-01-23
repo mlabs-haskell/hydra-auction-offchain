@@ -21,11 +21,7 @@ import Data.Newtype (class Newtype, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import HydraAuctionOffchain.Codec (plutusAddressCodec, publicKeyCodec)
-import HydraAuctionOffchain.Contract.Types.VerificationKey
-  ( VerificationKey
-  , vkeyBytes
-  , vkeyCodec
-  )
+import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import Partial.Unsafe (unsafePartial)
 import Test.QuickCheck (class Arbitrary, arbitrary)

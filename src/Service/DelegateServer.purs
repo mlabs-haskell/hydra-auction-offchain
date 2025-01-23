@@ -15,7 +15,6 @@ import Data.Codec.Argonaut (encode) as CA
 import Data.Either (Either)
 import Data.Maybe (Maybe(Just, Nothing))
 import Data.Set (Set)
-import DelegateServer.AppManager.Types (AuctionSlot)
 import DelegateServer.Handlers.GetAvailableSlots (availableSlotsCodec)
 import DelegateServer.Handlers.HostAuction
   ( HostAuctionRequest
@@ -40,8 +39,9 @@ import HydraAuctionOffchain.Service.DelegateServer.Http
   , mkAuctionCsHeader
   , postRequest
   )
+import HydraSdk.Extra.AppManager (AppManagerSlot)
 
-getAvailableSlotsRequest :: String -> Aff (Either ServiceError (Set AuctionSlot))
+getAvailableSlotsRequest :: String -> Aff (Either ServiceError (Set AppManagerSlot))
 getAvailableSlotsRequest httpServer =
   handleResponse availableSlotsCodec <$>
     getRequest (httpServer <</>> "availableSlots")

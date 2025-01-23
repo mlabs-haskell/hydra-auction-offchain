@@ -37,7 +37,7 @@ import Data.Maybe (Maybe(Just, Nothing))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set)
 import Data.Set (empty) as Set
-import DelegateServer.Config (AppConfig, AppConfig'(AppConfig), networkToNetworkId)
+import DelegateServer.Config (AppConfig, AppConfig'(AppConfig))
 import DelegateServer.Lib.Contract (runContractNullCostsAff)
 import DelegateServer.State
   ( class App
@@ -50,8 +50,6 @@ import DelegateServer.State
   )
 import DelegateServer.Types.AppExitReason (AppExitReason)
 import DelegateServer.Types.CommitStatus (CommitStatus(ShouldCommitCollateral))
-import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus(HeadStatus_Unknown))
-import DelegateServer.Types.HydraSnapshot (HydraSnapshot, emptySnapshot)
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
 import Effect.Aff.AVar (AVar)
@@ -61,6 +59,12 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 import Effect.Exception (Error)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoExtended, Utxo)
+import HydraSdk.Types
+  ( HydraHeadStatus(HeadStatus_Unknown)
+  , HydraSnapshot
+  , emptySnapshot
+  , networkToNetworkId
+  )
 import Type.Proxy (Proxy(Proxy))
 
 ----------------------------------------------------------------------

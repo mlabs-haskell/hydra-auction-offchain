@@ -36,14 +36,11 @@ import HydraAuctionOffchain.Contract.Types
   , AuctionAuth(AuctionAuth)
   , ContractOutput
   , ContractResult
-  , VerificationKey
   , assetToValue
   , emptySubmitTxData
   , mkContractOutput
   , sellerSignatureMessage
   , submitTxReturningContractResult
-  , vkeyBytes
-  , vkeyCodec
   )
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)

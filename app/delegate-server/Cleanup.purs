@@ -10,7 +10,6 @@ import Contract.Monad (ContractEnv, stopContractEnv)
 import Data.Maybe (Maybe)
 import Data.Posix.Signal (Signal(SIGTERM))
 import Data.Traversable (traverse_)
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Types.AppExitReason (AppExitReason(AppExitReason_Cleanup))
 import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect (Effect)
@@ -20,6 +19,7 @@ import Effect.Aff (launchAff_)
 import Effect.Console (log)
 import Effect.Timer (TimeoutId)
 import Effect.Timer (clearTimeout) as Timer
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
 import Node.ChildProcess (ChildProcess, kill)
 
 appCleanupHandler
@@ -36,8 +36,9 @@ appCleanupHandler closeHttpServer wsServer cleanupAppInstances = do
     *> cleanupAppInstances AppExitReason_Cleanup
 
 appInstanceCleanupHandler
-  :: ChildProcess
-  -> HydraNodeApiWebSocket
+  :: forall m
+   . ChildProcess
+  -> HydraNodeApiWebSocket m
   -> ContractEnv
   -> Array (AVar (Maybe TimeoutId))
   -> Effect Unit

@@ -13,12 +13,15 @@ import type {
   ContractConfig,
   ContractOutput,
   CurrencySymbol,
+  DelegateGroupInfo,
   DiscoverSellerSigContractParams,
   EnterAuctionContractParams,
   MoveBidL2ContractParams,
   PlaceBidContractParams,
   PlaceBidL2ContractParams,
   PubKeyHash,
+  RegisterDelegateGroupContractOutput,
+  RegisterDelegateGroupContractParams,
   StartBiddingContractParams,
   StandingBidState,
   TokenName,
@@ -183,54 +186,17 @@ export const announceDelegateGroup = async (
   delegates: Array<PubKeyHash>
 ): Promise<ContractOutput<TxCbor>> => unimplemented();
 
-/*
 // Delegate groups ---------------------------------------------------
 
-export type Url = string;
-export type RawBytes = string;
-
-export type DelegateGroupMetadata = {
-  url: Url;
-  dataHash: RawBytes;
-};
-
-export type DelegateGroupInfo = {
-  groupId: CurrencySymbol;
-  groupMetadata: DelegateGroupMetadata;
-  delegates: Array<PubKeyHash>;
-  httpServers: Array<string>;
-  wsServers: Array<string>;
-};
-
-export type DelegateGroupSlot = string; // stringified int
-
-export type HostAuctionInfo = {
-  delegateGroup: DelegateGroupInfo;
-  slot: DelegateGroupSlot;
-  auctionMetadataOref: TransactionInput;
-};
-
+export const registerDelegateGroup = async (
+  config: ContractConfig,
+  params: RegisterDelegateGroupContractParams
+): Promise<ContractOutput<RegisterDelegateGroupContractOutput>> =>
+  Purs.registerDelegateGroup(config)(params)();
+  
 export const queryDelegateGroups = async (
   config: ContractConfig
-): Promise<Array<DelegateGroupInfo>> => unimplemented();
-
-// Attempt to book a delegate group slot for an upcoming auction.
-//
-// This query will perform the following steps under the hood:
-// 1. Query a list of available auction slots from each delegate.
-// 2. Identify the common slots by finding their intersection.
-// 3. Randomly select one slot from the common available slots.
-// 4. Attempt to book the selected slot by sending booking requests to each delegate.
-export const bookSlotForAuction = async (
-  groupInfo: DelegateGroupInfo
-): Promise<DelegateGroupSlot | null> => unimplemented();
-
-// Attempt to host announced auction at a specific delegate group slot.
-export const hostAuction = async (
-  hostInfo: HostAuctionInfo
-): Promise<ContractOutput<any>> => unimplemented();
-
-*/
+): Promise<Array<DelegateGroupInfo>> => Purs.queryDelegateGroups(config)();
 
 // Helpers -----------------------------------------------------------
 

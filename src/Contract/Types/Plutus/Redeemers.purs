@@ -12,6 +12,7 @@ module HydraAuctionOffchain.Contract.Types.Plutus.Redeemers
       , ReclaimDepositAuctionConcludedRedeemer
       , ReclaimDepositCleanupRedeemer
       )
+  , DelegateGroupPolicyRedeemer(MintDelegateGroup, BurnDelegateGroup)
   , StandingBidRedeemer
       ( NewBidRedeemer
       , MoveToHydraRedeemer
@@ -25,6 +26,35 @@ import Prelude
 import Cardano.Plutus.DataSchema (S, Z)
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
+
+----------------------------------------------------------------------
+-- DelegateGroup minting policy
+
+data DelegateGroupPolicyRedeemer = MintDelegateGroup | BurnDelegateGroup
+
+derive instance Generic DelegateGroupPolicyRedeemer _
+derive instance Eq DelegateGroupPolicyRedeemer
+
+instance Show DelegateGroupPolicyRedeemer where
+  show = genericShow
+
+instance
+  HasPlutusSchema
+    DelegateGroupPolicyRedeemer
+    ( "MintDelegateGroup"
+        := PNil
+        @@ Z
+        :+ "BurnDelegateGroup"
+        := PNil
+        @@ (S Z)
+        :+ PNil
+    )
+
+instance ToData DelegateGroupPolicyRedeemer where
+  toData = genericToData
+
+instance FromData DelegateGroupPolicyRedeemer where
+  fromData = genericFromData
 
 ----------------------------------------------------------------------
 -- AuctionEscrow

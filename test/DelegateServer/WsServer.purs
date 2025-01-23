@@ -8,13 +8,10 @@ import Cardano.Types (NetworkId(MainnetId), ScriptHash)
 import Control.Monad.Logger.Trans (LoggerT, runLoggerT)
 import Data.Array (cons, elemIndex, singleton) as Array
 import Data.Codec.Argonaut (null) as CA
+import Data.Either (Either(Right))
 import Data.Maybe (Maybe(Just, Nothing))
-import Data.Tuple (fst)
-import DelegateServer.Config (Network(Mainnet))
 import DelegateServer.Lib.AVar (modifyAVar_)
 import DelegateServer.Lib.WebSocketServer (WebSocketCloseReason)
-import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
-import DelegateServer.WebSocket (WebSocketBuilder, mkWebSocket)
 import DelegateServer.WsServer
   ( DelegateWebSocketServer
   , DelegateWebSocketServerMessage(HydraHeadStatus, StandingBid)
@@ -31,6 +28,8 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.Types (StandingBidState)
 import HydraAuctionOffchain.Helpers (csToHex, waitSeconds)
+import HydraSdk.Internal.Lib.WebSocket (WebSocketBuilder, mkWebSocket)
+import HydraSdk.Types (HydraHeadStatus, Network(Mainnet))
 import Mote (MoteT, group, test)
 import Test.Gen (genStandingBid)
 import Test.Helpers (mkCurrencySymbolUnsafe)
@@ -49,7 +48,7 @@ suite =
         connWsServerTrackMessages (csToHex auctionCsFixture0) \messages -> do
           waitSeconds one
           AVar.tryRead messages `shouldReturn`
-            Just (Array.singleton $ HydraHeadStatus headStatus)
+            Just (Array.singleton $ Right $ HydraHeadStatus headStatus)
 
     test "sends hydra head status and standing bid on connection" do
       headStatus <- liftEffect $ randomSampleOne arbitrary
@@ -58,7 +57,7 @@ suite =
         connWsServerTrackMessages (csToHex auctionCsFixture0) \messages -> do
           waitSeconds one
           AVar.tryRead messages `shouldReturn`
-            Just [ StandingBid standingBid, HydraHeadStatus headStatus ]
+            Just [ Right $ StandingBid standingBid, Right $ HydraHeadStatus headStatus ]
 
     test "closes connection on auction currency symbol decoding failure" do
       headStatus <- liftEffect $ randomSampleOne arbitrary
@@ -104,11 +103,11 @@ appMapMock auctionsToServe headStatus standingBid = do
 
 connWsServerTrackMessages
   :: String
-  -> (AVar (Array DelegateWebSocketServerMessage) -> Aff Unit)
+  -> (AVar (Array (Either String DelegateWebSocketServerMessage)) -> Aff Unit)
   -> Aff Unit
 connWsServerTrackMessages auctionCs cont = do
   messages <- AVar.new mempty
-  ws <- liftEffect $ fst <$> mkWebSocket (wsBuilder auctionCs)
+  ws <- liftEffect $ mkWebSocket (wsBuilder auctionCs)
   liftEffect $ ws.onMessage $ \m -> modifyAVar_ messages (pure <<< Array.cons m)
   cont messages
   liftEffect ws.close
@@ -116,7 +115,7 @@ connWsServerTrackMessages auctionCs cont = do
 connWsServerExpectClose :: String -> (AVar WebSocketCloseReason -> Aff Unit) -> Aff Unit
 connWsServerExpectClose auctionCs cont = do
   closeReason <- AVar.empty
-  ws <- liftEffect $ fst <$> mkWebSocket (wsBuilder auctionCs)
+  ws <- liftEffect $ mkWebSocket (wsBuilder auctionCs)
   liftEffect $ ws.onClose \code reason ->
     liftAff $ void $ AVar.tryPut { code, reason } closeReason
   cont closeReason

@@ -18,17 +18,24 @@ import Prelude
 import Cardano.Types (TransactionInput)
 import Control.Monad.Except (ExceptT(ExceptT), except, runExceptT)
 import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (JsonCodec, int, null, object, prismaticCodec, string) as CA
+import Data.Codec.Argonaut
+  ( JsonCodec
+  , int
+  , null
+  , object
+  , printJsonDecodeError
+  , prismaticCodec
+  , string
+  ) as CA
 import Data.Codec.Argonaut.Compat (maybe) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
+import Data.Codec.Argonaut.Sum (sum) as CAS
 import Data.Either (Either(Left, Right), either)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(Tuple))
-import Data.UUID (UUID)
-import DelegateServer.AppManager (AppManager)
+import DelegateServer.AppManager (AppManager')
 import DelegateServer.AppManager
   ( HostAuctionError
       ( AuctionSlotNotAvailable
@@ -37,7 +44,6 @@ import DelegateServer.AppManager
       )
   , hostAuction
   ) as AppManager
-import DelegateServer.AppManager.Types (AuctionSlot, withAppManager)
 import DelegateServer.Helpers (printOref, readOref)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse
@@ -45,42 +51,52 @@ import DelegateServer.Types.ServerResponse
   , serverResponseCodec
   )
 import DelegateServer.Types.ServerResponse (fromEither) as ServerResponse
+import DelegateServer.WsServer (DelegateWebSocketServer)
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar)
 import HTTPure (Response) as HTTPure
 import HydraAuctionOffchain.Codec (uuidCodec)
 import HydraAuctionOffchain.Contract.Types (ContractError, contractErrorCodec, toContractError)
-import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraSdk.Extra.AppManager (ReservationCode, AppManagerSlot, withAppManager)
+import HydraSdk.Lib (caDecodeString)
 
-hostAuctionHandler :: AVar AppManager -> String -> Aff HTTPure.Response
-hostAuctionHandler appManagerAvar bodyStr =
-  hostAuctionHandlerImpl appManagerAvar bodyStr >>=
+hostAuctionHandler
+  :: AVar AppManager'
+  -> DelegateWebSocketServer
+  -> String
+  -> Aff HTTPure.Response
+hostAuctionHandler appManagerAvar wsServer bodyStr =
+  hostAuctionHandlerImpl appManagerAvar wsServer bodyStr >>=
     respCreatedOrBadRequest hostAuctionResponseCodec
       <<< ServerResponse.fromEither
 
-hostAuctionHandlerImpl :: AVar AppManager -> String -> Aff (Either HostAuctionError Unit)
-hostAuctionHandlerImpl appManagerAvar bodyStr =
+hostAuctionHandlerImpl
+  :: AVar AppManager'
+  -> DelegateWebSocketServer
+  -> String
+  -> Aff (Either HostAuctionError Unit)
+hostAuctionHandlerImpl appManagerAvar wsServer bodyStr =
   runExceptT do
-    reqBody <- except $ lmap CouldNotDecodeHostAuctionReqBody $
+    reqBody <- except $ lmap (CouldNotDecodeHostAuctionReqBody <<< CA.printJsonDecodeError) $
       caDecodeString hostAuctionRequestCodec bodyStr
     ExceptT $ lmap convertHostAuctionError <$>
       withAppManager appManagerAvar \appManager ->
         either (Tuple appManager <<< Left) (flip Tuple (Right unit)) <$>
           AppManager.hostAuction
             { slot: reqBody.slot
-            , auctionMetadataOref: reqBody.auctionMetadataOref
+            , reservationCode: reqBody.reservationCode
             , appManager
             , appManagerAvar
-            , reservationCode: reqBody.reservationCode
+            , auctionMetadataOref: reqBody.auctionMetadataOref
+            , wsServer
             }
 
 -- HostAuctionRequest ------------------------------------------------
 
 type HostAuctionRequest =
   { auctionMetadataOref :: TransactionInput
-  , slot :: AuctionSlot
-  , reservationCode :: Maybe UUID
+  , slot :: AppManagerSlot
+  , reservationCode :: Maybe ReservationCode
   }
 
 hostAuctionRequestCodec :: CA.JsonCodec HostAuctionRequest
@@ -116,14 +132,12 @@ instance Show HostAuctionError where
 
 hostAuctionErrorCodec :: CA.JsonCodec HostAuctionError
 hostAuctionErrorCodec =
-  sumGenericCodec "ReserveSlotError"
-    ( CAV.variantMatch
-        { "CouldNotDecodeHostAuctionReqBody": Right CA.string
-        , "AuctionSlotNotAvailable": Left unit
-        , "IncorrectReservationCode": Left unit
-        , "MissingOrInvalidAuctionInfo": Right contractErrorCodec
-        }
-    )
+  CAS.sum "ReserveSlotError"
+    { "CouldNotDecodeHostAuctionReqBody": CA.string
+    , "AuctionSlotNotAvailable": unit
+    , "IncorrectReservationCode": unit
+    , "MissingOrInvalidAuctionInfo": contractErrorCodec
+    }
 
 convertHostAuctionError :: AppManager.HostAuctionError -> HostAuctionError
 convertHostAuctionError = case _ of

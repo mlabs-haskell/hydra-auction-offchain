@@ -10,7 +10,7 @@ import Prelude
 
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
-import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus)
+import HydraSdk.Types (HydraHeadStatus)
 
 data AppExitReason
   = AppExitReason_HeadFinalized
