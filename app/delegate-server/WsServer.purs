@@ -24,16 +24,13 @@ import Data.Either (Either(Right))
 import Data.Generic.Rep (class Generic)
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(Just, Nothing), fromMaybe, maybe)
-import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Show.Generic (genericShow)
 import Data.String (Pattern(Pattern))
 import Data.String (stripPrefix) as String
 import Data.Tuple (snd)
 import Data.Variant (inj, match) as Variant
-import DelegateServer.App (runApp)
-import DelegateServer.AppManager.Types (AppManager', ActiveAuction)
-import DelegateServer.Config (Network, networkToNetworkId)
+import DelegateServer.App (AppLogger, AppState, runApp)
 import DelegateServer.Contract.StandingBid (queryStandingBidL2)
 import DelegateServer.Lib.WebSocketServer
   ( WebSocketCloseReason
@@ -43,13 +40,14 @@ import DelegateServer.Lib.WebSocketServer
   , mkWebSocketServer
   )
 import DelegateServer.State (readAppState)
-import DelegateServer.Types.HydraHeadStatus (HydraHeadStatus, headStatusCodec)
 import Effect (Effect)
 import Effect.AVar (tryRead) as AVarSync
 import Effect.Aff (Aff, launchAff_)
 import Effect.Aff.AVar (AVar)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.Types (StandingBidState, standingBidStateCodec)
+import HydraSdk.Extra.AppManager (AppManager, ActiveApp)
+import HydraSdk.Types (HydraHeadStatus, Network, headStatusCodec, networkToNetworkId)
 import Type.Proxy (Proxy(Proxy))
 import URI.Port (Port)
 import URI.Port (toInt) as Port
@@ -75,22 +73,30 @@ type WsServerAppMap appState =
   }
 
 wsServer
-  :: forall a
+  :: forall appConfigAvailable appConfigActive r
    . Port
   -> Network
-  -> AVar (AppManager' a DelegateWebSocketServer)
+  -> AVar
+       ( AppManager ScriptHash (Record (appState :: AppState, appLogger :: AppLogger | r))
+           appConfigAvailable
+           appConfigActive
+       )
   -> Aff DelegateWebSocketServer
 wsServer wsServerPort network appManagerAvar =
   wsServerGeneric wsServerPort network appMap
   where
-  appMap :: WsServerAppMap (ActiveAuction a)
+  appMap
+    :: WsServerAppMap
+         ( ActiveApp (Record (appState :: AppState, appLogger :: AppLogger | r))
+             appConfigActive
+         )
   appMap =
     { lookupApp: \auctionCs -> do
-        activeAuctions <- map (_.activeAuctions <<< unwrap) <$> AVarSync.tryRead appManagerAvar
+        activeAuctions <- map _.activeApps <$> AVarSync.tryRead appManagerAvar
         pure $ Map.lookup auctionCs =<< activeAuctions
-    , getHeadStatus: \{ appState, appLogger } ->
+    , getHeadStatus: \{ state: { appState, appLogger } } ->
         runApp appState appLogger $ readAppState (Proxy :: _ "headStatus")
-    , getStandingBid: \{ appState, appLogger } ->
+    , getStandingBid: \{ state: { appState, appLogger } } ->
         runApp appState appLogger $ map snd <$> queryStandingBidL2
     }
 

@@ -24,7 +24,6 @@ import HydraAuctionOffchain.Contract
 import HydraAuctionOffchain.Contract.Types
   ( AuctionInfoExtended(AuctionInfoExtended)
   , ContractResult
-  , VerificationKey
   )
 import Mote (group, test)
 import Test.Contract.AnnounceAuction (announceAuction)

@@ -14,7 +14,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, launchAff)
 import Effect.Class (liftEffect)
 import Effect.Ref (new, write) as Ref
-import Mote (group)
+import Mote (group, skip)
 import Test.Contract.AnnounceAuction (suite) as AnnounceAuction
 import Test.Contract.AuthorizeBidders (suite) as AuthorizeBidders
 import Test.Contract.DelegateServer (suite) as DelegateServer
@@ -43,13 +43,18 @@ suite = do
     config =
       localnetConfig
         { hooks = localnetConfig.hooks
-            { onClusterStartup = Just (flip Ref.write clusterParamsRef)
+            { onClusterStartup = Just
+                ( flip Ref.write clusterParamsRef <<< { nodeSocketPath: _ } <<<
+                    _.nodeSocketPath
+                )
             }
         }
   group "delegate-server" do
     WsServer.suite
     testTestnetContracts config do
-      DelegateServer.suite clusterParamsRef
+      -- FIXME: Reenable once the issue with cardano-testnet is resolved
+      -- https://github.com/IntersectMBO/cardano-node/issues/5989
+      skip $ DelegateServer.suite clusterParamsRef
 
       group "contracts" do
         AnnounceAuction.suite

@@ -17,7 +17,6 @@ import Control.Monad.Error.Class (liftMaybe)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (untilJust)
 import Control.Parallel (parTraverse_)
-import Ctl.Internal.Contract.Hooks (ClusterParameters)
 import Data.Array (foldRecM, last, replicate, singleton, snoc) as Array
 import Data.Time.Duration (Seconds(Seconds))
 import DelegateServer.Contract.PlaceBid
@@ -29,15 +28,6 @@ import DelegateServer.Handlers.MoveBid
 import DelegateServer.Handlers.PlaceBid
   ( PlaceBidError(PlaceBidError_ContractError)
   , PlaceBidSuccess(PlaceBidSuccess_SubmittedTransaction)
-  )
-import DelegateServer.Types.HydraHeadStatus
-  ( HydraHeadStatus
-      ( HeadStatus_Idle
-      , HeadStatus_Initializing
-      , HeadStatus_Open
-      , HeadStatus_Closed
-      , HeadStatus_Final
-      )
   )
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
@@ -56,6 +46,15 @@ import HydraAuctionOffchain.Contract.Types
   )
 import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe, randomElem, waitSeconds)
 import HydraAuctionOffchain.Wallet (signMessage)
+import HydraSdk.Types
+  ( HydraHeadStatus
+      ( HeadStatus_Idle
+      , HeadStatus_Initializing
+      , HeadStatus_Open
+      , HeadStatus_Closed
+      , HeadStatus_Final
+      )
+  )
 import Mote (group, skip, test)
 import Partial.Unsafe (unsafePartial)
 import Test.Contract.AnnounceAuction (AuctionTermsMutator, announceAuctionFix)
@@ -69,7 +68,7 @@ import Test.Helpers (defDistribution, untilM, waitUntil)
 import Test.QuickCheck.Gen (Gen, chooseInt, randomSampleOne)
 import Test.Spec.Assertions (shouldEqual, shouldReturn, shouldSatisfy)
 
-suite :: Ref ClusterParameters -> TestPlanM ContractTest Unit
+suite :: Ref { nodeSocketPath :: String } -> TestPlanM ContractTest Unit
 suite clusterParams = do
   group "delegate-server" do
     test "delegates set announced auction as active auction" do
@@ -185,7 +184,7 @@ openHead appHandle { autoInit } = do
   untilM (eq HeadStatus_Open)
     appHandle.getHeadStatus
 
-moveBidTest :: Ref ClusterParameters -> { autoInit :: Boolean } -> ContractTest
+moveBidTest :: Ref { nodeSocketPath :: String } -> { autoInit :: Boolean } -> ContractTest
 moveBidTest clusterParams { autoInit } =
   withWallets' clusterParams defDistribution
     \seller delegates withDelegateServerCluster -> do
@@ -247,12 +246,12 @@ validBids { maxNumBids } =
         (Array.replicate (numBids - 1) unit)
   }
 
-placeBidTest :: Ref ClusterParameters -> PlaceBidTestParams -> ContractTest
+placeBidTest :: Ref { nodeSocketPath :: String } -> PlaceBidTestParams -> ContractTest
 placeBidTest clusterParams params =
   placeL2Bids clusterParams params identity (const (pure unit))
 
 placeL2Bids
-  :: Ref ClusterParameters
+  :: Ref { nodeSocketPath :: String }
   -> PlaceBidTestParams
   -> AuctionTermsMutator
   -> (L2TestContData -> Contract Unit)

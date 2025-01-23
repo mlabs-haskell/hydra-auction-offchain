@@ -55,10 +55,8 @@ import Data.Newtype (unwrap)
 import Data.Profunctor (dimap)
 import Data.Variant (inj, match) as Variant
 import DelegateServer.App (runContractNullCosts)
-import DelegateServer.HydraNodeApi.WebSocket (HydraNodeApiWebSocket)
 import DelegateServer.Lib.Transaction (setExUnitsToMax, setTxValid)
 import DelegateServer.State (class AppOpen, readAppState)
-import DelegateServer.Types.HydraUtxoMap (toUtxoMapWithoutRefScripts)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (findStandingBidUtxo)
@@ -78,22 +76,20 @@ import HydraAuctionOffchain.Contract.Validators
   , mkAuctionValidators
   , mkAuctionValidatorsErrorCodec
   )
+import HydraSdk.NodeApi (HydraNodeApiWebSocket)
+import HydraSdk.Types (toUtxoMap)
 import JS.BigInt (fromInt) as BigInt
 import Type.Proxy (Proxy(Proxy))
 
 placeBidL2
   :: forall m
    . AppOpen m
-  => HydraNodeApiWebSocket
+  => HydraNodeApiWebSocket m
   -> BidTerms
   -> ExceptT PlaceBidL2ContractError m Unit
 placeBidL2 ws bidTerms = do
   auctionInfo <- readAppState (Proxy :: _ "auctionInfo")
-  utxos <-
-    readAppState (Proxy :: _ "snapshot")
-      <#> toUtxoMapWithoutRefScripts
-      <<< _.utxo
-      <<< unwrap
+  utxos <- toUtxoMap <<< _.utxo <<< unwrap <$> readAppState (Proxy :: _ "snapshot")
   mapExceptT runContractNullCosts $
     placeBidL2' (unwrap auctionInfo) bidTerms ws.submitTxL2 utxos
 

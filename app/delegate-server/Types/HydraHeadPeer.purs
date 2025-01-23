@@ -9,7 +9,7 @@ import Contract.Config (ServerConfig)
 import Data.Codec.Argonaut (JsonCodec, object, string) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
 import HydraAuctionOffchain.Codec (serverConfigCodec)
-import HydraAuctionOffchain.Types.HostPort (HostPort, hostPortCodec)
+import HydraSdk.Types (HostPort, hostPortCodec)
 import Node.Path (FilePath)
 
 type HydraHeadPeer =

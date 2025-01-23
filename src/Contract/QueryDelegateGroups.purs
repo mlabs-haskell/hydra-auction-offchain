@@ -30,7 +30,7 @@ queryDelegateGroups = do
     <<< Map.toUnfoldable
 
 getValidDelegateGroup :: Utxo -> Maybe DelegateGroupInfo
-getValidDelegateGroup (oref /\ txOut) = do
+getValidDelegateGroup (_ /\ txOut) = do
   delegateGroupInfo <- getInlineDatum txOut
   guard $ validDelegateGroupId (unwrap delegateGroupInfo).delegateGroupId
   pure delegateGroupInfo
