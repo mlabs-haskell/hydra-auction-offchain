@@ -14,7 +14,9 @@ import {
   moveBidL2,
   placeBidL2,
   queryAuctions,
+  queryDelegateGroups,
   queryStandingBidState,
+  registerDelegateGroup,
   startBidding
 } from "hydra-auction-offchain";
 import type {
@@ -46,7 +48,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   await delay(1000); // need some time for cardano object to be injected
   const config: ContractConfig = {
     tag: "network",
-    network: "Preview",
+    network: "Preprod",
     blockfrostApiKey: process.env.BLOCKFROST_API_KEY,
     walletApp: "Nami"
   };
@@ -57,9 +59,29 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const mintTxHash = await mintTokenUsingAlwaysMints(config, tokenName, "1");
   await awaitTxConfirmed(config, mintTxHash);
 
+  // delegate group: registerDelegateGroup
+  const registerDelegateGroupResult = await registerDelegateGroup(
+    config,
+    { delegateGroupServers: {
+        httpServers: ["http://127.0.0.1:7010", "http://127.0.0.1:7011"],
+        wsServers: ["ws://127.0.0.1:7020", "ws://127.0.0.1:7021"]
+      },
+      delegateGroupMetadata: "Test delegate group"
+    }
+  );
+  await logConfirmContract("RegisterDelegateGroup", config, registerDelegateGroupResult);
+
+  // seller: queryDelegateGroups
+  const delegateGroups = await queryDelegateGroups(config);
+  console.log("Delegate groups:", delegateGroups);
+
+  const delegateInfo = delegateGroups[0]?.delegateGroupServers;
+  if (!delegateInfo) throw new Error("No registered delegate groups found.");
+
   // seller: announceAuction
   const announceAuctionResult = await runAnnounceAuction(
     config,
+    delegateInfo,
     tokenName,
     preBiddingPeriod,
     biddingPeriod
@@ -68,7 +90,6 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
   const auctionInfo = announceAuctionResult.value.auctionInfo;
   const auctionCs = auctionInfo.auctionId;
   const auctionTerms = auctionInfo.auctionTerms;
-  const delegateInfo = auctionInfo.delegateInfo;
 
   // seller: queryAuctions
   const sellerAuctions = await queryAuctions(config, { myRole: "ActorRoleSeller" });
@@ -169,6 +190,7 @@ async function logConfirmContract<T extends { txHash: TransactionHash }>(
 
 async function runAnnounceAuction(
   config: ContractConfig,
+  delegateInfo: DelegateInfo,
   tokenName: TokenName,
   preBiddingPeriod: number,
   biddingPeriod: number
@@ -187,10 +209,7 @@ async function runAnnounceAuction(
           quantity: "1"
         }
       ],
-      delegates: [
-        "ac55de689702d745e77050ce83b77ff9619383bb802e40fb90aa3be4",
-        "e17e5b8c19c89d663c66b3e4943972d7b6dd70a711fade4cf1a6a95a"
-      ],
+      delegates: [],
       biddingStart: biddingStart.toString(),
       biddingEnd: biddingEnd.toString(),
       purchaseDeadline: purchaseDeadline.toString(),
@@ -200,10 +219,7 @@ async function runAnnounceAuction(
       minBidIncrement: "1000000",
       minDepositAmount: "3000000"
     },
-    delegateInfo: {
-      httpServers: ["http://127.0.0.1:7010", "http://127.0.0.1:7011"],
-      wsServers: ["ws://127.0.0.1:7020", "ws://127.0.0.1:7021"]
-    },
+    delegateInfo,
     additionalAuctionLotOrefs: []
   };
   return await announceAuction(config, params);

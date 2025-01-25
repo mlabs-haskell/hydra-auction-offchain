@@ -16,3 +16,4 @@
 /keys/*.vk
 /keys/*.addr
 /hydra-persist/
+/result

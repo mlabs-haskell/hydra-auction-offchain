@@ -8,24 +8,24 @@ module Test.Contract.Fixtures
 
 import Prelude
 
-import Contract.Address (PubKeyHash)
+import Cardano.Plutus.Types.Value (Value) as Plutus
+import Cardano.Types (AssetName, Ed25519KeyHash)
+import Cardano.Types.BigNum (fromInt)
 import Contract.Time (POSIXTime)
-import Contract.Value (TokenName, Value)
 import Data.Time.Duration (Seconds(Seconds))
 import HydraAuctionOffchain.Contract.Types (AuctionTermsInput)
 import HydraAuctionOffchain.Helpers (mkPosixTimeUnsafe)
-import JS.BigInt (fromInt)
 import Test.Helpers (mkPubKeyHashUnsafe, mkTokenNameAsciiUnsafe)
 
-auctionLotTokenNameFixture :: TokenName
+auctionLotTokenNameFixture :: AssetName
 auctionLotTokenNameFixture = mkTokenNameAsciiUnsafe "MonaLisa"
 
-delegatePkhFixture :: PubKeyHash
+delegatePkhFixture :: Ed25519KeyHash
 delegatePkhFixture =
   mkPubKeyHashUnsafe
     "ac55de689702d745e77050ce83b77ff9619383bb802e40fb90aa3be4"
 
-auctionTermsInputFixture :: Value -> POSIXTime -> AuctionTermsInput
+auctionTermsInputFixture :: Plutus.Value -> POSIXTime -> AuctionTermsInput
 auctionTermsInputFixture auctionLot biddingStart =
   { auctionLot
   , delegates: [ delegatePkhFixture ]

@@ -10,12 +10,22 @@ module HydraAuctionOffchain.Contract.Types.Plutus.BidTerms
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (PubKeyHash, toPubKeyHash)
-import Contract.Config (NetworkId)
-import Contract.Numeric.BigNum (zero) as BigNum
-import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr), serializeData)
+import Cardano.AsCbor (decodeCbor)
+import Cardano.Plutus.Types.PubKeyHash (PubKeyHash(PubKeyHash)) as Plutus
+import Cardano.Types
+  ( BigNum
+  , Credential(PubKeyHashCredential)
+  , Ed25519KeyHash
+  , NetworkId
+  , PublicKey
+  , RawBytes(RawBytes)
+  , ScriptHash
+  )
+import Cardano.Types.Address (mkPaymentAddress)
+import Cardano.Types.PublicKey (verify) as PublicKey
+import Contract.Numeric.BigNum (sub, zero) as BigNum
+import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
 import Contract.Prim.ByteArray (ByteArray, byteLength, hexToByteArrayUnsafe)
-import Contract.Value (CurrencySymbol)
 import Data.Array (fold)
 import Data.Array (replicate) as Array
 import Data.Codec.Argonaut (JsonCodec, object) as CA
@@ -27,22 +37,21 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
-import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec)
+import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms(AuctionTerms)
   , totalAuctionFees
   )
 import HydraAuctionOffchain.Contract.Types.Plutus.BidderInfo (BidderInfo, bidderInfoCodec)
-import HydraAuctionOffchain.Contract.Types.VerificationKey (vkeyBytes)
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
 import HydraAuctionOffchain.Lib.Cose (mkSigStructure)
-import HydraAuctionOffchain.Lib.Crypto (verifySignature)
-import JS.BigInt (BigInt)
+import HydraAuctionOffchain.Lib.Plutus.Address (toPubKeyHash)
+import HydraAuctionOffchain.Lib.ToData (serializeData)
 import Type.Proxy (Proxy(Proxy))
 
 newtype BidTerms = BidTerms
   { bidder :: BidderInfo
-  , price :: BigInt
+  , price :: BigNum
   , bidderSignature :: ByteArray
   , sellerSignature :: ByteArray
   }
@@ -56,7 +65,7 @@ instance Show BidTerms where
 
 type BidTermsSchema =
   ("bidder" :~: BidderInfo)
-    :$: ("price" :~: BigInt)
+    :$: ("price" :~: BigNum)
     :$: ("bidderSignature" :~: ByteArray)
     :$: ("sellerSignature" :~: ByteArray)
     :$: Nil
@@ -80,20 +89,20 @@ bidTermsCodec :: NetworkId -> CA.JsonCodec BidTerms
 bidTermsCodec network =
   wrapIso BidTerms $ CA.object "BidTerms" $ CAR.record
     { bidder: bidderInfoCodec network
-    , price: bigIntCodec
+    , price: bigNumCodec
     , bidderSignature: byteArrayCodec
     , sellerSignature: byteArrayCodec
     }
 
-sellerPayout :: AuctionTerms -> BidTerms -> BigInt
+sellerPayout :: AuctionTerms -> BidTerms -> Maybe BigNum
 sellerPayout auctionTerms bidTerms =
-  (unwrap bidTerms).price - totalAuctionFees auctionTerms
+  BigNum.sub (unwrap bidTerms).price =<< totalAuctionFees auctionTerms
 
 --------------------------------------------------------------------------------
 -- Validation
 --------------------------------------------------------------------------------
 
-validateBidTerms :: NetworkId -> CurrencySymbol -> AuctionTerms -> BidTerms -> Effect Boolean
+validateBidTerms :: NetworkId -> ScriptHash -> AuctionTerms -> BidTerms -> Effect Boolean
 validateBidTerms network auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerms) =
   conj <$> verifySellerSignature <*> verifyBidderSignature
   where
@@ -101,18 +110,25 @@ validateBidTerms network auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerm
 
   verifyBidderSignature :: Effect Boolean
   verifyBidderSignature =
-    case bidderInfo.bidderAddress of
-      bidderAddress | Just bidderPkh <- toPubKeyHash bidderAddress -> do
-        let payload = bidderSignatureMessage auctionCs bidderPkh bidTerms.price
-        sigStruct <- mkSigStructure network bidderAddress payload
-        verifySignature (vkeyBytes bidderInfo.bidderVk) sigStruct bidTerms.bidderSignature
-      _ -> pure false
+    case toPubKeyHash bidderInfo.bidderAddress, decodeCbor (wrap bidTerms.bidderSignature) of
+      Just (Plutus.PubKeyHash bidderPkh), Just bidderSignature -> do
+        let
+          addr = mkPaymentAddress network (wrap $ PubKeyHashCredential bidderPkh) Nothing
+          payload = bidderSignatureMessage auctionCs bidderPkh bidTerms.price
+        sigStruct <- RawBytes <$> mkSigStructure addr payload
+        pure $ PublicKey.verify bidderInfo.bidderVk sigStruct bidderSignature
+      _, _ -> pure false
 
   verifySellerSignature :: Effect Boolean
-  verifySellerSignature = do
-    let payload = sellerSignatureMessage auctionCs $ vkeyBytes bidderInfo.bidderVk
-    sigStruct <- mkSigStructure network auctionTerms.sellerAddress payload
-    verifySignature (vkeyBytes auctionTerms.sellerVk) sigStruct bidTerms.sellerSignature
+  verifySellerSignature =
+    case toPubKeyHash auctionTerms.sellerAddress, decodeCbor (wrap bidTerms.sellerSignature) of
+      Just (Plutus.PubKeyHash sellerPkh), Just sellerSignature -> do
+        let
+          addr = mkPaymentAddress network (wrap $ PubKeyHashCredential sellerPkh) Nothing
+          payload = sellerSignatureMessage auctionCs bidderInfo.bidderVk
+        sigStruct <- RawBytes <$> mkSigStructure addr payload
+        pure $ PublicKey.verify auctionTerms.sellerVk sigStruct sellerSignature
+      _, _ -> pure false
 
 -- Maximum (reasonable) size of the bidder signature message where
 -- bidPrice is set to the total supply of ADA (45 billion). 
@@ -123,12 +139,12 @@ validateBidTerms network auctionCs (AuctionTerms auctionTerms) (BidTerms bidTerm
 bidderSignatureMessageSize :: Int
 bidderSignatureMessageSize = 69
 
-bidderSignatureMessage :: CurrencySymbol -> PubKeyHash -> BigInt -> ByteArray
+bidderSignatureMessage :: ScriptHash -> Ed25519KeyHash -> BigNum -> ByteArray
 bidderSignatureMessage auctionCs bidderPkh bidPrice =
   padMessage bidderSignatureMessageSize $ unwrap
     (serializeData auctionCs <> serializeData bidderPkh <> serializeData bidPrice)
 
-sellerSignatureMessage :: CurrencySymbol -> ByteArray -> ByteArray
+sellerSignatureMessage :: ScriptHash -> PublicKey -> ByteArray
 sellerSignatureMessage auctionCs bidderVk =
   unwrap $ serializeData auctionCs <> serializeData bidderVk
 

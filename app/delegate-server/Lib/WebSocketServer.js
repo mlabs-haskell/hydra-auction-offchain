@@ -6,8 +6,8 @@ export const newWebSocketServer = (options) => () => {
 
 export const onConnect = (wss) => (cb) => () => {
   wss.on("connection", (ws, req) => {
-    console.log("conn url: ", req.url);
-    cb(ws)();
+    ws.connPath = req.url;
+    cb(ws)(ws.connPath)();
   });
 };
 
@@ -15,9 +15,13 @@ export const sendMessage = (ws) => (message) => () => {
   ws.send(message);
 };
 
-export const broadcastMessage = (wss) => (message) => () => {
+export const closeConn = (ws) => (code) => (reason) => () => {
+  ws.close(code, reason);
+};
+
+export const broadcastMessage = (wss) => (auctionCs) => (message) => () => {
   wss.clients.forEach((ws) => {
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws.readyState === WebSocket.OPEN && ws.connPath === "/" + auctionCs) {
       ws.send(message, { binary: false });
     }
   });

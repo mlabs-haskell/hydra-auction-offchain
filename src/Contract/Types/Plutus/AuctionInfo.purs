@@ -18,11 +18,12 @@ module HydraAuctionOffchain.Contract.Types.Plutus.AuctionInfo
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
-import Contract.Address (Address, scriptHashAddress)
-import Contract.Config (NetworkId)
+import Cardano.Plutus.Types.Address (Address) as Plutus
+import Cardano.Plutus.Types.Address (scriptHashAddress) as Plutus.Address
+import Cardano.Types (NetworkId, PlutusScript, ScriptHash)
+import Cardano.Types.PlutusScript (hash) as PlutusScript
 import Contract.Numeric.BigNum (zero) as BigNum
 import Contract.PlutusData (class FromData, class ToData, PlutusData(Constr))
-import Contract.Scripts (Validator, validatorHash)
 import Contract.Transaction (TransactionInput)
 import Contract.Value (CurrencySymbol)
 import Data.Codec.Argonaut (JsonCodec, object) as CA
@@ -35,7 +36,7 @@ import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Profunctor (wrapIso)
 import Data.Show.Generic (genericShow)
 import Data.Validation.Semigroup (V)
-import HydraAuctionOffchain.Codec (addressCodec, currencySymbolCodec, orefCodec)
+import HydraAuctionOffchain.Codec (plutusAddressCodec, orefCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.Types.Plutus.AuctionTerms
   ( AuctionTerms
   , auctionTermsCodec
@@ -57,10 +58,10 @@ type AuctionInfoRec (r :: Row Type) =
   ( auctionId :: CurrencySymbol
   , auctionTerms :: AuctionTerms
   , delegateInfo :: Maybe DelegateInfo
-  , auctionEscrowAddr :: Address
-  , bidderDepositAddr :: Address
-  , feeEscrowAddr :: Address
-  , standingBidAddr :: Address
+  , auctionEscrowAddr :: Plutus.Address
+  , bidderDepositAddr :: Plutus.Address
+  , feeEscrowAddr :: Plutus.Address
+  , standingBidAddr :: Plutus.Address
   | r
   )
 
@@ -74,13 +75,13 @@ instance Show AuctionInfo where
   show = genericShow
 
 type AuctionInfoSchema =
-  ("auctionId" :~: CurrencySymbol)
+  ("auctionId" :~: ScriptHash)
     :$: ("auctionTerms" :~: AuctionTerms)
     :$: ("delegateInfo" :~: Maybe DelegateInfo)
-    :$: ("auctionEscrowAddr" :~: Address)
-    :$: ("bidderDepositAddr" :~: Address)
-    :$: ("feeEscrowAddr" :~: Address)
-    :$: ("standingBidAddr" :~: Address)
+    :$: ("auctionEscrowAddr" :~: Plutus.Address)
+    :$: ("bidderDepositAddr" :~: Plutus.Address)
+    :$: ("feeEscrowAddr" :~: Plutus.Address)
+    :$: ("standingBidAddr" :~: Plutus.Address)
     :$: Nil
 
 auctionInfoSchema :: Proxy AuctionInfoSchema
@@ -101,13 +102,13 @@ instance HasJson AuctionInfo NetworkId where
 auctionInfoCodec :: NetworkId -> CA.JsonCodec AuctionInfo
 auctionInfoCodec network =
   wrapIso AuctionInfo $ CA.object "AuctionInfo" $ CAR.record
-    { auctionId: currencySymbolCodec
+    { auctionId: scriptHashCodec
     , auctionTerms: auctionTermsCodec network
     , delegateInfo: CA.maybe delegateInfoCodec
-    , auctionEscrowAddr: addressCodec network
-    , bidderDepositAddr: addressCodec network
-    , feeEscrowAddr: addressCodec network
-    , standingBidAddr: addressCodec network
+    , auctionEscrowAddr: plutusAddressCodec network
+    , bidderDepositAddr: plutusAddressCodec network
+    , feeEscrowAddr: plutusAddressCodec network
+    , standingBidAddr: plutusAddressCodec network
     }
 
 ----------------------------------------------------------------------
@@ -127,13 +128,13 @@ instance Show AuctionInfoExtended where
   show = genericShow
 
 type AuctionInfoExtendedSchema =
-  ("auctionId" :~: CurrencySymbol)
+  ("auctionId" :~: ScriptHash)
     :$: ("auctionTerms" :~: AuctionTerms)
     :$: ("delegateInfo" :~: Maybe DelegateInfo)
-    :$: ("auctionEscrowAddr" :~: Address)
-    :$: ("bidderDepositAddr" :~: Address)
-    :$: ("feeEscrowAddr" :~: Address)
-    :$: ("standingBidAddr" :~: Address)
+    :$: ("auctionEscrowAddr" :~: Plutus.Address)
+    :$: ("bidderDepositAddr" :~: Plutus.Address)
+    :$: ("feeEscrowAddr" :~: Plutus.Address)
+    :$: ("standingBidAddr" :~: Plutus.Address)
     :$: ("metadataOref" :~: Maybe TransactionInput)
     :$: Nil
 
@@ -156,13 +157,13 @@ instance HasJson AuctionInfoExtended NetworkId where
 auctionInfoExtendedCodec :: NetworkId -> CA.JsonCodec AuctionInfoExtended
 auctionInfoExtendedCodec network =
   wrapIso AuctionInfoExtended $ CA.object "AuctionInfoExtended" $ CAR.record
-    { auctionId: currencySymbolCodec
+    { auctionId: scriptHashCodec
     , auctionTerms: auctionTermsCodec network
     , delegateInfo: CA.maybe delegateInfoCodec
-    , auctionEscrowAddr: addressCodec network
-    , bidderDepositAddr: addressCodec network
-    , feeEscrowAddr: addressCodec network
-    , standingBidAddr: addressCodec network
+    , auctionEscrowAddr: plutusAddressCodec network
+    , bidderDepositAddr: plutusAddressCodec network
+    , feeEscrowAddr: plutusAddressCodec network
+    , standingBidAddr: plutusAddressCodec network
     , metadataOref: CA.maybe orefCodec
     }
 
@@ -190,7 +191,7 @@ instance Show AuctionInfoValidationError where
 validateAuctionInfo
   :: forall (r :: Row Type)
    . Record (AuctionInfoRec r)
-  -> AuctionValidators Validator
+  -> AuctionValidators PlutusScript
   -> V (Array AuctionInfoValidationError) Unit
 validateAuctionInfo auctionInfo validators = fold
   [ (auctionInfo.auctionEscrowAddr == validatorAddresses.auctionEscrow)
@@ -204,4 +205,7 @@ validateAuctionInfo auctionInfo validators = fold
   ]
   where
   validatorAddresses =
-    unwrap $ validators <#> flip scriptHashAddress Nothing <<< validatorHash
+    unwrap $ validators <#>
+      flip Plutus.Address.scriptHashAddress Nothing
+        <<< wrap
+        <<< PlutusScript.hash

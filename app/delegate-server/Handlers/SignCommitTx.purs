@@ -26,37 +26,38 @@ module DelegateServer.Handlers.SignCommitTx
 
 import Prelude
 
-import Contract.Address (PubKeyHash, toPubKeyHash)
-import Contract.Monad (Contract, liftedM)
-import Contract.Transaction
-  ( FinalizedTransaction(FinalizedTransaction)
+import Cardano.AsCbor (encodeCbor)
+import Cardano.Types
+  ( Asset(Asset)
+  , AssetName
+  , Ed25519KeyHash
+  , ScriptHash
   , Transaction
   , TransactionInput
   , TransactionOutput(TransactionOutput)
   , Vkeywitness
-  , _body
-  , _collateral
-  , _inputs
-  , signTransaction
   )
+import Cardano.Types.AssetName (mkAssetName)
+import Cardano.Types.BigNum (one) as BigNum
+import Cardano.Types.Transaction (_body)
+import Cardano.Types.TransactionBody (_collateral, _inputs)
+import Contract.Monad (Contract, liftedM)
+import Contract.Transaction (signTransaction)
 import Contract.Utxos (getUtxo)
-import Contract.Value (CurrencySymbol, TokenName, mkTokenName)
 import Contract.Value (geq, singleton, valueOf) as Value
 import Contract.Wallet (ownPaymentPubKeyHash)
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Parallel (parTraverse)
-import Ctl.Internal.Plutus.Conversion (toPlutusValue)
-import Ctl.Internal.Serialization.Hash (ed25519KeyHashToBytes)
 import Data.Array (all, difference, find, fromFoldable, length, partition) as Array
-import Data.Codec.Argonaut (JsonCodec, array, object, string) as CA
+import Data.Codec.Argonaut (JsonCodec, array, object, printJsonDecodeError, string) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.Codec.Argonaut.Variant (variantMatch) as CAV
+import Data.Codec.Argonaut.Sum (sum) as CAS
 import Data.Either (Either(Left, Right))
 import Data.Foldable (fold)
 import Data.Generic.Rep (class Generic)
 import Data.Lens ((^.))
-import Data.Maybe (Maybe(Just, Nothing), fromMaybe, isJust, isNothing)
+import Data.Maybe (Maybe(Just, Nothing), isJust, isNothing)
 import Data.Newtype (unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (sequence)
@@ -65,8 +66,7 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.Validation.Semigroup (V, validation)
 import DelegateServer.App (runContract)
 import DelegateServer.Lib.Transaction (txSignatures)
-import DelegateServer.Lib.Wallet (withWallet)
-import DelegateServer.State (class AppInit, access, readAppState)
+import DelegateServer.State (class AppInit, readAppState)
 import DelegateServer.Types.ServerResponse
   ( ServerResponse(ServerResponseSuccess, ServerResponseError)
   , respCreatedOrBadRequest
@@ -75,25 +75,26 @@ import DelegateServer.Types.ServerResponse
 import Effect.Exception (error)
 import Effect.Exception (message) as Error
 import HTTPure (Response) as HTTPure
-import HydraAuctionOffchain.Codec (pubKeyHashCodec, txCodec, vkeyWitnessCodec)
+import HydraAuctionOffchain.Codec (ed25519KeyHashCodec, txCodec, vkeyWitnessCodec)
 import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
 import HydraAuctionOffchain.Contract.QueryUtxo (isStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types (AuctionInfoRec)
 import HydraAuctionOffchain.Helpers (errV, fromJustWithErr)
-import HydraAuctionOffchain.Lib.Codec (sumGenericCodec)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
+import HydraAuctionOffchain.Lib.Cardano.Address (toPubKeyHash)
+import HydraSdk.Lib (caDecodeString)
+import Partial.Unsafe (unsafePartial)
 import Type.Proxy (Proxy(Proxy))
 
 type SignCommitTxRequestPayload =
   { commitTx :: Transaction
-  , commitLeader :: PubKeyHash
+  , commitLeader :: Ed25519KeyHash
   }
 
 signCommitTxRequestPayloadCodec :: CA.JsonCodec SignCommitTxRequestPayload
 signCommitTxRequestPayloadCodec =
   CA.object "SignCommitTxRequestPayload" $ CAR.record
     { commitTx: txCodec
-    , commitLeader: pubKeyHashCodec
+    , commitLeader: ed25519KeyHashCodec
     }
 
 type CommitTxSignature = Vkeywitness
@@ -112,15 +113,15 @@ signCommitTxHandlerImpl :: forall m. AppInit m => String -> m SignCommitTxRespon
 signCommitTxHandlerImpl bodyStr = do
   case caDecodeString signCommitTxRequestPayloadCodec bodyStr of
     Left decodeErr ->
-      pure $ ServerResponseError $ CommitTxDecodingFailed decodeErr
+      pure $ ServerResponseError $ CommitTxDecodingFailed $
+        CA.printJsonDecodeError decodeErr
     Right { commitTx, commitLeader } -> do
       auctionInfo <- unwrap <$> readAppState (Proxy :: _ "auctionInfo")
       hydraHeadCs <- readAppState (Proxy :: _ "headCs")
-      { cardanoSk } <- unwrap <$> access (Proxy :: _ "config")
-      runContract $ withWallet cardanoSk do
+      runContract do
         let txBody = commitTx ^. _body
         mResolvedInputs <- resolveInputs (Array.fromFoldable $ txBody ^. _inputs)
-        mResolvedCollateralInputs <- resolveInputs (fromMaybe mempty $ txBody ^. _collateral)
+        mResolvedCollateralInputs <- resolveInputs $ txBody ^. _collateral
         case mResolvedInputs, mResolvedCollateralInputs of
           Nothing, _ ->
             pure $ ServerResponseError
@@ -159,8 +160,7 @@ resolveInputs =
 
 signTxReturnSignature :: Transaction -> Contract CommitTxSignature
 signTxReturnSignature tx = do
-  let wrappedTx = FinalizedTransaction tx
-  signedTx <- unwrap <$> signTransaction wrappedTx
+  signedTx <- signTransaction tx
   case Array.difference (txSignatures signedTx) (txSignatures tx) of
     -- Impossible: Two new signatures would indicate that the
     -- transaction was also signed using the stake key, breaking
@@ -186,15 +186,13 @@ instance Show SignCommitTxError where
 
 signCommitTxErrorCodec :: CA.JsonCodec SignCommitTxError
 signCommitTxErrorCodec =
-  sumGenericCodec "SignCommitTxError"
-    ( CAV.variantMatch
-        { "CommitTxDecodingFailed": Right CA.string
-        , "CommitTxCouldNotResolveInputs": Left unit
-        , "CommitTxCouldNotResolveCollateralInputs": Left unit
-        , "CommitTxValidationFailed": Right $ CA.array commitTxValidationErrorCodec
-        , "CommitTxSigningFailed": Right CA.string
-        }
-    )
+  CAS.sum "SignCommitTxError"
+    { "CommitTxDecodingFailed": CA.string
+    , "CommitTxCouldNotResolveInputs": unit
+    , "CommitTxCouldNotResolveCollateralInputs": unit
+    , "CommitTxValidationFailed": CA.array commitTxValidationErrorCodec
+    , "CommitTxSigningFailed": CA.string
+    }
 
 ----------------------------------------------------------------------
 -- CommitTx validation
@@ -225,10 +223,10 @@ commitTxValidationErrorCodec =
 
 type CommitTxValidationParams (r :: Row Type) =
   { commitTx :: Transaction
-  , commitLeader :: PubKeyHash
-  , verifier :: PubKeyHash
+  , commitLeader :: Ed25519KeyHash
+  , verifier :: Ed25519KeyHash
   , auctionInfo :: Record (AuctionInfoRec r)
-  , hydraHeadCs :: CurrencySymbol
+  , hydraHeadCs :: ScriptHash
   , resolvedInputs :: ResolvedInputs
   , resolvedCollateralInputs :: ResolvedInputs
   }
@@ -249,10 +247,10 @@ validateCommitTx p = do
   where
   txBody = unwrap $ p.commitTx ^. _body
 
-  commitLeaderPTokenName :: TokenName
+  commitLeaderPTokenName :: AssetName
   commitLeaderPTokenName =
     fromJustWithErr "commitLeaderPTokenName"
-      (mkTokenName $ unwrap $ ed25519KeyHashToBytes $ unwrap p.commitLeader)
+      (mkAssetName $ unwrap $ encodeCbor p.commitLeader)
 
   standingBidInputPartition =
     Array.partition (isStandingBidUtxo p.auctionInfo <<< snd)
@@ -261,7 +259,8 @@ validateCommitTx p = do
   hydraInitInputPartition =
     Array.partition
       ( \(_ /\ TransactionOutput { amount }) ->
-          Value.valueOf amount p.hydraHeadCs commitLeaderPTokenName == one
+          Value.valueOf (Asset p.hydraHeadCs commitLeaderPTokenName) amount
+            == BigNum.one
       )
       standingBidInputPartition.no
 
@@ -302,9 +301,9 @@ validateCommitTx p = do
   checkCommitOutput =
     isJust $ Array.find
       ( \output ->
-          toPlutusValue (unwrap output).amount `Value.geq`
-            ( Value.singleton p.auctionInfo.auctionId standingBidTokenName one
-                <> Value.singleton p.hydraHeadCs commitLeaderPTokenName one
+          unsafePartial $ (unwrap output).amount `Value.geq`
+            ( Value.singleton p.auctionInfo.auctionId standingBidTokenName BigNum.one
+                <> Value.singleton p.hydraHeadCs commitLeaderPTokenName BigNum.one
             )
       )
       txBody.outputs

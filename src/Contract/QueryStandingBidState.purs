@@ -8,17 +8,12 @@ module HydraAuctionOffchain.Contract.QueryStandingBidState
 
 import Contract.Prelude
 
-import Contract.Address (Address)
 import Contract.Chain (currentTime)
 import Contract.Monad (Contract)
-import Contract.Transaction (TransactionOutput)
-import Contract.Value (CurrencySymbol)
-import Contract.Value (valueOf) as Value
 import Control.Error.Util ((!?))
 import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (find) as Array
-import HydraAuctionOffchain.Contract.MintingPolicies (standingBidTokenName)
+import HydraAuctionOffchain.Contract.QueryUtxo (queryStandingBidUtxo)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionInfoExtended(AuctionInfoExtended)
@@ -27,7 +22,6 @@ import HydraAuctionOffchain.Contract.Types
   , StandingBidState
   , mkContractOutput
   )
-import HydraAuctionOffchain.Helpers (getInlineDatum, getTxOutsAt)
 
 queryStandingBidState :: AuctionInfoExtended -> Contract (ContractOutput StandingBidState)
 queryStandingBidState =
@@ -39,7 +33,6 @@ queryStandingBidStateWithErrors
 queryStandingBidStateWithErrors auctionInfo = do
   let
     AuctionInfoExtended auctionInfoRec = auctionInfo
-    auctionCs = auctionInfoRec.auctionId
     AuctionTerms auctionTermsRec = auctionInfoRec.auctionTerms
 
   -- Check that the query is executed after the bidding start time:
@@ -48,17 +41,8 @@ queryStandingBidStateWithErrors auctionInfo = do
     throwError QueryBidState_Error_CurrentTimeBeforeBiddingStart
 
   -- Look up standing bid:
-  findStandingBid auctionInfoRec.standingBidAddr auctionCs
-    !? QueryBidState_Error_CouldNotFindStandingBidUtxo
-
-findStandingBid :: Address -> CurrencySymbol -> Contract (Maybe StandingBidState)
-findStandingBid standingBidAddr auctionCs =
-  getTxOutsAt standingBidAddr <#>
-    (getInlineDatum <=< Array.find hasStandingBidToken)
-  where
-  hasStandingBidToken :: TransactionOutput -> Boolean
-  hasStandingBidToken txOut =
-    Value.valueOf (unwrap txOut).amount auctionCs standingBidTokenName == one
+  snd <$> queryStandingBidUtxo auctionInfoRec !?
+    QueryBidState_Error_CouldNotFindStandingBidUtxo
 
 ----------------------------------------------------------------------
 -- Errors

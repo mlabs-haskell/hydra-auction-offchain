@@ -13,12 +13,15 @@ import type {
   ContractConfig,
   ContractOutput,
   CurrencySymbol,
+  DelegateGroupInfo,
   DiscoverSellerSigContractParams,
   EnterAuctionContractParams,
   MoveBidL2ContractParams,
   PlaceBidContractParams,
   PlaceBidL2ContractParams,
   PubKeyHash,
+  RegisterDelegateGroupContractOutput,
+  RegisterDelegateGroupContractParams,
   StartBiddingContractParams,
   StandingBidState,
   TokenName,
@@ -182,6 +185,18 @@ export const announceDelegateGroup = async (
   groupUrl: string,
   delegates: Array<PubKeyHash>
 ): Promise<ContractOutput<TxCbor>> => unimplemented();
+
+// Delegate groups ---------------------------------------------------
+
+export const registerDelegateGroup = async (
+  config: ContractConfig,
+  params: RegisterDelegateGroupContractParams
+): Promise<ContractOutput<RegisterDelegateGroupContractOutput>> =>
+  Purs.registerDelegateGroup(config)(params)();
+  
+export const queryDelegateGroups = async (
+  config: ContractConfig
+): Promise<Array<DelegateGroupInfo>> => Purs.queryDelegateGroups(config)();
 
 // Helpers -----------------------------------------------------------
 

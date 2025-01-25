@@ -8,6 +8,10 @@ module HydraAuctionOffchain.Contract.QueryUtxo
 
 import Contract.Prelude
 
+import Cardano.Plutus.Types.Address (fromCardano, toCardano) as Plutus.Address
+import Cardano.Types (Asset(Asset))
+import Cardano.Types.BigNum (one) as BigNum
+import Contract.Address (getNetworkId)
 import Contract.Monad (Contract)
 import Contract.PlutusData (OutputDatum(OutputDatum), toData)
 import Contract.Transaction (TransactionOutput(TransactionOutput))
@@ -37,18 +41,23 @@ queryAuctionEscrowUtxo
    . AuctionEscrowState
   -> Record (AuctionInfoRec r)
   -> Contract (Maybe Utxo)
-queryAuctionEscrowUtxo escrowState auctionInfo =
-  utxosAt auctionInfo.auctionEscrowAddr
-    <#> Array.find (isValidAuctionEscrowUtxo <<< _.output <<< unwrap <<< snd)
-    <<< Map.toUnfoldable
+queryAuctionEscrowUtxo escrowState auctionInfo = do
+  network <- getNetworkId
+  case Plutus.Address.toCardano network auctionInfo.auctionEscrowAddr of
+    Just auctionEscrowAddr ->
+      utxosAt auctionEscrowAddr
+        <#> Array.find (isValidAuctionEscrowUtxo <<< snd)
+        <<< Map.toUnfoldable
+    Nothing ->
+      pure Nothing
   where
   auctionCs :: CurrencySymbol
   auctionCs = auctionInfo.auctionId
 
   isValidAuctionEscrowUtxo :: TransactionOutput -> Boolean
   isValidAuctionEscrowUtxo (TransactionOutput txOut) =
-    Value.valueOf txOut.amount auctionCs auctionEscrowTokenName == one
-      && (txOut.datum == OutputDatum (wrap $ toData escrowState))
+    (Value.valueOf (Asset auctionCs auctionEscrowTokenName) txOut.amount == BigNum.one)
+      && (txOut.datum == Just (OutputDatum $ toData escrowState))
 
 ----------------------------------------------------------------------
 -- StandingBid
@@ -57,8 +66,13 @@ queryStandingBidUtxo
   :: forall (r :: Row Type)
    . Record (AuctionInfoRec r)
   -> Contract (Maybe (Utxo /\ StandingBidState))
-queryStandingBidUtxo auctionInfo =
-  findStandingBidUtxo auctionInfo <$> utxosAt auctionInfo.standingBidAddr
+queryStandingBidUtxo auctionInfo = do
+  network <- getNetworkId
+  case Plutus.Address.toCardano network auctionInfo.standingBidAddr of
+    Just standingBidAddr ->
+      findStandingBidUtxo auctionInfo <$> utxosAt standingBidAddr
+    Nothing ->
+      pure Nothing
 
 findStandingBidUtxo
   :: forall (r :: Row Type)
@@ -66,20 +80,22 @@ findStandingBidUtxo
   -> UtxoMap
   -> Maybe (Utxo /\ StandingBidState)
 findStandingBidUtxo auctionInfo utxos = do
-  let getTxOut = _.output <<< unwrap <<< snd
   standingBidUtxo <-
-    Array.find (isStandingBidUtxo auctionInfo <<< getTxOut)
+    Array.find (isStandingBidUtxo auctionInfo <<< snd)
       (Map.toUnfoldable utxos)
-  Tuple standingBidUtxo <$> getInlineDatum (getTxOut standingBidUtxo)
+  Tuple standingBidUtxo <$> getInlineDatum (snd standingBidUtxo)
 
 isStandingBidUtxo
   :: forall (r :: Row Type)
    . Record (AuctionInfoRec r)
   -> TransactionOutput
   -> Boolean
-isStandingBidUtxo auctionInfo txOut =
-  (unwrap txOut).address == auctionInfo.standingBidAddr
-    && (Value.valueOf (unwrap txOut).amount auctionInfo.auctionId standingBidTokenName == one)
+isStandingBidUtxo auctionInfo (TransactionOutput txOut) =
+  Plutus.Address.fromCardano txOut.address == Just auctionInfo.standingBidAddr
+    &&
+      ( Value.valueOf (Asset auctionInfo.auctionId standingBidTokenName) txOut.amount ==
+          BigNum.one
+      )
 
 ----------------------------------------------------------------------
 -- BidderDeposit
@@ -89,7 +105,12 @@ queryBidderDepositUtxo
    . Record (AuctionInfoRec r)
   -> BidderInfo
   -> Contract (Maybe Utxo)
-queryBidderDepositUtxo auctionInfo bidderInfo =
-  utxosAt auctionInfo.bidderDepositAddr
-    <#> Array.find (eq (Just bidderInfo) <<< getInlineDatum <<< _.output <<< unwrap <<< snd)
-    <<< Map.toUnfoldable
+queryBidderDepositUtxo auctionInfo bidderInfo = do
+  network <- getNetworkId
+  case Plutus.Address.toCardano network auctionInfo.bidderDepositAddr of
+    Just bidderDepositAddr ->
+      utxosAt bidderDepositAddr
+        <#> Array.find (eq (Just bidderInfo) <<< getInlineDatum <<< snd)
+        <<< Map.toUnfoldable
+    Nothing ->
+      pure Nothing

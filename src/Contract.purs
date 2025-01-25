@@ -11,7 +11,9 @@ module HydraAuctionOffchain.Contract
   , module ExportMoveBid
   , module ExportPlaceBid
   , module ExportQueryAuctions
+  , module ExportQueryDelegateGroups
   , module ExportQueryStandingBidState
+  , module ExportRegisterDelegateGroup
   , module ExportSendBid
   , module ExportStartBidding
   ) where
@@ -170,6 +172,10 @@ import HydraAuctionOffchain.Contract.QueryAuctions
   ( queryAuctions
   ) as ExportQueryAuctions
 
+import HydraAuctionOffchain.Contract.QueryDelegateGroups
+  ( queryDelegateGroups
+  ) as ExportQueryDelegateGroups
+
 import HydraAuctionOffchain.Contract.QueryStandingBidState
   ( QueryStandingBidStateError
       ( QueryBidState_Error_CurrentTimeBeforeBiddingStart
@@ -178,10 +184,24 @@ import HydraAuctionOffchain.Contract.QueryStandingBidState
   , queryStandingBidState
   ) as ExportQueryStandingBidState
 
+import HydraAuctionOffchain.Contract.RegisterDelegateGroup
+  ( RegisterDelegateGroupError
+      ( RegisterDelegateGroup_Error_CouldNotGetOwnPubKeyHash
+      , RegisterDelegateGroup_Error_CouldNotGetWalletUtxos
+      , RegisterDelegateGroup_Error_CouldNotSelectNonceUtxo
+      , RegisterDelegateGroup_Error_EmptyNonceUtxoMap
+      )
+  , RegisterDelegateGroupContractOutput(RegisterDelegateGroupContractOutput)
+  , RegisterDelegateGroupContractParams(RegisterDelegateGroupContractParams)
+  , RegisterDelegateGroupContractResult
+  , registerDelegateGroupContract
+  , registerDelegateGroupContractErr
+  ) as ExportRegisterDelegateGroup
+
 import HydraAuctionOffchain.Contract.StartBidding
   ( StartBiddingContractError
       ( StartBidding_Error_InvalidAuctionTerms
-      , StartBidding_Error_CouldNotGetOwnAddress
+      , StartBidding_Error_CouldNotGetOwnPkh
       , StartBidding_Error_ContractNotInitiatedBySeller
       , StartBidding_Error_CurrentTimeBeforeBiddingStart
       , StartBidding_Error_CurrentTimeAfterBiddingEnd

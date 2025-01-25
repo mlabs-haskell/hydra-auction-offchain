@@ -7,6 +7,7 @@ module HydraAuctionOffchain.Contract.SendBid
       , SendBid_Error_CouldNotGetOwnPubKeyHash
       , SendBid_Error_CouldNotSignBidderMessage
       , SendBid_Error_PlaceBidRequestServiceError
+      , SendBid_Error_BidderAddressConversionFailure
       )
   , SendBidContractParams(SendBidContractParams)
   , sendBidContract
@@ -15,29 +16,23 @@ module HydraAuctionOffchain.Contract.SendBid
 
 import Contract.Prelude
 
-import Affjax (Error, Response, defaultRequest) as Affjax
-import Affjax.RequestBody (RequestBody(Json)) as Affjax
-import Affjax.ResponseFormat (string) as Affjax.ResponseFormat
-import Affjax.StatusCode (StatusCode(StatusCode)) as Affjax
+import Cardano.AsCbor (encodeCbor)
+import Cardano.Plutus.Types.Address (fromCardano) as Plutus.Address
+import Cardano.Types (BigNum, NetworkId, ScriptHash)
 import Contract.Address (getNetworkId)
 import Contract.Chain (currentTime)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract)
 import Contract.Prim.ByteArray (ByteArray)
-import Contract.Value (CurrencySymbol)
 import Contract.Wallet (ownPaymentPubKeyHash)
-import Control.Error.Util ((!?))
+import Control.Error.Util ((!?), (??))
 import Control.Monad.Except (ExceptT(ExceptT), throwError, withExceptT)
 import Control.Monad.Trans.Class (lift)
-import Ctl.Internal.Affjax (request) as Affjax
-import Data.Bifunctor (lmap)
-import Data.Codec.Argonaut (JsonCodec, encode, object) as CA
+import Data.Codec.Argonaut (JsonCodec, object) as CA
 import Data.Codec.Argonaut.Record (record) as CAR
-import Data.HTTP.Method (Method(POST))
 import Data.Profunctor (wrapIso)
 import Data.Validation.Semigroup (validation)
-import DelegateServer.Handlers.PlaceBid (PlaceBidResponse, placeBidResponseCodec)
-import HydraAuctionOffchain.Codec (bigIntCodec, byteArrayCodec, currencySymbolCodec)
+import DelegateServer.Handlers.PlaceBid (PlaceBidResponse)
+import HydraAuctionOffchain.Codec (bigNumCodec, byteArrayCodec, scriptHashCodec)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , AuctionTerms(AuctionTerms)
@@ -48,7 +43,6 @@ import HydraAuctionOffchain.Contract.Types
   , DelegateInfo
   , DelegateInfoValidationError
   , auctionTermsCodec
-  , bidTermsCodec
   , bidderSignatureMessage
   , delegateInfoCodec
   , mkContractOutput
@@ -57,19 +51,16 @@ import HydraAuctionOffchain.Contract.Types
   , validateDelegateInfo
   )
 import HydraAuctionOffchain.Lib.Codec (class HasJson)
-import HydraAuctionOffchain.Lib.Json (caDecodeString)
-import HydraAuctionOffchain.Service.Common
-  ( ServiceError(ServiceDecodeJsonError, ServiceHttpError, ServiceHttpResponseError)
-  )
+import HydraAuctionOffchain.Service.Common (ServiceError)
+import HydraAuctionOffchain.Service.DelegateServer (placeBidRequest)
 import HydraAuctionOffchain.Wallet (SignMessageError, signMessage)
-import JS.BigInt (BigInt)
 
 newtype SendBidContractParams = SendBidContractParams
-  { auctionCs :: CurrencySymbol
+  { auctionCs :: ScriptHash
   , auctionTerms :: AuctionTerms
   , delegateInfo :: DelegateInfo
   , sellerSignature :: ByteArray
-  , bidAmount :: BigInt
+  , bidAmount :: BigNum
   }
 
 derive instance Generic SendBidContractParams _
@@ -86,11 +77,11 @@ sendBidContractParamsCodec :: NetworkId -> CA.JsonCodec SendBidContractParams
 sendBidContractParamsCodec network =
   wrapIso SendBidContractParams $ CA.object "SendBidContractParams" $
     CAR.record
-      { auctionCs: currencySymbolCodec
+      { auctionCs: scriptHashCodec
       , auctionTerms: auctionTermsCodec network
       , delegateInfo: delegateInfoCodec
       , sellerSignature: byteArrayCodec
-      , bidAmount: bigIntCodec
+      , bidAmount: bigNumCodec
       }
 
 sendBidContract :: SendBidContractParams -> Contract (ContractOutput PlaceBidResponse)
@@ -129,48 +120,23 @@ mkSendBidContractWithErrors (SendBidContractParams params) = do
     withExceptT SendBid_Error_CouldNotSignBidderMessage $
       signMessage payload
 
+  -- Convert bidder address:
+  bidderAddressPlutus <- Plutus.Address.fromCardano bidderAddress
+    ?? SendBid_Error_BidderAddressConversionFailure
+
   -- Send `placeBid` request to a randomly picked delegate:
   let
     bidTerms = BidTerms
-      { bidder: BidderInfo { bidderAddress, bidderVk }
+      { bidder: BidderInfo { bidderAddress: bidderAddressPlutus, bidderVk }
       , price: params.bidAmount
-      , bidderSignature
+      , bidderSignature: unwrap $ encodeCbor bidderSignature
       , sellerSignature: params.sellerSignature
       }
 
-  delegateHttpServer <- randomHttpServer delegateInfo
+  httpServer <- randomHttpServer delegateInfo
   network <- lift getNetworkId
-  let
-    sendBidToDelegate' = ExceptT $ liftAff $ sendBidToDelegate network delegateHttpServer
-      bidTerms
-  withExceptT SendBid_Error_PlaceBidRequestServiceError
-    sendBidToDelegate'
-
-sendBidToDelegate
-  :: NetworkId -> String -> BidTerms -> Aff (Either ServiceError PlaceBidResponse)
-sendBidToDelegate network httpServer bidTerms = do
-  handleResponse <$> Affjax.request
-    ( Affjax.defaultRequest
-        { method = Left POST
-        , url = httpServer <> "/placeBid"
-        , content = Just $ Affjax.Json $ CA.encode (bidTermsCodec network) bidTerms
-        , responseFormat = Affjax.ResponseFormat.string
-        }
-    )
-
-handleResponse
-  :: Either Affjax.Error (Affjax.Response String)
-  -> Either ServiceError PlaceBidResponse
-handleResponse = case _ of
-  Left affjaxError ->
-    Left $ ServiceHttpError $ wrap affjaxError
-  Right { status, body } ->
-    case status of
-      Affjax.StatusCode statusCode | statusCode == 201 || statusCode == 400 ->
-        lmap (ServiceDecodeJsonError body) $
-          caDecodeString placeBidResponseCodec body
-      _ ->
-        Left $ ServiceHttpResponseError status body
+  withExceptT SendBid_Error_PlaceBidRequestServiceError $ ExceptT $ liftAff $
+    placeBidRequest httpServer network bidTerms auctionCs
 
 ----------------------------------------------------------------------
 -- Errors
@@ -183,6 +149,7 @@ data SendBidContractError
   | SendBid_Error_CouldNotGetOwnPubKeyHash
   | SendBid_Error_CouldNotSignBidderMessage SignMessageError
   | SendBid_Error_PlaceBidRequestServiceError ServiceError
+  | SendBid_Error_BidderAddressConversionFailure
 
 derive instance Generic SendBidContractError _
 
@@ -212,3 +179,6 @@ instance ToContractError SendBidContractError where
 
     SendBid_Error_PlaceBidRequestServiceError err ->
       "PlaceBid request failed with error: " <> show err <> "."
+
+    SendBid_Error_BidderAddressConversionFailure ->
+      "Could not convert bidder address to Plutus.Address."

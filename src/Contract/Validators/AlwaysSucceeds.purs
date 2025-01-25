@@ -4,17 +4,16 @@ module HydraAuctionOffchain.Contract.Validators.AlwaysSucceeds
 
 import Contract.Prelude
 
+import Cardano.Types (PlutusScript)
 import Contract.Monad (Contract)
-import Contract.Scripts (Validator(Validator))
-import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Control.Monad.Error.Class (liftMaybe)
-import Effect.Exception (error)
+import HydraAuctionOffchain.Lib.Script (decodeApplyScript)
 
 foreign import alwaysSucceedsValidator :: String
 
-mkAlwaysSucceedsValidator :: Contract Validator
+mkAlwaysSucceedsValidator :: Contract PlutusScript
 mkAlwaysSucceedsValidator =
-  Validator <$>
-    liftMaybe (error "Error decoding alwaysSucceedsValidator") do
-      envelope <- decodeTextEnvelope alwaysSucceedsValidator
-      plutusScriptV2FromEnvelope envelope
+  decodeApplyScript
+    { scriptEnvelope: alwaysSucceedsValidator
+    , scriptName: "AlwaysSucceedsValidator"
+    , args: mempty
+    }

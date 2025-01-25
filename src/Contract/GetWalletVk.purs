@@ -6,20 +6,20 @@ module HydraAuctionOffchain.Contract.GetWalletVk
 
 import Contract.Prelude
 
+import Cardano.Types (PublicKey)
 import Contract.Monad (Contract)
 import Control.Monad.Except (ExceptT, withExceptT)
 import HydraAuctionOffchain.Contract.Types
   ( class ToContractError
   , ContractOutput
-  , VerificationKey
   , mkContractOutput
   )
 import HydraAuctionOffchain.Wallet (SignMessageError, askWalletVk)
 
-getWalletVk :: Contract (ContractOutput VerificationKey)
+getWalletVk :: Contract (ContractOutput PublicKey)
 getWalletVk = mkContractOutput identity getWalletVkWithErrors
 
-getWalletVkWithErrors :: ExceptT GetWalletVkContractError Contract VerificationKey
+getWalletVkWithErrors :: ExceptT GetWalletVkContractError Contract PublicKey
 getWalletVkWithErrors =
   _.vkey <$>
     withExceptT GetWalletVk_Error_CouldNotGetWalletVk

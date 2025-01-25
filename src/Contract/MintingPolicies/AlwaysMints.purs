@@ -2,19 +2,18 @@ module HydraAuctionOffchain.Contract.MintingPolicies.AlwaysMints
   ( mkAlwaysMintsPolicy
   ) where
 
-import Contract.Prelude
+import Prelude
 
+import Cardano.Types (PlutusScript)
 import Contract.Monad (Contract)
-import Contract.Scripts (MintingPolicy(PlutusMintingPolicy))
-import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Control.Monad.Error.Class (liftMaybe)
-import Effect.Exception (error)
+import HydraAuctionOffchain.Lib.Script (decodeApplyScript)
 
 foreign import alwaysMintsPolicy :: String
 
-mkAlwaysMintsPolicy :: Contract MintingPolicy
+mkAlwaysMintsPolicy :: Contract PlutusScript
 mkAlwaysMintsPolicy =
-  PlutusMintingPolicy <$>
-    liftMaybe (error "Error decoding alwaysMintsPolicy") do
-      envelope <- decodeTextEnvelope alwaysMintsPolicy
-      plutusScriptV2FromEnvelope envelope
+  decodeApplyScript
+    { scriptEnvelope: alwaysMintsPolicy
+    , scriptName: "AlwaysMintsPolicy"
+    , args: mempty
+    }

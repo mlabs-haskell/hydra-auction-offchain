@@ -15,19 +15,21 @@ module HydraAuctionOffchain.Api
   , placeBid
   , placeBidL2
   , queryAuctions
+  , queryDelegateGroups
   , queryStandingBidState
+  , registerDelegateGroup
   , startBidding
   ) where
 
 import Prelude
 
+import Aeson (Aeson)
+import Cardano.Types (NetworkId)
 import Contract.Address (getNetworkId)
-import Contract.Config (NetworkId)
 import Contract.Monad (Contract, runContract)
 import Contract.Transaction (TransactionHash)
 import Contract.Transaction (awaitTxConfirmed) as Contract
 import Control.Promise (Promise, fromAff)
-import Data.Argonaut (Json)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import HydraAuctionOffchain.Contract
@@ -43,7 +45,9 @@ import HydraAuctionOffchain.Contract
   , moveBidContract
   , placeBidContract
   , queryAuctions
+  , queryDelegateGroups
   , queryStandingBidState
+  , registerDelegateGroupContract
   , sendBidContract
   , startBiddingContract
   ) as Contract
@@ -58,61 +62,72 @@ contractGeneric
    . HasJson a NetworkId
   => HasJson b NetworkId
   => (a -> Contract b)
-  -> Json
-  -> Json
-  -> Effect (Promise Json)
+  -> Aeson
+  -> Aeson
+  -> Effect (Promise Aeson)
 contractGeneric contract contractConfig params = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   runContract contractParams do
     network <- getNetworkId
     toJs network <$> contract (fromJs network params)
 
 ----------------------------------------------------------------------
+-- Delegate groups
+
+registerDelegateGroup :: Aeson -> Aeson -> Effect (Promise Aeson)
+registerDelegateGroup = contractGeneric Contract.registerDelegateGroupContract
+
+queryDelegateGroups :: Aeson -> Effect (Promise Aeson)
+queryDelegateGroups contractConfig = fromAff do
+  let contractParams = mkContractParams $ fromJs unit contractConfig
+  toJs unit <$> runContract contractParams Contract.queryDelegateGroups
+
+----------------------------------------------------------------------
 -- Auctions
 
-announceAuction :: Json -> Json -> Effect (Promise Json)
+announceAuction :: Aeson -> Aeson -> Effect (Promise Aeson)
 announceAuction = contractGeneric Contract.announceAuctionContract
 
-authorizeBidders :: Json -> Json -> Effect (Promise Json)
+authorizeBidders :: Aeson -> Aeson -> Effect (Promise Aeson)
 authorizeBidders = contractGeneric Contract.authorizeBiddersContract
 
-discoverBidders :: Json -> Json -> Effect (Promise Json)
+discoverBidders :: Aeson -> Aeson -> Effect (Promise Aeson)
 discoverBidders = contractGeneric Contract.discoverBidders
 
-discoverSellerSignature :: Json -> Json -> Effect (Promise Json)
+discoverSellerSignature :: Aeson -> Aeson -> Effect (Promise Aeson)
 discoverSellerSignature = contractGeneric Contract.discoverSellerSignature
 
-enterAuction :: Json -> Json -> Effect (Promise Json)
+enterAuction :: Aeson -> Aeson -> Effect (Promise Aeson)
 enterAuction = contractGeneric Contract.enterAuctionContract
 
-placeBid :: Json -> Json -> Effect (Promise Json)
+placeBid :: Aeson -> Aeson -> Effect (Promise Aeson)
 placeBid = contractGeneric Contract.placeBidContract
 
-moveBidL2 :: Json -> Json -> Effect (Promise Json)
+moveBidL2 :: Aeson -> Aeson -> Effect (Promise Aeson)
 moveBidL2 = contractGeneric Contract.moveBidContract
 
-placeBidL2 :: Json -> Json -> Effect (Promise Json)
+placeBidL2 :: Aeson -> Aeson -> Effect (Promise Aeson)
 placeBidL2 = contractGeneric Contract.sendBidContract
 
-queryAuctions :: Json -> Json -> Effect (Promise Json)
+queryAuctions :: Aeson -> Aeson -> Effect (Promise Aeson)
 queryAuctions = contractGeneric Contract.queryAuctions
 
-queryStandingBidState :: Json -> Json -> Effect (Promise Json)
+queryStandingBidState :: Aeson -> Aeson -> Effect (Promise Aeson)
 queryStandingBidState = contractGeneric Contract.queryStandingBidState
 
-startBidding :: Json -> Json -> Effect (Promise Json)
+startBidding :: Aeson -> Aeson -> Effect (Promise Aeson)
 startBidding = contractGeneric Contract.startBiddingContract
 
-claimAuctionLotBidder :: Json -> Json -> Effect (Promise Json)
+claimAuctionLotBidder :: Aeson -> Aeson -> Effect (Promise Aeson)
 claimAuctionLotBidder = contractGeneric Contract.claimAuctionLotBidderContract
 
-claimAuctionLotSeller :: Json -> Json -> Effect (Promise Json)
+claimAuctionLotSeller :: Aeson -> Aeson -> Effect (Promise Aeson)
 claimAuctionLotSeller = contractGeneric Contract.claimAuctionLotSellerContract
 
-claimDepositLoser :: Json -> Json -> Effect (Promise Json)
+claimDepositLoser :: Aeson -> Aeson -> Effect (Promise Aeson)
 claimDepositLoser = contractGeneric contractStub
 
-cleanupAuction :: Json -> Json -> Effect (Promise Json)
+cleanupAuction :: Aeson -> Aeson -> Effect (Promise Aeson)
 cleanupAuction = contractGeneric contractStub
 
 contractStub :: AuctionInfo -> Contract (ContractOutput TransactionHash)
@@ -123,18 +138,18 @@ contractStub _ = do
 ----------------------------------------------------------------------
 -- Helpers
 
-getWalletVk :: Json -> Effect (Promise Json)
+getWalletVk :: Aeson -> Effect (Promise Aeson)
 getWalletVk contractConfig = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   toJs unit <$> runContract contractParams Contract.getWalletVk
 
-awaitTxConfirmed :: Json -> Json -> Effect (Promise Unit)
+awaitTxConfirmed :: Aeson -> Aeson -> Effect (Promise Unit)
 awaitTxConfirmed contractConfig txHash = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   runContract contractParams $ Contract.awaitTxConfirmed $ fromJs unit txHash
 
-mintTokenUsingAlwaysMints :: Json -> Json -> Json -> Effect (Promise Json)
+mintTokenUsingAlwaysMints :: Aeson -> Aeson -> Aeson -> Effect (Promise Aeson)
 mintTokenUsingAlwaysMints contractConfig tokenName quantity = fromAff do
-  contractParams <- mkContractParams $ fromJs unit contractConfig
+  let contractParams = mkContractParams $ fromJs unit contractConfig
   toJs unit <$> runContract contractParams
     (Contract.mintTokenUsingAlwaysMints (fromJs unit tokenName) (fromJs unit quantity))

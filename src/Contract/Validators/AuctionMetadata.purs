@@ -2,11 +2,18 @@ module HydraAuctionOffchain.Contract.Validators.AuctionMetadata
   ( mkAuctionMetadataValidator
   ) where
 
+import Prelude
+
+import Cardano.Types (PlutusScript)
 import Contract.Monad (Contract)
-import Contract.Scripts (Validator)
-import HydraAuctionOffchain.Lib.Script (reifySimpleValidator)
+import HydraAuctionOffchain.Lib.Script (decodeApplyScript)
 
 foreign import auctionMetadataValidator :: String
 
-mkAuctionMetadataValidator :: Contract Validator
-mkAuctionMetadataValidator = reifySimpleValidator auctionMetadataValidator
+mkAuctionMetadataValidator :: Contract PlutusScript
+mkAuctionMetadataValidator =
+  decodeApplyScript
+    { scriptEnvelope: auctionMetadataValidator
+    , scriptName: "AuctionMetadataValidator"
+    , args: mempty
+    }

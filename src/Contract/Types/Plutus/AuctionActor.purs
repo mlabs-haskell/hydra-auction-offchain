@@ -8,6 +8,7 @@ import Contract.PlutusData
 import HydraAuctionOffchain.Contract.Types.Plutus.Extra.TypeLevel
 import Prelude
 
+import Cardano.Plutus.DataSchema (S, Z)
 import Contract.Numeric.BigNum (zero) as BigNum
 import Data.Codec.Argonaut (JsonCodec) as CA
 import Data.Codec.Argonaut.Generic (nullarySum) as CAG

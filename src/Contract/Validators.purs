@@ -3,6 +3,7 @@ module HydraAuctionOffchain.Contract.Validators
   , module ExportAuctionMetadata
   , module ExportAuctionValidators
   , module ExportBidderDeposit
+  , module ExportDelegateGroupMetadata
   , module ExportStandingBid
   ) where
 
@@ -28,6 +29,10 @@ import HydraAuctionOffchain.Contract.Validators.AuctionValidators
 import HydraAuctionOffchain.Contract.Validators.BidderDeposit
   ( mkBidderDepositValidator
   ) as ExportBidderDeposit
+
+import HydraAuctionOffchain.Contract.Validators.DelegateGroupMetadata
+  ( mkDelegateGroupMetadataValidator
+  ) as ExportDelegateGroupMetadata
 
 import HydraAuctionOffchain.Contract.Validators.StandingBid
   ( mkStandingBidValidator
