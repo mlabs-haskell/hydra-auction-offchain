@@ -41,15 +41,22 @@ to ensure these important but problematic transactions go through.
 
 ## Front-end Application
 
-TODO:
-
+The Hydra Auctions front-end application has been thoroughly examined for possible
+optimizations and clean-ups. We carried out most of our findings with detrimental 
+effects on user or dev experience. Among them:
+* Minimize Blockfrost queries that slowed down pages and increased network and API usage.
+* Set sensible polling limits that previously were over-eager.
+* Cleanup leaking effect dependencies, a subtle bug that may affect the functioning of the application. 
+* Update package dependencies and fix all building warnings.
+* Eliminate unused code paths.
+  
 ## Off-chain Code: Querying Chain State
 
 Querying chain state is the most common bottleneck when executing off-chain
 code in dApps. Bearing this in mind, we opted for parameterized on-chain scripts.
 That way every auction gets its own unique contract, and this tremendously simplifies
 querying since auctions are isolated. This cuts down the amount of UTxO to filter,
-minimizes the number of network interactions with services like
+minimizing the number of network interactions with services like
 Blockfrost, and finally shortens the waiting time for the user.
 This optimisation though comes at its toll - now we have to deploy a script
 for every auction, and this requires a separate transaction and locking up a
@@ -63,7 +70,7 @@ decisions we've made at very early phases of development:
 * Use of Plutarch to implement all validators and policies
 * Use of error codes to help keep the size of the script smaller
 
-In terms of robustness, we checked contracts' susceptibilty to known
+In terms of robustness, we checked the susceptibilty of contracts to known
 vulnerabilities including:
 * Checks by-passing
 * Leaking protocol tokens
