@@ -156,7 +156,7 @@ export type DelegateInfo = {
 
 export type Network = "Preview" | "Preprod" | "Mainnet";
 
-export type WalletApp = "Nami" | "Gero" | "Flint" | "Eternl" | "Lode" | "NuFi" | "Lace";
+export type WalletApp = "Nami" | "GeroWallet" | "eternl" | "Lode" | "NuFi" | "lace";
 
 export type ContractConfig = {
   network: Network;
