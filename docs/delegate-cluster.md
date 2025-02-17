@@ -15,7 +15,7 @@ network (preview, preprod, or mainnet).  Follow the instructions provided
 and `cardano-cli`.
 
 2. You will also need a `hydra-node` executable to generate Hydra keys later on.
-Refer to the `hydra-node` [installation guide](https://hydra.family/head-protocol/docs/getting-started/installation).
+Refer to the `hydra-node` [installation guide](https://hydra.family/head-protocol/docs/installation).
 
 2. For 2 delegate servers, generate 6 pairs of keys:
    - `(cardano.vk, cardano.sk)` and `(cardano2.vk, cardano2.sk)`: 
