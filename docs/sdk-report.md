@@ -32,7 +32,8 @@ does not strictly imply the use of any specific backend for transaction building
 and also does not depend on CTL.
 To highlight that, a minimal working example in the `purescript-hydra-sdk` repository
 just demonstrates how natural and easy it is to use CTL in combination with the SDK.
-Next, the SDK provides various Hydra domain-specific types
+
+The SDK also provides various Hydra domain-specific types
 along with other utility types used by the components of the library,
 most of which have the corresponding bi-directional Aeson-based JSON codecs.
 As part of our efforts to bring the Hydra SDK to its first stable version, we forked
@@ -47,23 +48,26 @@ the declarative nature of `purescript-codec-argonaut`.
 The recommended approach for using the Hydra SDK is to adapt and extend
 the minimal example contained in the repository.
 However, starting from scratch should also be relatively straightforward.
-First and foremost, we need to launch a Hydra Node, which can be done using
+
+- First and foremost, we need to launch a Hydra Node, which can be done using
 the `spawnHydraNode` function. This function accepts a typed record
 with configuration parameters and returns information about the child process,
 which can later be used as part of the cleanup procedure.
-Once the Hydra Node process is spawned and ready, the user can connect
+
+- Once the Hydra Node process is spawned and ready, the user can connect
 to its WebSocket API using the `mkHydraNodeApiWebSocket` function
 and attach a message handler.
 This handler will serve as the entry point for advancing the application’s state.
-For example, the Head participant may want to trigger the Hydra Head initialization
+  - For example, the Head participant may want to trigger the Hydra Head initialization
 upon receiving the `Greetings` message, commit some funds when
 the `HeadIsInitializing` message is received,
 and finally begin submitting L2 transactions on `HeadIsOpen`.
-When closing a Head or contesting a snapshot, the corresponding `Close` and `Contest`
+- When closing a Head or contesting a snapshot, the corresponding `Close` and `Contest`
 transactions may be silently dropped by `cardano-node`, which is a known issue in `hydra-node`.
 To address this, `mkHydraNodeApiWebSocket` provides a convenient way
 to specify retry strategies for these problematic transactions,
 ensuring that they are successfully submitted and processed.
+
 To further enhance the developer experience, we introduced an option
 to automatically handle Hydra Head statuses, eliminating the need for developers
 to explicitly maintain the current Head status by inspecting incoming messages.
@@ -77,11 +81,13 @@ Due to the requirement that each delegate group should be able
 to host multiple auctions simultaneously,
 we introduced an opinionated interface called `AppManager`.
 Later, we generalized this interface, incorporating it into the Hydra SDK's extras.
+
 The central idea behind `AppManager` is the concept of slots.
 Within a delegate group, each slot represents a set of delegate configurations
 sufficient to spin up a properly configured Hydra Head.
 Delegates are expected to agree on the slot configurations upfront
 and are responsible for ensuring their correctness.
+
 In Hydra Auction, slot numbers are implicitly derived from the provided configurations,
 with the first configuration corresponding to slot 0, the second to slot 1, and so forth.
 Users are expected to reserve slots before making an initial Layer-1 commitment,
@@ -93,6 +99,7 @@ between individual delegates, nor does it rely on a central server
 to orchestrate the initialization of Hydra Heads.
 Additionally, it enables on-demand hosting of auctions
 while ensuring strong guarantees regarding the availability of reserved slots for users.
+
 Two clear drawbacks of this mechanism are its static nature,
 where everything must be correctly configured at the start
 (which introduces additional complexity for delegates),
