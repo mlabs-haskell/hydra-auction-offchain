@@ -64,7 +64,7 @@ returnable storage fees which currently are around 40 ADA.
 
 ## On-chain Contracts
 
-Despite our initial expectations, we haven't detected any issues with the  performance
+Despite our initial expectations, we haven't detected any issues with the performance
 of the on-chain code in Hydra Auсtions. We attribute this fact to the following
 decisions we've made at very early phases of development:
 * Use of Plutarch to implement all validators and policies
